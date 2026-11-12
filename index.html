@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>MINI-VALO 3D</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; user-select: none; }
+    #crosshair {
+      position: fixed; top: 50%; left: 50%; width: 12px; height: 12px;
+      transform: translate(-50%, -50%); pointer-events: none; z-index: 10;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: #00ffcc;
+    }
+    #crosshair::before { top: 5px; left: 0; width: 12px; height: 2px; }
+    #crosshair::after { top: 0; left: 5px; width: 2px; height: 12px; }
+    #hud {
+      position: fixed; bottom: 20px; left: 20px; color: white; font-size: 18px;
+      background: rgba(0,0,0,0.6); padding: 12px 20px; border-left: 4px solid #ff4655;
+    }
+    #overlay {
+      position: fixed; inset: 0; background: rgba(15,25,35,0.85); color: white;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 20; cursor: pointer;
+    }
+    h1 { color: #ff4655; font-size: 48px; margin: 0 0 10px 0; letter-spacing: 3px; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <h1>MINI-VALO</h1>
+    <p>화면을 클릭하여 게임 시작</p>
+    <p style="color:#aaa; font-size:14px;">WASD: 이동 | SPACE: 점프 | E: 제트 대시 | 좌클릭: 사격</p>
+  </div>
+  <div id="crosshair"></div>
+  <div id="hud">
+    점수: <span id="score">0</span> | 대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a242f);
+    scene.fog = new THREE.Fog(0x1a242f, 10, 80);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 2, 10);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1.5);
+    light.position.set(10, 20, 10);
+    scene.add(light, new THREE.AmbientLight(0x404040, 2));
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(100, 100),
+      new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+    scene.add(new THREE.GridHelper(100, 50, 0xff4655, 0x34495e));
+
+    const gun = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.15, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0x111111 })
+    );
+    gun.position.set(0.3, -0.25, -0.5);
+    camera.add(gun);
+    scene.add(camera);
+
+    const targets = [];
+    const targetGeo = new THREE.BoxGeometry(1.2, 2.2, 1.2);
+    for (let i = 0; i < 8; i++) {
+      const target = new THREE.Mesh(targetGeo, new THREE.MeshStandardMaterial({ color: 0xff4655 }));
+      respawnTarget(target);
+      scene.add(target);
+      targets.push(target);
+    }
+
+    function respawnTarget(t) {
+      t.position.set((Math.random() - 0.5) * 40, 1.1, (Math.random() - 0.5) * 40 - 10);
+    }
+
+    const keys = {};
+    let yaw = 0, pitch = 0, velY = 0, isGrounded = true;
+    let dashCooldown = 0, dashTime = 0;
+    let score = 0;
+
+    const overlay = document.getElementById('overlay');
+    overlay.addEventListener('click', () => document.body.requestPointerLock());
+    document.addEventListener('pointerlockchange', () => {
+      overlay.style.display = document.pointerLockElement ? 'none' : 'flex';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!document.pointerLockElement) return;
+      yaw -= e.movementX * 0.002;
+      pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch - e.movementY * 0.002));
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (e.code === 'Space' && isGrounded) { velY = 0.22; isGrounded = false; }
+      if (e.code === 'KeyE' && dashCooldown <= 0) {
+        dashTime = 0.15;
+        dashCooldown = 3.0;
+      }
+    });
+    document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+    const raycaster = new THREE.Raycaster();
+    document.addEventListener('mousedown', () => {
+      if (!document.pointerLockElement) return;
+      gun.position.z = -0.35;
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const hits = raycaster.intersectObjects(targets);
+      if (hits.length > 0) {
+        score += 100;
+        document.getElementById('score').innerText = score;
+        respawnTarget(hits[0].object);
+      }
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+
+      if (dashCooldown > 0) dashCooldown -= dt;
+      const dashEl = document.getElementById('dashStatus');
+      dashEl.innerText = dashCooldown > 0 ? dashCooldown.toFixed(1) + '초' : '준비완료';
+      dashEl.style.color = dashCooldown > 0 ? '#ff4655' : '#00ffcc';
+
+      let speed = 10;
+      if (dashTime > 0) {
+        dashTime -= dt;
+        speed = 38;
+        camera.fov = THREE.MathUtils.lerp(camera.fov, 95, 0.3);
+      } else {
+        camera.fov = THREE.MathUtils.lerp(camera.fov, 75, 0.2);
+      }
+      camera.updateProjectionMatrix();
+
+      const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const move = new THREE.Vector3();
+      if (keys['KeyW']) move.add(forward);
+      if (keys['KeyS']) move.sub(forward);
+      if (keys['KeyD']) move.add(right);
+      if (keys['KeyA']) move.sub(right);
+      if (move.length() > 0) move.normalize();
+      camera.position.addScaledVector(move, speed * dt);
+
+      velY -= 0.012;
+      camera.position.y += velY;
+      if (camera.position.y <= 2) { camera.position.y = 2; velY = 0; isGrounded = true; }
+
+      gun.position.z = THREE.MathUtils.lerp(gun.position.z, -0.5, 0.2);
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
