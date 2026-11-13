@@ -1516,126 +1516,161 @@
 
       const amethystBodyMat = new THREE.MeshStandardMaterial({
         map: c24Tex,
-        metalness: 0.72,
-        roughness: 0.24,
-        emissive: new THREE.Color(0x9d4edd),
-        emissiveIntensity: 0.22
+        metalness: 0.78,
+        roughness: 0.20,
+        emissive: new THREE.Color(0x8b3dff),
+        emissiveIntensity: 0.25
+      });
+      const darkVioletMat = new THREE.MeshStandardMaterial({
+        color: 0x1a102b,
+        metalness: 0.85,
+        roughness: 0.24
       });
       const goldTrimMat = new THREE.MeshStandardMaterial({
         color: 0xffd166,
-        metalness: 0.92,
-        roughness: 0.16,
+        metalness: 0.94,
+        roughness: 0.14,
         emissive: new THREE.Color(0xffb703),
-        emissiveIntensity: 0.22
+        emissiveIntensity: 0.26
       });
       const whiteArmorMat = new THREE.MeshStandardMaterial({
-        color: 0xf4f5f8,
+        color: 0xf7f8fb,
         metalness: 0.35,
-        roughness: 0.32
+        roughness: 0.28
       });
       const darkObsidianMat = new THREE.MeshStandardMaterial({
-        color: 0x15121e,
-        metalness: 0.82,
-        roughness: 0.28
+        color: 0x120f1a,
+        metalness: 0.85,
+        roughness: 0.26
       });
       const coreCrystalMat = new THREE.MeshStandardMaterial({
         color: 0xff6b9d,
         emissive: new THREE.Color(0xff477e),
-        emissiveIntensity: 0.85,
-        metalness: 0.3,
-        roughness: 0.15,
+        emissiveIntensity: 0.95,
+        metalness: 0.25,
+        roughness: 0.12,
         transparent: true,
-        opacity: 0.92
+        opacity: 0.94
       });
 
-      // 1. 메인 퍼플-핑크-골드 아메시스트 리시버 & 후방 아치
-      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.076, 0.34), amethystBodyMat);
-      receiver.position.set(0, 0.012, -0.02);
+      // 1. 날렵하게 깎인 다층 구조의 아메시스트 리시버 (각진 상단 슈라우드 + 하단 다크 섀시)
+      const receiverCore = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.064, 0.33), darkVioletMat);
+      receiverCore.position.set(0, 0.008, -0.02);
 
-      // 리시버 하단 황금 테두리 스커트
-      const goldTrimBottom = new THREE.Mesh(new THREE.BoxGeometry(0.061, 0.012, 0.33), goldTrimMat);
-      goldTrimBottom.position.set(0, -0.024, -0.02);
+      // 측면 입체 장갑 패널 (경사 베벨 효과)
+      const sideArmorL = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.052, 0.31), amethystBodyMat);
+      sideArmorL.position.set(-0.028, 0.012, -0.02);
+      sideArmorL.rotation.z = 0.08;
 
-      // 후방 아치형 스파인 & 발광 V 스파크 패널
-      const rearSpine = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.022, 0.14), amethystBodyMat);
-      rearSpine.rotation.x = -0.14;
-      rearSpine.position.set(0, 0.054, 0.07);
+      const sideArmorR = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.052, 0.31), amethystBodyMat);
+      sideArmorR.position.set(0.028, 0.012, -0.02);
+      sideArmorR.rotation.z = -0.08;
 
-      const topSparkPlate = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.006, 0.05), coreCrystalMat);
-      topSparkPlate.rotation.x = -0.14;
-      topSparkPlate.position.set(0, 0.066, 0.07);
+      // 상단 입체 레이어 패널 & 피카티니 레일
+      const upperShroud = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.016, 0.32), amethystBodyMat);
+      upperShroud.position.set(0, 0.044, -0.02);
 
-      // 2. 중앙 측면 황금 링 코어 챔버 (사진 속 둥근 황금 링 + 회전하는 아메시스트 코어!)
-      const coreChamberRingL = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0045, 10, 24), goldTrimMat);
+      const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.006, 0.28), darkObsidianMat);
+      topRail.position.set(0, 0.054, -0.03);
+
+      // 리시버 하단 황금 에지 라인 & 노리쇠 왕복부
+      const goldTrimBottom = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.009, 0.32), goldTrimMat);
+      goldTrimBottom.position.set(0, -0.022, -0.02);
+
+      const boltCarrier = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.018, 0.085), goldTrimMat);
+      boltCarrier.position.set(0.029, 0.024, -0.03);
+
+      // 후방 아치형 스파인 & 발광 V 스파크 패널 (조준 시 카메라 시야를 가리지 않도록 낮고 날렵하게 설계)
+      const rearSpine = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.016, 0.11), amethystBodyMat);
+      rearSpine.rotation.x = -0.10;
+      rearSpine.position.set(0, 0.046, 0.08);
+
+      const topSparkPlate = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.005, 0.045), coreCrystalMat);
+      topSparkPlate.rotation.x = -0.10;
+      topSparkPlate.position.set(0, 0.056, 0.08);
+
+      // 2. 중앙 측면 황금 링 코어 챔버 & 공중 부양 아메시스트 크리스탈 코어
+      const coreChamberRingL = new THREE.Mesh(new THREE.TorusGeometry(0.023, 0.0042, 12, 28), goldTrimMat);
       coreChamberRingL.rotation.y = Math.PI / 2;
-      coreChamberRingL.position.set(-0.030, 0.006, -0.055);
+      coreChamberRingL.position.set(-0.032, 0.008, -0.055);
 
-      const coreChamberRingR = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0045, 10, 24), goldTrimMat);
+      const coreChamberRingR = new THREE.Mesh(new THREE.TorusGeometry(0.023, 0.0042, 12, 28), goldTrimMat);
       coreChamberRingR.rotation.y = Math.PI / 2;
-      coreChamberRingR.position.set(0.030, 0.006, -0.055);
+      coreChamberRingR.position.set(0.032, 0.008, -0.055);
 
-      const crystalOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.019, 1), coreCrystalMat);
-      crystalOrb.position.set(0, 0.006, -0.055);
+      const crystalOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.018, 0), coreCrystalMat);
+      crystalOrb.position.set(0, 0.008, -0.055);
 
-      // 3. 전방 핸드가드 & 화이트-골드 소음기 (Suppressor)
-      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.054, 0.16), amethystBodyMat);
+      // 3. 테이퍼드 전방 핸드가드 (앞으로 갈수록 날렵해지는 스켈레톤 총열 덮개)
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.046, 0.17), amethystBodyMat);
       handguard.position.set(0, 0.014, -0.25);
 
-      const handguardGoldLip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.014, 0.15), goldTrimMat);
-      handguardGoldLip.position.set(0, -0.014, -0.25);
+      const handguardVentL = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.014, 0.11), coreCrystalMat);
+      handguardVentL.position.set(-0.023, 0.018, -0.25);
+      const handguardVentR = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.014, 0.11), coreCrystalMat);
+      handguardVentR.position.set(0.023, 0.018, -0.25);
 
-      // 화이트 & 옵시디언 & 골드 포인트 소음기
-      const suppressorBody = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.025, 0.22, 16), whiteArmorMat);
+      const handguardGoldLip = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.011, 0.16), goldTrimMat);
+      handguardGoldLip.position.set(0, -0.012, -0.25);
+
+      // 화이트·옵시디언·골드 소음기 (Suppressor)
+      const suppressorBody = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.024, 0.22, 20), whiteArmorMat);
       suppressorBody.rotation.x = Math.PI / 2;
       suppressorBody.position.set(0, 0.016, -0.43);
 
-      const suppressorCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.0265, 0.0265, 0.032, 16), goldTrimMat);
+      const suppressorCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.028, 20), goldTrimMat);
       suppressorCollar.rotation.x = Math.PI / 2;
       suppressorCollar.position.set(0, 0.016, -0.34);
 
-      const suppressorTip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.0245, 0.045, 16), darkObsidianMat);
+      const suppressorMidBand = new THREE.Mesh(new THREE.CylinderGeometry(0.0232, 0.0232, 0.018, 20), darkObsidianMat);
+      suppressorMidBand.rotation.x = Math.PI / 2;
+      suppressorMidBand.position.set(0, 0.016, -0.43);
+
+      const suppressorTip = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.023, 0.045, 20), darkObsidianMat);
       suppressorTip.rotation.x = Math.PI / 2;
       suppressorTip.position.set(0, 0.016, -0.545);
 
-      const suppressorTipGold = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.012, 16), goldTrimMat);
+      const suppressorTipGold = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.010, 20), goldTrimMat);
       suppressorTipGold.rotation.x = Math.PI / 2;
       suppressorTipGold.position.set(0, 0.016, -0.52);
 
-      // 전방 가늠쇠 (골드-핑크 발광)
-      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.018), goldTrimMat);
-      frontSight.position.set(0, 0.046, -0.31);
-      const frontSightDot = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.008, 0.010), coreCrystalMat);
-      frontSightDot.position.set(0, 0.054, -0.31);
-
       // 4. 팬텀 전용 직선형 다크 퍼플 & 골드 탄창
-      const straightMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.165, 0.068), darkObsidianMat);
+      const straightMag = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.165, 0.066), darkObsidianMat);
       straightMag.rotation.x = -0.08;
       straightMag.position.set(0, -0.10, -0.095);
 
-      const magGoldStrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.022, 0.070), goldTrimMat);
+      const magCrystalStripe = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.085, 0.014), coreCrystalMat);
+      magCrystalStripe.rotation.x = -0.08;
+      magCrystalStripe.position.set(0, -0.105, -0.095);
+
+      const magGoldStrip = new THREE.Mesh(new THREE.BoxGeometry(0.037, 0.020, 0.068), goldTrimMat);
       magGoldStrip.rotation.x = -0.08;
       magGoldStrip.position.set(0, -0.178, -0.102);
 
       // 5. 왼쪽 측면에 매달린 2024 서울 챔피언스 건 버디
-      const buddyRing = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.003, 8, 16), goldTrimMat);
-      buddyRing.position.set(-0.034, -0.008, -0.19);
-      const buddyCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.011, 0), coreCrystalMat);
-      buddyCrystal.position.set(-0.034, -0.026, -0.19);
+      const buddyRing = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0028, 8, 16), goldTrimMat);
+      buddyRing.position.set(-0.032, -0.008, -0.19);
+      const buddyCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.010, 0), coreCrystalMat);
+      buddyCrystal.position.set(-0.032, -0.025, -0.19);
 
-      // 6. 화이트·골드 콤팩트 홀로그램 사이트 (사진 상단 화이트 사이트 반영)
+      // 6. 시야가 뻥 뚫린 오픈형 화이트·골드 홀로그램 조준경 (중심이 뚫려 있어 조준 시 화면 가림 0%)
       const sight = new THREE.Group();
-      const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.014, 0.082), whiteArmorMat);
-      const sightGoldFrame = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.022, 0.045), goldTrimMat);
-      sightGoldFrame.position.set(0, 0.014, -0.005);
+      const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.010, 0.072), whiteArmorMat);
+      const sightLeftPillar = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.026, 0.042), whiteArmorMat);
+      sightLeftPillar.position.set(-0.017, 0.016, -0.004);
+      const sightRightPillar = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.026, 0.042), whiteArmorMat);
+      sightRightPillar.position.set(0.017, 0.016, -0.004);
+      const sightTopArch = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.004, 0.036), goldTrimMat);
+      sightTopArch.position.set(0, 0.030, -0.004);
       const sightLens = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.028, 0.018),
-        new THREE.MeshBasicMaterial({ color: 0xe0aaff, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+        new THREE.PlaneGeometry(0.030, 0.022),
+        new THREE.MeshBasicMaterial({ color: 0xe0aaff, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
       );
-      sightLens.position.set(0, 0.016, -0.005);
-      const sightDot = new THREE.Mesh(new THREE.SphereGeometry(0.0022, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
-      sightDot.position.set(0, 0.016, -0.005);
-      sight.add(sightBase, sightGoldFrame, sightLens, sightDot);
-      sight.position.set(0, 0.054, -0.12);
+      sightLens.position.set(0, 0.017, -0.004);
+      const sightDot = new THREE.Mesh(new THREE.SphereGeometry(0.0018, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+      sightDot.position.set(0, 0.017, -0.004);
+      sight.add(sightBase, sightLeftPillar, sightRightPillar, sightTopArch, sightLens, sightDot);
+      sight.position.set(0, 0.056, -0.11);
 
       // 7. 킬 달성 시 총신에 감기는 보랏빛·황금색 챔피언스 오라 쉘
       const auraMat = new THREE.MeshBasicMaterial({
@@ -1644,16 +1679,15 @@
         opacity: 0.0,
         wireframe: true
       });
-      const auraShell = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.092, 0.64), auraMat);
+      const auraShell = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.086, 0.62), auraMat);
       auraShell.position.set(0, 0.014, -0.18);
 
       group.add(
-        receiver, goldTrimBottom, rearSpine, topSparkPlate,
+        receiverCore, sideArmorL, sideArmorR, upperShroud, topRail, goldTrimBottom, boltCarrier, rearSpine, topSparkPlate,
         coreChamberRingL, coreChamberRingR, crystalOrb,
-        handguard, handguardGoldLip,
-        suppressorBody, suppressorCollar, suppressorTip, suppressorTipGold,
-        frontSight, frontSightDot,
-        straightMag, magGoldStrip,
+        handguard, handguardVentL, handguardVentR, handguardGoldLip,
+        suppressorBody, suppressorCollar, suppressorMidBand, suppressorTip, suppressorTipGold,
+        straightMag, magCrystalStripe, magGoldStrip,
         buddyRing, buddyCrystal,
         sight, auraShell
       );
@@ -3935,12 +3969,16 @@
 
       const isMoving = Boolean(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
       const isWalking = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
+      const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       let spread = 0;
 
       if (!isGrounded) {
         spread = w.jumpSpread;
       } else if (key === 'operator' && !wasZoomed) {
-        spread = w.noScopeSpread + (isMoving && !isWalking ? 0.12 : 0);
+        spread = w.noScopeSpread + (isMoving && !isWalking && !isCrouching ? 0.12 : (isCrouching ? -0.06 : 0));
+      } else if (isCrouching) {
+        // 앉아 쏴(Ctrl) 상태: 이동 중에도 발로란트 게걸음 사격처럼 정밀하게 탄착군이 모임
+        spread = isMoving ? (w.jumpSpread * 0.04) : 0;
       } else if (isMoving && !isWalking) {
         spread = w.jumpSpread * 0.45;
       }
@@ -4110,8 +4148,7 @@
         }
       }
 
-      const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
-      let recoilMult = isCrouching ? 0.65 : 1.0;
+      let recoilMult = isCrouching ? 0.48 : 1.0;
       if (wasZoomed) recoilMult *= 0.8;
       if (key === 'operator' && !wasZoomed) recoilMult *= 1.8;
       if (!isGrounded) recoilMult *= 1.4;
@@ -4307,7 +4344,7 @@
 
       const crosshairEl = document.getElementById('crosshair');
       const curKey = getCurrentWeaponKey();
-      const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isMoving && !isWalking ? 1.5 : 1.0));
+      const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isCrouching ? (isMoving ? 0.85 : 0.75) : (isMoving && !isWalking ? 1.5 : 1.0)));
       crosshairEl.style.transform = `translate(-50%, -50%) scale(${spreadScale})`;
 
       const targetEyeHeight = isCrouching ? 1.25 : 2.0;
@@ -4510,8 +4547,8 @@
         }
       } else if (!isReloading && gunGroup.visible) {
         const targetGunX = zoomLevel > 0 ? 0.0 : (isKarambitEquipped ? 0.21 : 0.26);
-        const targetGunY = zoomLevel > 0 ? -0.075 : (isKarambitEquipped ? -0.14 : -0.22);
-        const targetGunZ = zoomLevel > 0 ? -0.28 : (isKarambitEquipped ? -0.34 : -0.42);
+        const targetGunY = zoomLevel > 0 ? -0.073 : (isKarambitEquipped ? -0.14 : -0.22);
+        const targetGunZ = zoomLevel > 0 ? -0.42 : (isKarambitEquipped ? -0.34 : -0.42);
         gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, targetGunX, 0.25);
         gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetGunY, 0.25);
         gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetGunZ, 0.25);
