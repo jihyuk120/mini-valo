@@ -146,8 +146,14 @@
           <div class="item-price">2,900 ¤</div>
         </div>
         <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')">
-          <div><div class="item-title">[1번] 밴달 (Vandal)</div><div class="item-desc">25발 | 전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div></div>
-          <div class="item-price">2,900 ¤</div>
+          <div>
+            <div class="item-title">[1번] 밴달 (Vandal) <span id="vandalSkinBadge" style="font-size:11px; background:#333; color:#ccc; padding:2px 6px; border-radius:3px; margin-left:6px;">기본 스킨</span></div>
+            <div class="item-desc">25발 | 전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+            <div class="item-price">2,900 ¤</div>
+            <button id="toggleVandalSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('vandal');" style="background:#2a210c; border:1px solid #ffd700; color:#ffd700; font-size:11px; font-weight:bold; padding:3px 8px; border-radius:3px; cursor:pointer;">2021 챔피언스 장착</button>
+          </div>
         </div>
         <div class="shop-item" id="buy-operator" onclick="buyWeapon('operator')">
           <div><div class="item-title">[1번] 오퍼레이터 (Operator)</div><div class="item-desc">5발 | 헤드 255 / 몸 150 / 다리 120 | 고관통·2단줌·사격 후 줌해제</div></div>
@@ -173,10 +179,19 @@
     <button id="closeShopBtn" class="btn-primary" style="margin-top:18px;">상점 닫기 (게임 복귀)</button>
   </div>
 
-  <div id="topScoreboard">
-    <span class="team-red">RED <span id="redScoreText">0</span></span>
-    <span style="color:#888; font-size:14px;">VS (난투 PvP)</span>
-    <span class="team-blue"><span id="blueScoreText">0</span> BLUE</span>
+  <div id="topScoreboard" style="flex-direction:column; gap:4px; padding:8px 26px;">
+    <div style="display:flex; align-items:center; gap:18px;">
+      <span class="team-red">RED <span id="redScoreText">0</span></span>
+      <span id="roundTimerText" style="color:#00ffcc; font-size:18px; min-width:95px; text-align:center;">ROUND 1</span>
+      <span class="team-blue"><span id="blueScoreText">0</span> BLUE</span>
+    </div>
+    <div id="roundPhaseSub" style="font-size:12px; color:#ffcc00; letter-spacing:1px;">
+      준비 시간 (8초) - 상점(B) 이용 가능
+    </div>
+  </div>
+  <div id="roundCenterBanner" style="position:fixed; top:22%; left:50%; transform:translate(-50%, -50%); pointer-events:none; z-index:18; text-align:center; display:none;">
+    <div id="roundBannerTitle" style="font-size:44px; font-weight:900; color:#ece8e1; letter-spacing:4px; text-shadow:0 4px 18px rgba(0,0,0,0.9);">ROUND 1</div>
+    <div id="roundBannerSub" style="font-size:18px; font-weight:bold; color:#00ffcc; margin-top:4px; text-shadow:0 2px 8px black;">구매 및 준비 시간 (장벽 해제까지 8초)</div>
   </div>
 
   <div id="crosshair"></div>
@@ -374,6 +389,24 @@
       5: 'valorant-5-kills.mp3'
     };
 
+    const CHAMPIONS_2021_STREAK_FILES = {
+      1: 'champions-2021-kill-1-sound.mp3',
+      2: 'champions-2021-kill-2-sound.mp3',
+      3: 'champions-2021-kill-3-sound.mp3',
+      4: 'champions-2021-kill-4-sound.mp3',
+      5: 'champions-2021-kill-5-sound.mp3'
+    };
+
+    // 무기별 장착 스킨 상태
+    const equippedSkins = {
+      vandal: 'champions2021', // 기본으로 2021 챔피언스 장착 상태 (상점에서 언제든 전환 가능)
+      phantom: 'standard',
+      sheriff: 'standard',
+      operator: 'standard',
+      melee: 'standard'
+    };
+    let championsAuraTimer = 0; // 킬 달성 시 총신 황금 오라 지속시간
+
     let currentStreak = 0;
     let streakBannerTimer = null;
 
@@ -475,10 +508,15 @@
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
-      const file = STREAK_FILES[soundTier];
+      const isChamp2021Active = (getCurrentWeaponKey() === 'vandal' && equippedSkins.vandal === 'champions2021');
+      if (isChamp2021Active) {
+        championsAuraTimer = 5.0; // 5초간 챔피언스 오라 발광
+      }
+      const soundMap = isChamp2021Active ? CHAMPIONS_2021_STREAK_FILES : STREAK_FILES;
+      const file = soundMap[soundTier];
       if (file) {
         const sfx = new Audio(file);
-        sfx.volume = 0.85;
+        sfx.volume = 0.88;
         sfx.play().catch(() => {});
       }
 
@@ -735,17 +773,200 @@
       return group;
     }
 
+
+    function createChampions2021Texture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      // 1. 무광 다크 블랙 베이스
+      ctx.fillStyle = '#121316';
+      ctx.fillRect(0, 0, 512, 256);
+
+      // 2. 날카로운 로열 골드 파편 패턴
+      const goldGrad = ctx.createLinearGradient(0, 0, 512, 256);
+      goldGrad.addColorStop(0, '#ffd700');
+      goldGrad.addColorStop(0.5, '#d4af37');
+      goldGrad.addColorStop(1, '#fff099');
+      ctx.fillStyle = goldGrad;
+
+      const shards = [
+        [[20, 20], [110, 45], [65, 95]],
+        [[140, 15], [240, 35], [190, 85]],
+        [[300, 180], [430, 140], [390, 230]],
+        [[40, 160], [150, 190], [95, 240]],
+        [[410, 25], [495, 60], [450, 115]]
+      ];
+      shards.forEach(poly => {
+        ctx.beginPath();
+        ctx.moveTo(poly[0][0], poly[0][1]);
+        ctx.lineTo(poly[1][0], poly[1][1]);
+        ctx.lineTo(poly[2][0], poly[2][1]);
+        ctx.closePath();
+        ctx.fill();
+      });
+
+      // 3. 상단 크림슨 레드 포인트 라인
+      ctx.fillStyle = '#e62e3d';
+      ctx.fillRect(0, 0, 512, 22);
+
+      // 4. 시그니처 CHAMPIONS 황금 그래피티 레터링
+      ctx.save();
+      ctx.translate(256, 132);
+      ctx.rotate(-0.08);
+      ctx.font = 'italic 900 54px Impact, Arial Black, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#0a0a0c';
+      ctx.strokeText('CHAMPIONS', 0, 0);
+      ctx.fillStyle = '#ffdf4d';
+      ctx.fillText('CHAMPIONS', 0, 0);
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      return tex;
+    }
+
+    function buildChampions2021VandalModel() {
+      const group = new THREE.Group();
+      const champTex = createChampions2021Texture();
+
+      const champBodyMat = new THREE.MeshStandardMaterial({
+        map: champTex,
+        metalness: 0.78,
+        roughness: 0.28,
+        emissive: new THREE.Color(0xffb700),
+        emissiveIntensity: 0.08
+      });
+      const goldMat = new THREE.MeshStandardMaterial({
+        color: 0xffd23f,
+        metalness: 0.9,
+        roughness: 0.18,
+        emissive: new THREE.Color(0xffaa00),
+        emissiveIntensity: 0.15
+      });
+      const redMat = new THREE.MeshStandardMaterial({
+        color: 0xe62e3d,
+        metalness: 0.5,
+        roughness: 0.35,
+        emissive: new THREE.Color(0xff1e32),
+        emissiveIntensity: 0.2
+      });
+      const silverWhiteMat = new THREE.MeshStandardMaterial({
+        color: 0xd8dee9,
+        metalness: 0.45,
+        roughness: 0.4
+      });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x111215, metalness: 0.8, roughness: 0.3 });
+
+      // 바디 리시버 (CHAMPIONS 텍스처)
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.080, 0.34), champBodyMat);
+      receiver.position.set(0, 0.01, -0.02);
+
+      // 상단 레드 스파인 라인
+      const topRedLine = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.010, 0.32), redMat);
+      topRedLine.position.set(0, 0.052, -0.02);
+
+      // 하단 화이트/실버 언더 핸드가드 (이미지 디테일 반영)
+      const handguardTop = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.042, 0.22), champBodyMat);
+      handguardTop.position.set(0, 0.022, -0.28);
+      const handguardBottom = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.026, 0.22), silverWhiteMat);
+      handguardBottom.position.set(0, -0.012, -0.28);
+
+      // 황금 총열 및 머즐 브레이크
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.16, 12), goldMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.018, -0.45);
+
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.022, 0.02), redMat);
+      frontSight.position.set(0, 0.042, -0.49);
+
+      // 골드 & 블랙 탄창 + 하단 레드 고리
+      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.11, 0.068), goldMat);
+      magUpper.rotation.x = -0.22;
+      magUpper.position.set(0, -0.07, -0.10);
+
+      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.065), darkMat);
+      magLower.rotation.x = -0.48;
+      magLower.position.set(0, -0.155, -0.138);
+
+      const magRedTip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.014, 0.068), redMat);
+      magRedTip.rotation.x = -0.48;
+      magRedTip.position.set(0, -0.205, -0.162);
+
+      // 왼쪽 옆면에 매달린 챔피언스 총기 장식 (Gun Buddy)
+      const buddyRing = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.003, 8, 16), goldMat);
+      buddyRing.position.set(-0.034, -0.01, -0.18);
+      const buddyCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.011, 0), redMat);
+      buddyCore.position.set(-0.034, -0.028, -0.18);
+
+      // 챔피언스 오라 외곽 글로우 쉘 (킬 달성 시 빛남)
+      const auraMat = new THREE.MeshBasicMaterial({
+        color: 0xffe46b,
+        transparent: true,
+        opacity: 0.0,
+        wireframe: true
+      });
+      const auraShell = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.092, 0.56), auraMat);
+      auraShell.position.set(0, 0.012, -0.12);
+
+      const sight = buildHoloSight();
+      sight.position.set(0, 0.056, -0.02);
+
+      group.add(
+        receiver, topRedLine, handguardTop, handguardBottom,
+        barrel, frontSight, magUpper, magLower, magRedTip,
+        buddyRing, buddyCore, auraShell, sight
+      );
+
+      group.userData.auraMat = auraMat;
+      group.userData.champBodyMat = champBodyMat;
+      group.userData.goldMat = goldMat;
+      group.userData.buddyCore = buddyCore;
+      return group;
+    }
+
     const models = {
       sheriff: buildSheriffModel(),
       phantom: buildPhantomModel(),
       vandal: buildVandalModel(),
+      vandal_champions2021: buildChampions2021VandalModel(),
       operator: buildOperatorModel(),
       melee: buildMeleeModel()
     };
 
+    function getActiveModelForWeapon(wKey) {
+      if (wKey === 'vandal' && equippedSkins.vandal === 'champions2021') {
+        return models.vandal_champions2021;
+      }
+      return models[wKey];
+    }
+
+    window.toggleWeaponSkin = function(wKey) {
+      if (wKey === 'vandal') {
+        equippedSkins.vandal = equippedSkins.vandal === 'champions2021' ? 'standard' : 'champions2021';
+        const isChamp = equippedSkins.vandal === 'champions2021';
+        const badge = document.getElementById('vandalSkinBadge');
+        const btn = document.getElementById('toggleVandalSkinBtn');
+        if (badge) {
+          badge.innerText = isChamp ? '2021 챔피언스' : '기본 스킨';
+          badge.style.background = isChamp ? '#4a3800' : '#333';
+          badge.style.color = isChamp ? '#ffd700' : '#ccc';
+        }
+        if (btn) {
+          btn.innerText = isChamp ? '기본 스킨으로 변경' : '2021 챔피언스 장착';
+        }
+        if (getCurrentWeaponKey() === 'vandal') {
+          updateGunVisual();
+        }
+      }
+    };
+
     function updateGunVisual() {
       while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
-      gunGroup.add(models[getCurrentWeaponKey()]);
+      gunGroup.add(getActiveModelForWeapon(getCurrentWeaponKey()));
       gunGroup.visible = true;
       gunGroup.position.set(0.26, -0.22, -0.42);
       gunGroup.rotation.set(0, 0, 0);
@@ -886,6 +1107,326 @@
     // ==========================================
     // 난투 AI 봇 시스템 (적 팀 전투 AI)
     // ==========================================
+
+    // ==========================================
+    // 2021 챔피언스 마무리 모션 (피니셔) 연출 시스템
+    // ==========================================
+    let activeFinisher = null;
+
+    function clearChampionsFinisher() {
+      if (!activeFinisher) return;
+      scene.remove(activeFinisher.group);
+      if (activeFinisher.skyDome) scene.remove(activeFinisher.skyDome);
+      scene.background = new THREE.Color(0x16202a);
+      if (scene.fog) scene.fog.color.setHex(0x16202a);
+      if (activeFinisher.audio) {
+        activeFinisher.audio.pause();
+        activeFinisher.audio = null;
+      }
+      activeFinisher = null;
+    }
+
+    function triggerChampions2021Finisher(pos) {
+      clearChampionsFinisher();
+
+      // 마무리 모션 전용 사운드 (champions-2021-finisher.mp3가 있으면 재생, 없으면 5킬 에이스 음원 재생)
+      let finAudio = new Audio('champions-2021-finisher.mp3');
+      finAudio.volume = 0.9;
+      finAudio.play().catch(() => {
+        finAudio = new Audio('champions-2021-kill-5-sound.mp3');
+        finAudio.volume = 0.9;
+        finAudio.play().catch(() => {});
+      });
+
+      const group = new THREE.Group();
+      group.position.set(pos.x, 0, pos.z);
+
+      // 1. 어두운 반투명 구체 (영상 속 검은 에너지 돔)
+      const sphereGeo = new THREE.SphereGeometry(3.6, 28, 28);
+      const sphereMat = new THREE.MeshBasicMaterial({
+        color: 0x090a0d,
+        transparent: true,
+        opacity: 0.72,
+        side: THREE.DoubleSide
+      });
+      const darkSphere = new THREE.Mesh(sphereGeo, sphereMat);
+      darkSphere.position.y = 3.2;
+      group.add(darkSphere);
+
+      // 구체 외곽 황금 링
+      const ringGeo = new THREE.RingGeometry(3.5, 3.65, 36);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.y = 3.2;
+      group.add(ringMesh);
+
+      // 2. 중앙 황금 V 챔피언스 엠블럼 & 황금 빛기둥
+      const beamGeo = new THREE.CylinderGeometry(0.18, 0.9, 14, 16, 1, true);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xffdf5d,
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide
+      });
+      const beam = new THREE.Mesh(beamGeo, beamMat);
+      beam.position.y = 7.0;
+      group.add(beam);
+
+      const emblemGroup = new THREE.Group();
+      emblemGroup.position.y = 3.2;
+      const vMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+      const leftWing = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.8, 0.12), vMat);
+      leftWing.position.set(-0.48, 0, 0);
+      leftWing.rotation.z = 0.36;
+      const rightWing = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.8, 0.12), vMat);
+      rightWing.position.set(0.48, 0, 0);
+      rightWing.rotation.z = -0.36;
+      emblemGroup.add(leftWing, rightWing);
+      group.add(emblemGroup);
+
+      // 3. 거대한 챔피언스 거인 실루엣 (영상 후반 하늘로 솟아오르는 거인 연출)
+      const titanGroup = new THREE.Group();
+      const titanMat = new THREE.MeshBasicMaterial({
+        color: 0x0a080c,
+        transparent: true,
+        opacity: 0.0
+      });
+      const titanTorso = new THREE.Mesh(new THREE.BoxGeometry(7.5, 11, 3.5), titanMat);
+      titanTorso.position.y = 14;
+      const titanHead = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.2, 3.0), titanMat);
+      titanHead.position.y = 21.5;
+      const titanArmL = new THREE.Mesh(new THREE.BoxGeometry(2.2, 12, 2.2), titanMat);
+      titanArmL.position.set(-5.8, 19, 0);
+      titanArmL.rotation.z = 0.42;
+      const titanArmR = new THREE.Mesh(new THREE.BoxGeometry(2.2, 12, 2.2), titanMat);
+      titanArmR.position.set(5.8, 19, 0);
+      titanArmR.rotation.z = -0.42;
+      titanGroup.add(titanTorso, titanHead, titanArmL, titanArmR);
+      group.add(titanGroup);
+
+      scene.add(group);
+
+      // 4. 붉은 이클립스 밤하늘 전환
+      scene.background = new THREE.Color(0x4a0812);
+      if (scene.fog) scene.fog.color.setHex(0x4a0812);
+
+      activeFinisher = {
+        group,
+        darkSphere,
+        ringMesh,
+        emblemGroup,
+        titanGroup,
+        titanMat,
+        beamMat,
+        timer: 0,
+        duration: 5.5,
+        audio: finAudio
+      };
+    }
+
+    function updateChampionsFinisher(dt) {
+      if (!activeFinisher) return;
+      const f = activeFinisher;
+      f.timer += dt;
+
+      f.emblemGroup.rotation.y += dt * 1.8;
+      f.ringMesh.lookAt(camera.position);
+      f.titanGroup.lookAt(camera.position.x, f.titanGroup.position.y, camera.position.z);
+
+      // 거인 실루엣이 서서히 하늘 위로 솟아오르며 나타남
+      if (f.timer > 0.8) {
+        const riseProgress = Math.min(1, (f.timer - 0.8) / 2.2);
+        f.titanMat.opacity = riseProgress * 0.88;
+        f.titanGroup.position.y = -4 + riseProgress * 6;
+      }
+
+      // 황금 빛기둥 깜빡임
+      f.beamMat.opacity = 0.35 + Math.sin(f.timer * 14) * 0.15;
+
+      if (f.timer >= f.duration) {
+        clearChampionsFinisher();
+      }
+    }
+
+
+    // ==========================================
+    // 난투 라운드 페이즈 시스템 (8초 준비 + 방벽 + 전멸 승리)
+    // ==========================================
+    let roundNumber = 1;
+    let roundPhase = 'PREP'; // 'PREP' | 'COMBAT' | 'END'
+    let roundPhaseTimer = 8.0;
+    const prepBarrierMeshes = [];
+
+    function clearPrepBarriers() {
+      prepBarrierMeshes.forEach(m => scene.remove(m));
+      prepBarrierMeshes.length = 0;
+    }
+
+    function createPrepBarriers() {
+      clearPrepBarriers();
+      // 레드팀 진영 앞 보호막 (Z = 21) & 블루팀 진영 앞 보호막 (Z = -21)
+      const redBarrierMat = new THREE.MeshBasicMaterial({
+        color: 0xff4655,
+        transparent: true,
+        opacity: 0.26,
+        side: THREE.DoubleSide
+      });
+      const blueBarrierMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.26,
+        side: THREE.DoubleSide
+      });
+
+      const redBarrier = new THREE.Mesh(new THREE.PlaneGeometry(68, 8.5), redBarrierMat);
+      redBarrier.position.set(0, 4.25, 21.5);
+      scene.add(redBarrier);
+
+      const blueBarrier = new THREE.Mesh(new THREE.PlaneGeometry(68, 8.5), blueBarrierMat);
+      blueBarrier.position.set(0, 4.25, -21.5);
+      scene.add(blueBarrier);
+
+      prepBarrierMeshes.push(redBarrier, blueBarrier);
+    }
+
+    function showRoundBanner(title, sub, color = '#ece8e1', duration = 2200) {
+      const banner = document.getElementById('roundCenterBanner');
+      const titleEl = document.getElementById('roundBannerTitle');
+      const subEl = document.getElementById('roundBannerSub');
+      if (!banner) return;
+      titleEl.innerText = title;
+      titleEl.style.color = color;
+      subEl.innerText = sub;
+      banner.style.display = 'block';
+      clearTimeout(banner._t);
+      if (duration > 0) {
+        banner._t = setTimeout(() => { banner.style.display = 'none'; }, duration);
+      }
+    }
+
+    function startBrawlRound(num) {
+      roundNumber = num;
+      roundPhase = 'PREP';
+      roundPhaseTimer = 8.0;
+      clearChampionsFinisher();
+
+      // 플레이어 부활 및 스폰 위치 초기화
+      isDead = false;
+      playerHp = 100;
+      const s = SHIELDS[currentShieldKey];
+      playerShield = s.max;
+      shieldReserve = s.reserve;
+      tagSlowMultiplier = 1.0;
+      aimPunchPitch = 0;
+      setZoom(0);
+      document.getElementById('deathBanner').style.display = 'none';
+
+      // 탄약 가득 채우기
+      Object.keys(ammoState).forEach(k => {
+        if (WEAPONS[k] && WEAPONS[k].magSize !== Infinity) ammoState[k] = WEAPONS[k].magSize;
+      });
+      updateHUD();
+      spawnMyPlayer();
+
+      // AI 봇들도 전원 부활 및 진영 스폰
+      const botCnt = parseInt(document.getElementById('brawlBotCountSelect').value, 10) || 0;
+      if (brawlBots.length !== botCnt) {
+        initBrawlBots(botCnt);
+      } else {
+        brawlBots.forEach(b => spawnBrawlBot(b));
+      }
+
+      createPrepBarriers();
+      showRoundBanner(`ROUND ${roundNumber}`, '준비 시간 (8초) - 장벽이 열리기 전까지 상점(B) 이용 가능', '#00ffcc', 2600);
+    }
+
+    function endBrawlRound(winningTeam, killerPos = null, usedChamp2021 = false) {
+      if (roundPhase === 'END') return;
+      roundPhase = 'END';
+      roundPhaseTimer = 5.5;
+
+      if (winningTeam === 'red') redScore += 1;
+      else blueScore += 1;
+      updateScoreboard();
+
+      // 마지막 적 처치 시 2021 챔피언스 마무리 모션 발동!
+      if (usedChamp2021 && killerPos) {
+        triggerChampions2021Finisher(killerPos);
+      }
+
+      const winLabel = winningTeam === 'red' ? 'RED TEAM 승리!' : 'BLUE TEAM 승리!';
+      const winColor = winningTeam === 'red' ? '#ff4655' : '#38bdf8';
+      showRoundBanner(winLabel, '잠시 후 다음 라운드가 시작됩니다', winColor, 4500);
+    }
+
+    function countAliveTeams() {
+      let redAlive = 0;
+      let blueAlive = 0;
+
+      if (!isDead) {
+        if (myTeam === 'red') redAlive++;
+        else blueAlive++;
+      }
+
+      for (const bot of brawlBots) {
+        if (!bot.userData.dead) {
+          if (bot.userData.team === 'red') redAlive++;
+          else blueAlive++;
+        }
+      }
+
+      Object.values(remotePlayers).forEach(rp => {
+        if (rp.mesh && rp.mesh.visible) {
+          if (rp.team === 'red') redAlive++;
+          else blueAlive++;
+        }
+      });
+
+      return { redAlive, blueAlive };
+    }
+
+    function updateBrawlRoundPhase(dt) {
+      if (currentMap !== 'brawl') return;
+
+      const timerEl = document.getElementById('roundTimerText');
+      const subEl = document.getElementById('roundPhaseSub');
+      const { redAlive, blueAlive } = countAliveTeams();
+
+      if (roundPhase === 'PREP') {
+        roundPhaseTimer -= dt;
+        const sec = Math.max(0, Math.ceil(roundPhaseTimer));
+        if (timerEl) timerEl.innerText = `준비 ${sec}s`;
+        if (subEl) subEl.innerText = `ROUND ${roundNumber} · 준비 시간 (상점 B / 보호막 활성)`;
+
+        if (roundPhaseTimer <= 0) {
+          roundPhase = 'COMBAT';
+          clearPrepBarriers();
+          showRoundBanner('FIGHT!', '상대 팀을 모두 처치하세요!', '#ff4655', 1400);
+        }
+      } else if (roundPhase === 'COMBAT') {
+        if (timerEl) timerEl.innerText = `R${roundNumber} 전투`;
+        if (subEl) subEl.innerText = `생존 인원 — RED ${redAlive}명 vs BLUE ${blueAlive}명`;
+
+        // 전멸 체크 (상대 팀이 0명이 되면 즉시 라운드 종료)
+        if (blueAlive === 0 && redAlive > 0) {
+          endBrawlRound('red');
+        } else if (redAlive === 0 && blueAlive > 0) {
+          endBrawlRound('blue');
+        } else if (redAlive === 0 && blueAlive === 0) {
+          endBrawlRound(myTeam);
+        }
+      } else if (roundPhase === 'END') {
+        roundPhaseTimer -= dt;
+        const sec = Math.max(0, Math.ceil(roundPhaseTimer));
+        if (timerEl) timerEl.innerText = `다음 라운드 ${sec}s`;
+        if (subEl) subEl.innerText = `ROUND ${roundNumber} 종료`;
+
+        if (roundPhaseTimer <= 0) {
+          startBrawlRound(roundNumber + 1);
+        }
+      }
+    }
+
     const brawlBots = [];
     const brawlBotHitboxes = [];
     const AI_NAMES = ['봇 제트', '봇 레이나', '봇 피닉스', '봇 오멘', '봇 소바', '봇 세이지'];
@@ -1009,15 +1550,13 @@
 
     function updateBrawlBots(dt) {
       if (currentMap !== 'brawl') return;
+      if (roundPhase !== 'COMBAT') return; // 준비 시간에는 AI 봇도 대기
       const playerHeadPos = camera.position.clone();
 
       for (const bot of brawlBots) {
         const bd = bot.userData;
         if (bd.dead) {
-          bd.respawnTimer -= dt;
-          if (bd.respawnTimer <= 0) {
-            spawnBrawlBot(bot);
-          }
+          // 라운드제이므로 라운드 도중에는 부활하지 않음!
           continue;
         }
 
@@ -1347,10 +1886,6 @@
         resetScoreStreak();
         document.getElementById('deathBanner').style.display = 'flex';
 
-        if (attackerTeam === 'red') redScore += 1;
-        else blueScore += 1;
-        updateScoreboard();
-
         const myNick = document.getElementById('nickInput').value || '플레이어';
         addKillFeed(`${attackerNick} [${weaponName}] ➔ ${myNick}${isHead ? ' [헤드샷]' : ''}`, true);
         broadcastData({ type: 'killNotify', attackerNick, victimNick: myNick, weaponName, redScore, blueScore, isHead: Boolean(isHead) });
@@ -1363,16 +1898,8 @@
           });
         }
 
-        setTimeout(() => {
-          isDead = false;
-          playerHp = 100;
-          const s = SHIELDS[currentShieldKey];
-          playerShield = s.max;
-          shieldReserve = s.reserve;
-          document.getElementById('deathBanner').style.display = 'none';
-          spawnMyPlayer();
-          updateHUD();
-        }, 2500);
+        const deathSub = document.querySelector('#deathBanner div:nth-child(2)');
+        if (deathSub) deathSub.innerText = '라운드 종료 후 다음 라운드에 부활합니다...';
       }
     }
 
@@ -1405,8 +1932,11 @@
       } else {
         buildBrawlMap();
         bots.forEach(b => { b.visible = false; });
-        const botCnt = parseInt(document.getElementById('brawlBotCountSelect').value, 10) || 0;
-        initBrawlBots(botCnt);
+        redScore = 0;
+        blueScore = 0;
+        updateScoreboard();
+        startBrawlRound(1);
+        return;
       }
       spawnMyPlayer();
     }
@@ -1484,6 +2014,15 @@
 
       ['sheriff', 'phantom', 'vandal', 'operator'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k));
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
+      const isChamp = equippedSkins.vandal === 'champions2021';
+      const badge = document.getElementById('vandalSkinBadge');
+      const btn = document.getElementById('toggleVandalSkinBtn');
+      if (badge) {
+        badge.innerText = isChamp ? '2021 챔피언스' : '기본 스킨';
+        badge.style.background = isChamp ? '#4a3800' : '#333';
+        badge.style.color = isChamp ? '#ffd700' : '#ccc';
+      }
+      if (btn) btn.innerText = isChamp ? '기본 스킨으로 변경' : '2021 챔피언스 장착';
     }
     updateHUD();
 
@@ -1637,6 +2176,11 @@
           blockedZ = true; break;
         }
       }
+      // 준비 시간(PREP)에는 진영 보호막 밖으로 나갈 수 없음
+      if (currentMap === 'brawl' && roundPhase === 'PREP') {
+        if (myTeam === 'red' && nextZ < 22.3) blockedZ = true;
+        if (myTeam === 'blue' && nextZ > -22.3) blockedZ = true;
+      }
       if (!blockedZ) camera.position.z = nextZ;
     }
 
@@ -1646,6 +2190,7 @@
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
       if (isReloading || isDead) return;
+      if (currentMap === 'brawl' && roundPhase === 'PREP') return; // 준비 시간에는 발사/전투 불가
 
       const wasZoomed = zoomLevel > 0;
 
@@ -1732,7 +2277,8 @@
         if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
           tracerEnd = hits[0].point;
         }
-        spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator');
+        const isChamp2021 = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
+        spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator' || isChamp2021);
       }
 
       const hitTargetsSet = new Set();
@@ -1804,17 +2350,21 @@
           bd.hp -= rem;
           if (bd.hp <= 0) {
             bd.dead = true;
-            bd.respawnTimer = 2.5;
             botRoot.visible = false;
-
-            if (myTeam === 'red') redScore += 1;
-            else blueScore += 1;
-            updateScoreboard();
 
             const myNick = document.getElementById('nickInput').value || '플레이어';
             const isHead = part === 'head';
             triggerScoreStreak(1, isHead);
             addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
+
+            // 상대 팀이 전부 죽었는지 확인 -> 마지막 적 처치일 때만 마무리 모션 발동!
+            const { redAlive, blueAlive } = countAliveTeams();
+            const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+            const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
+            if (remainingEnemies === 0) {
+              const usedChamp = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
+              endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
+            }
           }
         }
       }
@@ -1992,6 +2542,20 @@
         gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, 0, 0.2);
       }
 
+      // 2021 챔피언스 밴달 오라 및 총기 장식 애니메이션
+      if (championsAuraTimer > 0) championsAuraTimer -= dt;
+      const champModel = models.vandal_champions2021;
+      if (champModel && champModel.userData.auraMat) {
+        const isAuraOn = championsAuraTimer > 0;
+        champModel.userData.auraMat.opacity = isAuraOn ? (0.32 + Math.sin(performance.now() * 0.015) * 0.14) : 0.0;
+        champModel.userData.champBodyMat.emissiveIntensity = isAuraOn ? 0.45 : 0.08;
+        if (champModel.userData.buddyCore) {
+          champModel.userData.buddyCore.rotation.y += dt * 3.0;
+        }
+      }
+
+      updateBrawlRoundPhase(dt);
+      updateChampionsFinisher(dt);
       updateBrawlBots(dt);
 
       if (currentMap === 'range' && botStrafeMode) {
