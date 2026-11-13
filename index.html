@@ -91,9 +91,17 @@
         <button id="btnFullscreen" class="btn-secondary" style="padding:8px 12px; font-size:13px;">전체화면</button>
       </div>
       <div class="row" style="margin-top:12px;">
-        <span style="font-size:14px; color:#bbb;">내 팀 선택 (난투용):</span>
+        <span style="font-size:14px; color:#bbb;">내 팀 선택:</span>
         <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">레드 팀 (RED)</button>
         <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">블루 팀 (BLUE)</button>
+        <span style="color:#555;">|</span>
+        <span style="font-size:14px; color:#bbb;">난투 AI 봇:</span>
+        <select id="brawlBotCountSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
+          <option value="0">0명 (PvP 전용)</option>
+          <option value="2">2명 (1v2 연습)</option>
+          <option value="4" selected>4명 (2v3 난투)</option>
+          <option value="6">6명 (다대다 난전)</option>
+        </select>
       </div>
     </div>
 
@@ -210,6 +218,154 @@
   </div>
 
   <script>
+    // ==========================================
+    // Web Audio API 프로시저럴 사운드 엔진 (외부 파일 불필요)
+    // ==========================================
+    let audioCtx = null;
+    let noiseBuffer = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        const bufferSize = audioCtx.sampleRate * 1.5;
+        noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+    }
+
+    function playWeaponSound(weaponKey, dist = 0) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const distGain = Math.max(0.05, Math.min(1.0, 1 - dist / 95));
+      if (distGain <= 0.06) return;
+
+      if (weaponKey === 'melee') {
+        // 칼 휘두르는 바람 소리
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(600, now);
+        filter.frequency.exponentialRampToValueAtTime(2200, now + 0.09);
+        filter.Q.value = 3;
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(0.28 * distGain, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.start(now); noise.stop(now + 0.15);
+        return;
+      }
+
+      // 총기별 타격음 파라미터
+      const cfg = {
+        sheriff:  { punchFreq: 190, endFreq: 42, punchDur: 0.22, noiseFreq: 1400, noiseDur: 0.24, vol: 0.55 },
+        vandal:   { punchFreq: 165, endFreq: 38, punchDur: 0.16, noiseFreq: 1150, noiseDur: 0.18, vol: 0.48 },
+        phantom:  { punchFreq: 130, endFreq: 45, punchDur: 0.11, noiseFreq: 2400, noiseDur: 0.11, vol: 0.32 }, // 소음기 쉭- 소리
+        operator: { punchFreq: 240, endFreq: 28, punchDur: 0.42, noiseFreq: 850,  noiseDur: 0.55, vol: 0.75 }  // 웅장한 대포 소리
+      }[weaponKey] || { punchFreq: 160, endFreq: 40, punchDur: 0.16, noiseFreq: 1200, noiseDur: 0.18, vol: 0.45 };
+
+      // 1. 저음 타격감 (Oscillator)
+      const osc = audioCtx.createOscillator();
+      const oscGain = audioCtx.createGain();
+      osc.type = weaponKey === 'phantom' ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(cfg.punchFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(cfg.endFreq, now + cfg.punchDur);
+      oscGain.gain.setValueAtTime(cfg.vol * distGain, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + cfg.punchDur);
+      osc.connect(oscGain); oscGain.connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + cfg.punchDur);
+
+      // 2. 화약 폭발음 (Filtered Noise)
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = weaponKey === 'phantom' ? 'highpass' : 'lowpass';
+      filter.frequency.setValueAtTime(cfg.noiseFreq, now);
+      filter.frequency.exponentialRampToValueAtTime(weaponKey === 'phantom' ? 1200 : 250, now + cfg.noiseDur);
+
+      const nGain = audioCtx.createGain();
+      nGain.gain.setValueAtTime(cfg.vol * 0.9 * distGain, now);
+      nGain.gain.exponentialRampToValueAtTime(0.001, now + cfg.noiseDur);
+
+      noise.connect(filter); filter.connect(nGain); nGain.connect(audioCtx.destination);
+      noise.start(now); noise.stop(now + cfg.noiseDur);
+
+      // 오퍼레이터 볼트액션 찰칵 소리
+      if (weaponKey === 'operator' && dist < 15) {
+        setTimeout(() => {
+          if (!audioCtx) return;
+          const t = audioCtx.currentTime;
+          const clickOsc = audioCtx.createOscillator();
+          const clickGain = audioCtx.createGain();
+          clickOsc.type = 'square';
+          clickOsc.frequency.setValueAtTime(950, t);
+          clickOsc.frequency.setValueAtTime(1350, t + 0.06);
+          clickGain.gain.setValueAtTime(0.12 * distGain, t);
+          clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+          clickOsc.connect(clickGain); clickGain.connect(audioCtx.destination);
+          clickOsc.start(t); clickOsc.stop(t + 0.13);
+        }, 480);
+      }
+    }
+
+    function playFootstepSound(isCrouching = false, dist = 0) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const distGain = Math.max(0.0, Math.min(1.0, 1 - dist / 42));
+      if (distGain <= 0.05) return;
+
+      const vol = (isCrouching ? 0.06 : 0.16) * distGain;
+
+      // 발바닥 닿는 묵직한 저음
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      const baseFreq = 95 + Math.random() * 20;
+      osc.frequency.setValueAtTime(baseFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(36, now + 0.075);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + 0.085);
+
+      // 바닥 마찰음
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 700 + Math.random() * 250;
+      const nGain = audioCtx.createGain();
+      nGain.gain.setValueAtTime(vol * 0.55, now);
+      nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      noise.connect(filter); filter.connect(nGain); nGain.connect(audioCtx.destination);
+      noise.start(now); noise.stop(now + 0.065);
+    }
+
+    function playHitMarkerSound(isHead = false) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = isHead ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(isHead ? 1320 : 520, now);
+      osc.frequency.exponentialRampToValueAtTime(isHead ? 1850 : 280, now + 0.07);
+      gain.gain.setValueAtTime(isHead ? 0.32 : 0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + 0.085);
+    }
+
     const STREAK_FILES = {
       1: 'multikill-1.mp3',
       2: 'valorant-2-kills.mp3',
@@ -670,6 +826,7 @@
         }
       }
 
+      playHitMarkerSound(isHead);
       const hitX = document.getElementById('hitX');
       hitX.style.setProperty('--hit-color', isHead ? '#ff4655' : '#ffffff');
       hitX.style.opacity = '1';
@@ -725,6 +882,216 @@
     }
 
     for (let i = 0; i < 8; i++) createTrainingBot(i);
+
+    // ==========================================
+    // 난투 AI 봇 시스템 (적 팀 전투 AI)
+    // ==========================================
+    const brawlBots = [];
+    const brawlBotHitboxes = [];
+    const AI_NAMES = ['봇 제트', '봇 레이나', '봇 피닉스', '봇 오멘', '봇 소바', '봇 세이지'];
+    const AI_WEAPONS = ['vandal', 'phantom', 'sheriff'];
+
+    function clearBrawlBots() {
+      brawlBots.forEach(b => scene.remove(b));
+      brawlBots.length = 0;
+      brawlBotHitboxes.length = 0;
+    }
+
+    function spawnBrawlBot(bot) {
+      const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+      bot.userData.team = enemyTeam;
+      bot.userData.hp = 100;
+      bot.userData.shield = 50;
+      bot.userData.dead = false;
+      bot.userData.respawnTimer = 0;
+      bot.userData.fireCooldown = 0.6 + Math.random() * 0.6;
+      bot.userData.stepTimer = 0;
+
+      const teamColor = enemyTeam === 'red' ? 0xff4655 : 0x38bdf8;
+      bot.userData.armorMat.color.setHex(teamColor);
+
+      const spawnZ = enemyTeam === 'red' ? 32 : -32;
+      const spawnX = (Math.random() - 0.5) * 26;
+      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 6);
+      bot.visible = true;
+    }
+
+    function initBrawlBots(count) {
+      clearBrawlBots();
+      const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+      for (let i = 0; i < count; i++) {
+        const botGroup = new THREE.Group();
+        const teamColor = enemyTeam === 'red' ? 0xff4655 : 0x38bdf8;
+        const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
+        const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.6, roughness: 0.4 });
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+
+        const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.28, 0.85, 12), darkMat);
+        legs.position.y = 0.425;
+        legs.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'leg' };
+
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat);
+        torso.position.y = 1.3;
+        torso.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'body' };
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat);
+        head.position.y = 2.08;
+        head.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
+
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat);
+        visor.position.set(0, 2.08, 0.24);
+        visor.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
+
+        // 봇이 들고 있는 총기 표시
+        const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.55), darkMat);
+        gunMesh.position.set(0.35, 1.35, 0.32);
+
+        botGroup.add(legs, torso, head, visor, gunMesh);
+        const wKey = AI_WEAPONS[i % AI_WEAPONS.length];
+        botGroup.userData = {
+          idx: i,
+          nick: AI_NAMES[i % AI_NAMES.length],
+          weaponKey: wKey,
+          armorMat,
+          team: enemyTeam,
+          hp: 100,
+          shield: 50,
+          dead: false,
+          respawnTimer: 0,
+          moveDir: new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5)).normalize(),
+          aiChangeTimer: 1.0 + Math.random() * 1.5,
+          fireCooldown: 0.8,
+          stepTimer: 0
+        };
+
+        scene.add(botGroup);
+        brawlBots.push(botGroup);
+        brawlBotHitboxes.push(legs, torso, head, visor);
+        spawnBrawlBot(botGroup);
+      }
+    }
+
+    const aiRaycaster = new THREE.Raycaster();
+    function hasLineOfSight(fromPos, toPos) {
+      const dir = new THREE.Vector3().subVectors(toPos, fromPos);
+      const dist = dir.length();
+      dir.normalize();
+      aiRaycaster.set(fromPos, dir);
+      const hits = aiRaycaster.intersectObjects(wallMeshes);
+      return !(hits.length > 0 && hits[0].distance < dist);
+    }
+
+    function moveBrawlBotWithCollision(bot, dx, dz) {
+      const nextX = bot.position.x + dx;
+      let blockedX = Math.abs(nextX) > 33.5;
+      if (!blockedX) {
+        for (const c of wallColliders) {
+          if (nextX > c.minX && nextX < c.maxX && bot.position.z > c.minZ && bot.position.z < c.maxZ && c.maxY > 0.6) {
+            blockedX = true; break;
+          }
+        }
+      }
+      if (!blockedX) bot.position.x = nextX;
+      else bot.userData.moveDir.x *= -1;
+
+      const nextZ = bot.position.z + dz;
+      let blockedZ = Math.abs(nextZ) > 43.5;
+      if (!blockedZ) {
+        for (const c of wallColliders) {
+          if (bot.position.x > c.minX && bot.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ && c.maxY > 0.6) {
+            blockedZ = true; break;
+          }
+        }
+      }
+      if (!blockedZ) bot.position.z = nextZ;
+      else bot.userData.moveDir.z *= -1;
+    }
+
+    function updateBrawlBots(dt) {
+      if (currentMap !== 'brawl') return;
+      const playerHeadPos = camera.position.clone();
+
+      for (const bot of brawlBots) {
+        const bd = bot.userData;
+        if (bd.dead) {
+          bd.respawnTimer -= dt;
+          if (bd.respawnTimer <= 0) {
+            spawnBrawlBot(bot);
+          }
+          continue;
+        }
+
+        const botEyePos = new THREE.Vector3(bot.position.x, 1.85, bot.position.z);
+        const toPlayer = new THREE.Vector3().subVectors(playerHeadPos, botEyePos);
+        const distToPlayer = toPlayer.length();
+        const canSeePlayer = !isDead && distToPlayer < 65 && hasLineOfSight(botEyePos, playerHeadPos);
+
+        if (canSeePlayer) {
+          // 플레이어를 바라보며 좌우 스트레이프 무빙
+          const targetYaw = Math.atan2(toPlayer.x, toPlayer.z);
+          bot.rotation.y = targetYaw;
+
+          bd.aiChangeTimer -= dt;
+          if (bd.aiChangeTimer <= 0) {
+            bd.aiChangeTimer = 0.6 + Math.random() * 0.9;
+            const strafeSign = Math.random() < 0.5 ? 1 : -1;
+            const rightVec = new THREE.Vector3(Math.cos(targetYaw), 0, -Math.sin(targetYaw));
+            const forwardVec = new THREE.Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw));
+            bd.moveDir.copy(rightVec).multiplyScalar(strafeSign);
+            if (distToPlayer > 22) bd.moveDir.addScaledVector(forwardVec, 0.45);
+            else if (distToPlayer < 8) bd.moveDir.addScaledVector(forwardVec, -0.5);
+            bd.moveDir.normalize();
+          }
+
+          moveBrawlBotWithCollision(bot, bd.moveDir.x * 5.8 * dt, bd.moveDir.z * 5.8 * dt);
+
+          // AI 사격
+          bd.fireCooldown -= dt;
+          if (bd.fireCooldown <= 0) {
+            const w = WEAPONS[bd.weaponKey];
+            bd.fireCooldown = (bd.weaponKey === 'sheriff' ? 0.65 : 0.34) + Math.random() * 0.25;
+
+            playWeaponSound(bd.weaponKey, distToPlayer);
+
+            const muzzlePos = botEyePos.clone().add(new THREE.Vector3(0, -0.25, 0));
+            const aimSpread = new THREE.Vector3(
+              (Math.random() - 0.5) * 2.2,
+              (Math.random() - 0.5) * 1.4,
+              (Math.random() - 0.5) * 2.2
+            );
+            const endPos = playerHeadPos.clone().add(aimSpread);
+            spawnBulletTracer(muzzlePos, endPos, false);
+
+            // 명중 판정 (거리가 가까울수록 명중률 상승)
+            const hitChance = Math.max(0.14, 0.42 - distToPlayer * 0.005);
+            if (Math.random() < hitChance) {
+              const isHeadHit = Math.random() < 0.18;
+              const hitPart = isHeadHit ? 'head' : 'body';
+              const dmg = Math.round(w.getDamage(distToPlayer, hitPart) * 0.65);
+              takeDamage(dmg, bd.nick, bd.team, w.name, isHeadHit, null, bot.position);
+            }
+          }
+        } else {
+          // 순찰 이동 (맵 중앙으로 이동)
+          bd.aiChangeTimer -= dt;
+          if (bd.aiChangeTimer <= 0) {
+            bd.aiChangeTimer = 1.5 + Math.random() * 2.0;
+            const toCenter = new THREE.Vector3((Math.random() - 0.5) * 24 - bot.position.x, 0, (Math.random() - 0.5) * 24 - bot.position.z).normalize();
+            bd.moveDir.copy(toCenter);
+          }
+          moveBrawlBotWithCollision(bot, bd.moveDir.x * 6.5 * dt, bd.moveDir.z * 6.5 * dt);
+          bot.rotation.y = Math.atan2(bd.moveDir.x, bd.moveDir.z);
+        }
+
+        // AI 발소리 재생
+        bd.stepTimer += dt;
+        if (bd.stepTimer >= 0.42) {
+          bd.stepTimer = 0;
+          playFootstepSound(false, distToPlayer);
+        }
+      }
+    }
+
 
     let peer = null;
     let myPeerId = '';
@@ -803,7 +1170,11 @@
       document.getElementById('teamBlueBtn').classList.toggle('active', team === 'blue');
       updatePlayerListUI();
       broadcastData({ type: 'info', nick: document.getElementById('nickInput').value || '플레이어', team: myTeam });
-      if (currentMap === 'brawl') spawnMyPlayer();
+      if (currentMap === 'brawl') {
+        spawnMyPlayer();
+        const cnt = parseInt(document.getElementById('brawlBotCountSelect').value, 10) || 0;
+        initBrawlBots(cnt);
+      }
     };
 
     function setupConnection(conn) {
@@ -941,14 +1312,15 @@
       }
     }
 
-    function takeDamage(dmg, attackerNick, attackerTeam, weaponName, isHead, attackerPeerId) {
+    function takeDamage(dmg, attackerNick, attackerTeam, weaponName, isHead, attackerPeerId, attackerWorldPos = null) {
       if (isDead) return;
       lastDamageTime = performance.now();
 
-      // 1. 데미지 표시기 (피격 방향 반원 UI)
+      // 1. 데미지 표시기 (피격 방향 반원 UI - 멀티플레이어 & AI 봇 모두 지원)
       const attackerObj = attackerPeerId && remotePlayers[attackerPeerId];
-      if (attackerObj && attackerObj.mesh) {
-        triggerDamageIndicator(attackerObj.mesh.position);
+      const sourcePos = attackerWorldPos || (attackerObj && attackerObj.mesh ? attackerObj.mesh.position : null);
+      if (sourcePos) {
+        triggerDamageIndicator(sourcePos);
       }
 
       // 2. 에임 펀치 (헤드샷 피격 시 조준점이 위로 크게 튕김)
@@ -1028,10 +1400,13 @@
 
       if (mapType === 'range') {
         buildRangeMap();
+        clearBrawlBots();
         bots.forEach(b => { b.visible = true; respawnBot(b); });
       } else {
         buildBrawlMap();
         bots.forEach(b => { b.visible = false; });
+        const botCnt = parseInt(document.getElementById('brawlBotCountSelect').value, 10) || 0;
+        initBrawlBots(botCnt);
       }
       spawnMyPlayer();
     }
@@ -1315,7 +1690,9 @@
 
       raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
 
-      const targets = currentMap === 'range' ? botHitboxes : remoteHitboxes;
+      playWeaponSound(key, 0);
+
+      const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes];
       const hits = raycaster.intersectObjects(targets);
 
       if (key !== 'melee') {
@@ -1392,6 +1769,35 @@
               attackerNick: myNick, attackerTeam: myTeam,
               weaponName: w.name, isHead: part === 'head'
             });
+          }
+        } else if (hitObj.userData.targetType === 'brawlBot') {
+          const botRoot = hitObj.userData.botRoot;
+          const bd = botRoot.userData;
+          if (bd.dead || bd.team === myTeam) continue;
+          if (hitTargetsSet.has(botRoot)) continue;
+          hitTargetsSet.add(botRoot);
+
+          const penIndex = hitTargetsSet.size - 1;
+          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
+          const dmg = Math.round(baseDmg * penMult);
+          spawnHitSpark(hit.point, part === 'head');
+
+          let rem = dmg;
+          if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+          bd.hp -= rem;
+          if (bd.hp <= 0) {
+            bd.dead = true;
+            bd.respawnTimer = 2.5;
+            botRoot.visible = false;
+
+            if (myTeam === 'red') redScore += 1;
+            else blueScore += 1;
+            updateScoreboard();
+
+            const myNick = document.getElementById('nickInput').value || '플레이어';
+            const isHead = part === 'head';
+            triggerScoreStreak(1, isHead);
+            addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
           }
         }
       }
@@ -1519,6 +1925,17 @@
           moveSpeed *= tagSlowMultiplier;
 
           moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
+
+          // 플레이어 발소리 (Shift 걷기 시 발소리 무음, 뛰거나 앉아 걸을 때 발소리 재생)
+          if (move.lengthSq() > 0 && isGrounded && !isWalking) {
+            window._playerStepTimer = (window._playerStepTimer || 0) + dt * (isCrouching ? 0.65 : 1.0);
+            if (window._playerStepTimer >= 0.36) {
+              window._playerStepTimer = 0;
+              playFootstepSound(isCrouching, 0);
+            }
+          } else {
+            window._playerStepTimer = 0.25;
+          }
         }
       }
       camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.22);
@@ -1557,6 +1974,8 @@
         gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0, 0.2);
         gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, 0, 0.2);
       }
+
+      updateBrawlBots(dt);
 
       if (currentMap === 'range' && botStrafeMode) {
         bots.forEach(bot => {
