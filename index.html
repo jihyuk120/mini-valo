@@ -125,7 +125,7 @@
     </div>
 
     <p style="color:#999; font-size:12px; margin-top:14px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | 우클릭: 줌 | F: 훈련봇 무빙
+      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | 우클릭: 줌/칼 강공격 | F: 훈련봇 무빙
     </p>
   </div>
 
@@ -832,7 +832,11 @@
         slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, zoomType: 'none',
         magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
         recoilPitch: 0, recoilYaw: 0, moveSpeed: 8.6,
-        getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0)
+        getDamage: (dist, part, isHeavy = false) => {
+          if (dist > 3.3) return 0;
+          if (isHeavy) return part === 'head' ? 150 : 75; // 우클릭 강공격: 몸통 75(2방), 헤드/백스탭 150(원콤)
+          return part === 'head' ? 100 : 50; // 좌클릭 약공격: 빠른 연속 베기
+        }
       }
     };
 
@@ -854,6 +858,8 @@
     let isDead = false, lastDamageTime = 0;
     let swapAnimTimer = 0;
     let meleeSlashTimer = 0;
+    let meleeSlashDuration = 0.28;
+    let isMeleeHeavySlash = false;
     let isInspecting = false;
     let inspectTimer = 0;
 
@@ -952,6 +958,7 @@
 
     function buildSheriffModel() {
       const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
       const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2b2d30, metalness: 0.75, roughness: 0.35 });
       const frameMetal = new THREE.MeshStandardMaterial({ color: 0x3a3d42, metalness: 0.65, roughness: 0.4 });
       const chromeMetal = new THREE.MeshStandardMaterial({ color: 0xd0d5dd, metalness: 0.92, roughness: 0.15 });
@@ -985,6 +992,7 @@
 
     function buildVandalModel() {
       const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
       const receiverMat = new THREE.MeshStandardMaterial({ color: 0x2d3035, metalness: 0.72, roughness: 0.35 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x1b1d20, metalness: 0.65, roughness: 0.45 });
       const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.078, 0.34), receiverMat); receiver.position.set(0, 0.01, -0.02);
@@ -999,6 +1007,7 @@
 
     function buildPhantomModel() {
       const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
       const bodyMat = new THREE.MeshStandardMaterial({ color: 0x26292e, metalness: 0.72, roughness: 0.35 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x191b1f, metalness: 0.65, roughness: 0.45 });
       const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.074, 0.34), bodyMat); receiver.position.set(0, 0.01, -0.02);
@@ -1011,6 +1020,7 @@
 
     function buildOperatorModel() {
       const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
       const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2d3238, metalness: 0.75, roughness: 0.3 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.85, roughness: 0.25 });
       const accentMat = new THREE.MeshStandardMaterial({ color: 0xff4655, metalness: 0.5, roughness: 0.4 });
@@ -1093,6 +1103,7 @@
 
     function buildChampions2021VandalModel() {
       const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
       const champTex = createChampions2021Texture();
 
       const champBodyMat = new THREE.MeshStandardMaterial({
@@ -1190,12 +1201,91 @@
       return group;
     }
 
+    function buildFirstPersonHandModel(mode = 'karambit') {
+      const handGroup = new THREE.Group();
+      const gloveMat = new THREE.MeshStandardMaterial({ color: 0x1b1f26, roughness: 0.72, metalness: 0.15 });
+      const armorPadMat = new THREE.MeshStandardMaterial({ color: 0x2c3340, roughness: 0.4, metalness: 0.55 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a484, roughness: 0.65 });
+      const accentTrimMat = new THREE.MeshStandardMaterial({ color: 0xff4655, roughness: 0.4, metalness: 0.3 });
+
+      if (mode === 'karambit') {
+        // 카람빗 전용 오른손: 원점(0,0,0) 고리에 검지 손가락이 끼워져 있고, 나머지 손가락이 손잡이를 감싸쥐는 형태
+        // 1. 검지 손가락 (고리 구멍을 관통하는 구부러진 검지)
+        const indexBase = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0095, 0.042, 10), skinMat);
+        indexBase.rotation.set(Math.PI / 2, 0, -0.15);
+        indexBase.position.set(0.014, 0.003, 0.006);
+
+        const indexTip = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.0085, 0.032, 10), skinMat);
+        indexTip.rotation.set(0.85, 0.25, 0.4);
+        indexTip.position.set(0.022, -0.012, -0.014);
+
+        // 2. 손등 & 전술 너클 아머
+        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.046, 0.088), gloveMat);
+        palm.position.set(0.056, -0.008, 0.036);
+        palm.rotation.set(0.08, -0.12, -0.15);
+
+        const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.012, 0.024), armorPadMat);
+        knuckleGuard.position.set(0.052, 0.017, 0.004);
+        knuckleGuard.rotation.y = -0.12;
+
+        // 3. 손잡이를 감싸쥐는 중지, 약지, 소지 (반장갑 형태라 손가락 끝은 피부색)
+        for (let i = 0; i < 3; i++) {
+          const offsetX = 0.042 + i * 0.018;
+          const fingerUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.0085, 0.032, 10), gloveMat);
+          fingerUpper.rotation.x = Math.PI / 2.2;
+          fingerUpper.position.set(offsetX, -0.006, -0.006);
+
+          const fingerLower = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.008, 0.028, 10), skinMat);
+          fingerLower.rotation.x = 0.45;
+          fingerLower.position.set(offsetX, -0.024, -0.012);
+          handGroup.add(fingerUpper, fingerLower);
+        }
+
+        // 4. 엄지손가락 (손잡이 위쪽을 지지)
+        const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.010, 0.044, 10), skinMat);
+        thumb.rotation.set(0.3, 0.2, 1.05);
+        thumb.position.set(0.035, 0.014, 0.014);
+
+        // 5. 손목 & 팔뚝 소매 (화면 우측 하단 모서리로 자연스럽게 이어짐)
+        const wristBand = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.038, 0.028, 14), accentTrimMat);
+        wristBand.rotation.set(Math.PI / 2.1, 0, -0.25);
+        wristBand.position.set(0.072, -0.018, 0.092);
+
+        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.048, 0.24, 14), gloveMat);
+        forearm.rotation.set(Math.PI / 2.15, 0, -0.28);
+        forearm.position.set(0.105, -0.035, 0.215);
+
+        handGroup.add(indexBase, indexTip, palm, knuckleGuard, thumb, wristBand, forearm);
+      } else {
+        // 총기 파지용 오른손 그립 & 팔뚝
+        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.068, 0.082), gloveMat);
+        palm.position.set(0.015, -0.055, 0.085);
+        palm.rotation.set(0.25, 0, -0.15);
+
+        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.044, 0.24, 14), gloveMat);
+        forearm.rotation.set(1.25, 0, -0.22);
+        forearm.position.set(0.045, -0.11, 0.21);
+
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.035, 0.022, 14), accentTrimMat);
+        cuff.rotation.set(1.25, 0, -0.22);
+        cuff.position.set(0.026, -0.078, 0.13);
+
+        handGroup.add(palm, forearm, cuff);
+      }
+
+      return handGroup;
+    }
+
     function buildChampions2021KarambitModel() {
       // 루트 그룹의 원점(0, 0, 0)이 곧 손가락 고리(Finger Ring) 중심이 되어,
       // Y(자세히 보기) 무한 스핀 시 영상처럼 손가락 고리를 축으로 초승달 칼날이 빙글빙글 회전!
       const rootGroup = new THREE.Group();
       const spinPivot = new THREE.Group();
       rootGroup.add(spinPivot);
+
+      // 검지 고리에 끼워진 1인칭 캐릭터 오른손 추가 (고정 파지 손이므로 spinPivot 밖의 rootGroup에 부착!)
+      const karambitHand = buildFirstPersonHandModel('karambit');
+      rootGroup.add(karambitHand);
 
       const blackCarbonMat = new THREE.MeshStandardMaterial({
         color: 0x16181c,
@@ -1322,8 +1412,8 @@
       bladeAura.position.set(-0.004, 0.002, -0.0045);
       spinPivot.add(bladeAura);
 
-      // 기본 파지 각도 (화면 우측 하단에서 역수(Reverse Grip)로 쥔 카람빗 각도)
-      rootGroup.rotation.set(0.15, -1.28, 0.22);
+      // 기본 파지 각도: 손잡이는 오른손이 쥐고, 초승달 커브드 칼날이 화면 안쪽(좌상단 방향)으로 멋지게 드러나는 각도
+      rootGroup.rotation.set(0.24, -0.68, 0.36);
 
       rootGroup.userData = {
         spinPivot,
@@ -2743,7 +2833,7 @@
 
     const raycaster = new THREE.Raycaster();
 
-    function fireWeapon() {
+    function fireWeapon(isHeavyAttack = false) {
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
       if (isReloading || isDead) return;
@@ -2758,7 +2848,13 @@
         if (ammoState[key] === 0) startReload();
       }
 
-      fireCooldown = wasZoomed ? w.fireRate * 1.15 : w.fireRate;
+      if (key === 'melee') {
+        isMeleeHeavySlash = isHeavyAttack;
+        meleeSlashDuration = isHeavyAttack ? 0.52 : 0.28;
+        fireCooldown = isHeavyAttack ? 0.72 : 0.36;
+      } else {
+        fireCooldown = wasZoomed ? w.fireRate * 1.15 : w.fireRate;
+      }
 
       if (key === 'operator' && wasZoomed) {
         setZoom(0);
@@ -2767,7 +2863,7 @@
       isInspecting = false;
       inspectTimer = 0;
       if (key === 'melee') {
-        meleeSlashTimer = 0.28;
+        meleeSlashTimer = meleeSlashDuration;
       } else {
         gunGroup.position.z = zoomLevel > 0 ? -0.22 : -0.32;
         gunGroup.rotation.x = zoomLevel > 0 ? 0.06 : 0.14;
@@ -2793,7 +2889,12 @@
 
       raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
 
-      playWeaponSound(key, 0);
+      if (key === 'melee' && isMeleeHeavySlash) {
+        playKarambitWhooshSound(0.75);
+        setTimeout(() => playWeaponSound('melee', 0), 55);
+      } else {
+        playWeaponSound(key, 0);
+      }
 
       const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes];
       let hits = raycaster.intersectObjects(targets);
@@ -2848,7 +2949,7 @@
         const hitObj = hit.object;
         const part = hitObj.userData.part;
         const distance = hit.distance;
-        const baseDmg = w.getDamage(distance, part);
+        const baseDmg = key === 'melee' ? w.getDamage(distance, part, isMeleeHeavySlash) : w.getDamage(distance, part);
         if (baseDmg <= 0) continue;
 
         if (hitObj.userData.targetType === 'bot') {
@@ -3042,9 +3143,15 @@
         isMouseDown = true;
         if (fireCooldown <= 0) fireWeapon();
       } else if (e.button === 2) {
-        const w = WEAPONS[getCurrentWeaponKey()];
-        if (w.zoomType === 'sniper') setZoom((zoomLevel + 1) % 3);
-        else if (w.zoomType === 'holo') setZoom(zoomLevel === 0 ? 1 : 0);
+        const curK = getCurrentWeaponKey();
+        const w = WEAPONS[curK];
+        if (curK === 'melee') {
+          if (fireCooldown <= 0) fireWeapon(true); // 우클릭 강공격!
+        } else if (w.zoomType === 'sniper') {
+          setZoom((zoomLevel + 1) % 3);
+        } else if (w.zoomType === 'holo') {
+          setZoom(zoomLevel === 0 ? 1 : 0);
+        }
       }
     });
 
@@ -3196,17 +3303,31 @@
         }
       } else if (meleeSlashTimer > 0 && curKey === 'melee') {
         meleeSlashTimer -= dt;
-        const t = 1.0 - Math.max(0, meleeSlashTimer / 0.28);
+        const t = 1.0 - Math.max(0, meleeSlashTimer / meleeSlashDuration);
         const thrust = t < 0.35 ? (t / 0.35) : (1.0 - (t - 0.35) / 0.65);
         if (isKarambitEquipped && karambitModel) {
-          // 카람빗 전용 날카로운 가로 베기 슬래시 & 황금 잔상
-          gunGroup.position.set(0.24 - thrust * 0.26, -0.17 + thrust * 0.08, -0.38 - thrust * 0.24);
-          gunGroup.rotation.set(-thrust * 0.35, thrust * 0.95, thrust * 0.85);
-          karambitModel.userData.spinPivot.rotation.z = -thrust * 0.9;
-          karambitModel.userData.trailMat.opacity = thrust * 0.72;
+          if (isMeleeHeavySlash) {
+            // 우클릭 강공격: 고리를 한 바퀴 반 돌리며 대각선으로 강하게 내려찍는 피니셔 슬래시!
+            gunGroup.position.set(0.18 - thrust * 0.28, -0.06 - thrust * 0.14, -0.32 - thrust * 0.32);
+            gunGroup.rotation.set(0.25 - thrust * 0.85, thrust * 0.75, -0.4 + thrust * 1.45);
+            karambitModel.userData.spinPivot.rotation.z = -t * Math.PI * 2;
+            karambitModel.userData.trailMat.opacity = Math.sin(t * Math.PI) * 0.88;
+          } else {
+            // 좌클릭 약공격: 날카로운 가로 베기 슬래시 & 황금 잔상
+            gunGroup.position.set(0.18 - thrust * 0.26, -0.13 + thrust * 0.08, -0.33 - thrust * 0.24);
+            gunGroup.rotation.set(-thrust * 0.35, thrust * 0.95, thrust * 0.85);
+            karambitModel.userData.spinPivot.rotation.z = -thrust * 0.9;
+            karambitModel.userData.trailMat.opacity = thrust * 0.72;
+          }
         } else {
-          gunGroup.position.set(0.26 - thrust * 0.14, -0.22 + thrust * 0.05, -0.42 - thrust * 0.36);
-          gunGroup.rotation.set(-thrust * 0.62, -thrust * 0.35, thrust * 0.45);
+          if (isMeleeHeavySlash) {
+            // 기본 칼 우클릭 강공격: 위에서 아래로 묵직하게 내리찍기
+            gunGroup.position.set(0.22 - thrust * 0.18, -0.10 - thrust * 0.14, -0.38 - thrust * 0.38);
+            gunGroup.rotation.set(0.35 - thrust * 1.15, -thrust * 0.25, thrust * 0.35);
+          } else {
+            gunGroup.position.set(0.26 - thrust * 0.14, -0.22 + thrust * 0.05, -0.42 - thrust * 0.36);
+            gunGroup.rotation.set(-thrust * 0.62, -thrust * 0.35, thrust * 0.45);
+          }
         }
       } else if (isInspecting && gunGroup.visible) {
         inspectTimer += dt;
@@ -3245,9 +3366,9 @@
           }
         }
       } else if (!isReloading && gunGroup.visible) {
-        const targetGunX = zoomLevel > 0 ? 0.0 : (isKarambitEquipped ? 0.23 : 0.26);
-        const targetGunY = zoomLevel > 0 ? -0.075 : (isKarambitEquipped ? -0.17 : -0.22);
-        const targetGunZ = zoomLevel > 0 ? -0.28 : (isKarambitEquipped ? -0.37 : -0.42);
+        const targetGunX = zoomLevel > 0 ? 0.0 : (isKarambitEquipped ? 0.18 : 0.26);
+        const targetGunY = zoomLevel > 0 ? -0.075 : (isKarambitEquipped ? -0.13 : -0.22);
+        const targetGunZ = zoomLevel > 0 ? -0.28 : (isKarambitEquipped ? -0.33 : -0.42);
         gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, targetGunX, 0.25);
         gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetGunY, 0.25);
         gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetGunZ, 0.25);
