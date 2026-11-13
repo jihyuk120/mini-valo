@@ -225,7 +225,7 @@
       if (audio) {
         try {
           audio.pause();
-          audio.currentTime = 0.32;
+          audio.currentTime = 0;
           audio.play().catch(() => {});
         } catch (e) {}
       }
