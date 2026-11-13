@@ -155,7 +155,7 @@
           <div class="item-price" style="font-size:12px;">500 ¤</div>
         </div>
         <div class="shop-item" id="buy-bandit" onclick="buyWeapon('bandit')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">밴딧 (Bandit)</div><div class="item-desc" style="font-size:11px;">8발 | 속사 대구경 리볼버 (헤드128)</div></div>
+          <div><div class="item-title" style="font-size:13px;">밴딧 (Bandit)</div><div class="item-desc" style="font-size:11px;">8발 | 10m 이내 헤드 156 / 몸 52</div></div>
           <div class="item-price" style="font-size:12px;">650 ¤</div>
         </div>
         <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')" style="padding:7px 10px;">
@@ -168,7 +168,7 @@
       <div class="shop-col" style="padding:12px;">
         <h2 style="font-size:15px;">기관단총 & 산탄총 [1번]</h2>
         <div class="shop-item" id="buy-stinger" onclick="buyWeapon('stinger')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">스팅어 (Stinger)</div><div class="item-desc" style="font-size:11px;">20발 | 초고속 연사 (우클릭 4점사)</div></div>
+          <div><div class="item-title" style="font-size:13px;">스팅어 (Stinger)</div><div class="item-desc" style="font-size:11px;">20발 | 초고속 연사 (우클릭 3점사)</div></div>
           <div class="item-price" style="font-size:12px;">1,100 ¤</div>
         </div>
         <div class="shop-item" id="buy-spectre" onclick="buyWeapon('spectre')" style="padding:7px 10px;">
@@ -180,7 +180,7 @@
           <div class="item-price" style="font-size:12px;">850 ¤</div>
         </div>
         <div class="shop-item" id="buy-judge" onclick="buyWeapon('judge')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">저지 (Judge)</div><div class="item-desc" style="font-size:11px;">7발 | 연사 자동 산탄총</div></div>
+          <div><div class="item-title" style="font-size:13px;">저지 (Judge)</div><div class="item-desc" style="font-size:11px;">5발 | 연사 자동 산탄총</div></div>
           <div class="item-price" style="font-size:12px;">1,850 ¤</div>
         </div>
         <h2 style="font-size:15px; margin-top:10px;">기관총 (Heavy) [1번]</h2>
@@ -920,7 +920,7 @@
         slot: 2, name: '밴딧', price: 650, auto: false, fireRate: 0.20, zoomType: 'none',
         magSize: 8, reloadTime: 1.5, penetration: 2, jumpSpread: 0.12, noScopeSpread: 0,
         recoilPitch: 0.026, recoilYaw: 0.008, moveSpeed: 7.5,
-        getDamage: (dist, part) => dist < 25 ? { head: 128, body: 42, leg: 35 }[part] : { head: 112, body: 37, leg: 31 }[part]
+        getDamage: (dist, part) => dist <= 10 ? { head: 156, body: 52, leg: 44 }[part] : (dist < 30 ? { head: 128, body: 42, leg: 35 }[part] : { head: 112, body: 37, leg: 31 }[part])
       },
       sheriff: {
         slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, zoomType: 'none',
@@ -931,7 +931,7 @@
 
       // === 기관단총 (SMGs - 1번 슬롯) ===
       stinger: {
-        slot: 1, name: '스팅어', price: 1100, auto: true, fireRate: 0.068, zoomType: 'burst4',
+        slot: 1, name: '스팅어', price: 1100, auto: true, fireRate: 0.068, zoomType: 'burst3_holo',
         magSize: 20, reloadTime: 1.6, penetration: 1, jumpSpread: 0.12, noScopeSpread: 0,
         recoilPitch: 0.011, recoilYaw: 0.011, moveSpeed: 7.2,
         getDamage: (dist, part) => dist < 15 ? { head: 67, body: 27, leg: 23 }[part] : { head: 62, body: 25, leg: 21 }[part]
@@ -946,7 +946,7 @@
       // === 산탄총 (Shotguns - 1번 슬롯) ===
       bucky: {
         slot: 1, name: '버키', price: 850, auto: false, fireRate: 0.85, zoomType: 'airburst',
-        pellets: 15, pelletSpread: 0.095,
+        pellets: 15, pelletSpread: 0.095, shellReload: true, shellTime: 0.42,
         magSize: 5, reloadTime: 1.9, penetration: 1, jumpSpread: 0.16, noScopeSpread: 0,
         recoilPitch: 0.048, recoilYaw: 0.015, moveSpeed: 6.8,
         getDamage: (dist, part) => dist < 8 ? { head: 40, body: 20, leg: 17 }[part] : (dist < 16 ? { head: 24, body: 12, leg: 10 }[part] : { head: 14, body: 7, leg: 6 }[part])
@@ -954,7 +954,7 @@
       judge: {
         slot: 1, name: '저지', price: 1850, auto: true, fireRate: 0.28, zoomType: 'none',
         pellets: 12, pelletSpread: 0.105,
-        magSize: 7, reloadTime: 1.8, penetration: 1, jumpSpread: 0.18, noScopeSpread: 0,
+        magSize: 5, reloadTime: 1.8, penetration: 1, jumpSpread: 0.18, noScopeSpread: 0,
         recoilPitch: 0.034, recoilYaw: 0.014, moveSpeed: 6.7,
         getDamage: (dist, part) => dist < 10 ? { head: 34, body: 17, leg: 14 }[part] : (dist < 18 ? { head: 20, body: 10, leg: 8 }[part] : { head: 12, body: 6, leg: 5 }[part])
       },
@@ -988,14 +988,15 @@
       // === 저격소총 (Sniper Rifles - 1번 슬롯) ===
       marshal: {
         slot: 1, name: '마샬', price: 950, auto: false, fireRate: 0.72, zoomType: 'sniper1',
-        magSize: 5, reloadTime: 1.9, penetration: 3, jumpSpread: 0.22, noScopeSpread: 0.04,
+        shellReload: true, shellTime: 0.45,
+        magSize: 5, reloadTime: 2.1, penetration: 3, jumpSpread: 0.22, noScopeSpread: 0.04,
         recoilPitch: 0.038, recoilYaw: 0.010, moveSpeed: 6.8,
         getDamage: (dist, part) => ({ head: 202, body: 101, leg: 85 }[part])
       },
       outlaw: {
-        slot: 1, name: '아웃로', price: 2400, auto: false, fireRate: 0.48, zoomType: 'sniper1',
-        magSize: 2, reloadTime: 2.0, penetration: 4, jumpSpread: 0.28, noScopeSpread: 0.12,
-        recoilPitch: 0.046, recoilYaw: 0.012, moveSpeed: 6.4,
+        slot: 1, name: '아웃로', price: 2400, auto: false, fireRate: 0.14, zoomType: 'sniper1',
+        magSize: 2, reloadTime: 1.9, penetration: 4, jumpSpread: 0.28, noScopeSpread: 0.12,
+        recoilPitch: 0.044, recoilYaw: 0.011, moveSpeed: 6.4,
         getDamage: (dist, part) => ({ head: 238, body: 140, leg: 119 }[part])
       },
       operator: {
@@ -1042,7 +1043,7 @@
     const credits = 99999;
     let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
     let activeSlot = 2;
-    let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 7, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
+    let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 5, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
     let isReloading = false, reloadTimer = null;
     let zoomLevel = 0;
     let botStrafeMode = false, currentMap = 'brawl';
@@ -1543,10 +1544,10 @@
 
       // 2. 인체공학적 곡선 손잡이 (고리에서 앞쪽 +X로 뻗어나가는 블랙 & 골드 핸들)
       const handleShape = new THREE.Shape();
-      handleShape.moveTo(0.018, 0.012);
-      handleShape.quadraticCurveTo(0.068, 0.002, 0.118, -0.010);
-      handleShape.lineTo(0.112, -0.036);
-      handleShape.quadraticCurveTo(0.064, -0.026, 0.016, -0.016);
+      handleShape.moveTo(0.018, 0.010);
+      handleShape.quadraticCurveTo(0.068, -0.006, 0.118, 0.006);
+      handleShape.lineTo(0.114, -0.022);
+      handleShape.quadraticCurveTo(0.065, -0.032, 0.016, -0.016);
       handleShape.closePath();
 
       const handleGeo = new THREE.ExtrudeGeometry(handleShape, {
@@ -1559,28 +1560,27 @@
       });
       handleGeo.center();
       const handleMesh = new THREE.Mesh(handleGeo, blackCarbonMat);
-      handleMesh.position.set(0.066, -0.012, 0);
+      handleMesh.position.set(0.066, -0.008, 0);
       spinPivot.add(handleMesh);
 
       // 손잡이 위 황금 & 크림슨 리벳
       const rivet1 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.020, 12), royalGoldMat);
       rivet1.rotation.x = Math.PI / 2;
-      rivet1.position.set(0.048, -0.010, 0);
+      rivet1.position.set(0.048, -0.006, 0);
       const rivet2 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.020, 12), crimsonRedMat);
       rivet2.rotation.x = Math.PI / 2;
-      rivet2.position.set(0.088, -0.014, 0);
+      rivet2.position.set(0.088, -0.006, 0);
       spinPivot.add(rivet1, rivet2);
 
-      // 3. 빨간 가이드선 형태에 맞춘 하단·전방 초승달 커브드 블레이드:
-      // 손잡이 앞끝(0.112)에서 아래쪽으로 호를 그리며 앞쪽(-Y -> +X 전방)으로 날카롭게 휘어지는 발톱 칼날!
+      // 3. 정방향 초승달 커브드 블레이드: 손잡이 끝에서 앞쪽 위로 휘어 올라가는 발톱형 칼날!
       const bladeShape = new THREE.Shape();
-      bladeShape.moveTo(0.112, -0.004);
-      // 바깥쪽 날등 (위쪽에서 시작해 아래로 깊게 둥글며 앞쪽으로 뻗는 황금 날등)
-      bladeShape.bezierCurveTo(0.168, -0.012, 0.215, -0.065, 0.258, -0.056);
-      // 뾰족한 칼끝 (앞쪽-약간 위를 향하는 호랑이 발톱 끝)
-      bladeShape.lineTo(0.252, -0.046);
-      // 안쪽 예리한 커브 날 (손가락 아래쪽을 따라 오목하게 파인 내측 날)
-      bladeShape.bezierCurveTo(0.205, -0.048, 0.155, -0.036, 0.106, -0.034);
+      bladeShape.moveTo(0.110, -0.018);
+      // 바깥쪽 날등 (아래쪽에서 앞쪽 위로 둥글게 휘어 올라가는 황금 날등)
+      bladeShape.bezierCurveTo(0.165, -0.024, 0.225, 0.015, 0.252, 0.088);
+      // 뾰족한 칼끝
+      bladeShape.lineTo(0.244, 0.094);
+      // 안쪽 예리한 커브 날 (위쪽 안으로 오목하게 파인 날)
+      bladeShape.bezierCurveTo(0.205, 0.038, 0.155, 0.012, 0.108, 0.012);
       bladeShape.closePath();
 
       const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, {
@@ -1595,12 +1595,12 @@
       bladeMesh.position.set(0, 0, -0.0025);
       spinPivot.add(bladeMesh);
 
-      // 칼날 바깥 등 황금 장식 (빨간 가이드선 외곽 곡선을 따라 빛나는 골드 엣지)
+      // 칼날 바깥 등 황금 장식
       const goldSpineShape = new THREE.Shape();
-      goldSpineShape.moveTo(0.114, -0.002);
-      goldSpineShape.bezierCurveTo(0.170, -0.010, 0.216, -0.064, 0.258, -0.056);
-      goldSpineShape.lineTo(0.251, -0.059);
-      goldSpineShape.bezierCurveTo(0.210, -0.068, 0.165, -0.018, 0.114, -0.009);
+      goldSpineShape.moveTo(0.114, -0.020);
+      goldSpineShape.bezierCurveTo(0.168, -0.026, 0.226, 0.012, 0.253, 0.088);
+      goldSpineShape.lineTo(0.246, 0.084);
+      goldSpineShape.bezierCurveTo(0.218, 0.016, 0.164, -0.016, 0.114, -0.011);
       goldSpineShape.closePath();
       const goldSpineGeo = new THREE.ExtrudeGeometry(goldSpineShape, { depth: 0.006, bevelEnabled: false });
       const goldSpineMesh = new THREE.Mesh(goldSpineGeo, royalGoldMat);
@@ -1608,9 +1608,9 @@
       spinPivot.add(goldSpineMesh);
 
       // 칼날 끝부분 붉은 챔피언스 하이라이트
-      const redTip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.006, 0.0075), crimsonRedMat);
-      redTip.position.set(0.238, -0.052, 0);
-      redTip.rotation.z = 0.22;
+      const redTip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.007, 0.0075), crimsonRedMat);
+      redTip.position.set(0.236, 0.068, 0);
+      redTip.rotation.z = 1.15;
       spinPivot.add(redTip);
 
       // 스핀 잔상 궤적 링
@@ -1620,7 +1620,7 @@
         opacity: 0.0,
         side: THREE.DoubleSide
       });
-      const spinTrailRing = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.255, 32, 1, -1.6, 2.4), trailMat);
+      const spinTrailRing = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.255, 32, 1, -0.9, 2.4), trailMat);
       spinPivot.add(spinTrailRing);
 
       // 킬 오라 와이어프레임
@@ -1635,6 +1635,10 @@
       bladeAura.position.set(-0.004, 0.002, -0.0045);
       spinPivot.add(bladeAura);
 
+      // 기본 파지 각도:
+      // rotation.y = 2.18 -> 로컬 +X(칼날)는 화면 앞쪽 왼쪽(-X, -Z)으로 뻗고,
+      // 로컬 -X/+Z(오른손목·팔)는 화면 우측 하단(+X, -Y, +Z)에서 자연스럽게 올라오며,
+      // 로컬 -Z(칼의 왼쪽 옆면)가 플레이어 카메라 정면을 향함!
       rootGroup.rotation.set(0.12, 2.18, -0.14);
 
       rootGroup.userData = {
@@ -2989,13 +2993,30 @@
       isReloading = true;
       document.getElementById('reloadMsg').style.display = 'block';
       gunGroup.rotation.x = -0.45;
-      reloadTimer = setTimeout(() => {
-        ammoState[key] = w.magSize;
-        isReloading = false;
-        document.getElementById('reloadMsg').style.display = 'none';
-        gunGroup.rotation.x = 0;
-        updateHUD();
-      }, w.reloadTime * 1000);
+
+      if (w.shellReload) {
+        const loadOneShell = () => {
+          if (!isReloading || getCurrentWeaponKey() !== key) return;
+          ammoState[key] = Math.min(w.magSize, ammoState[key] + 1);
+          updateHUD();
+          if (ammoState[key] >= w.magSize) {
+            isReloading = false;
+            document.getElementById('reloadMsg').style.display = 'none';
+            gunGroup.rotation.x = 0;
+          } else {
+            reloadTimer = setTimeout(loadOneShell, (w.shellTime || 0.45) * 1000);
+          }
+        };
+        reloadTimer = setTimeout(loadOneShell, (w.shellTime || 0.45) * 1000);
+      } else {
+        reloadTimer = setTimeout(() => {
+          ammoState[key] = w.magSize;
+          isReloading = false;
+          document.getElementById('reloadMsg').style.display = 'none';
+          gunGroup.rotation.x = 0;
+          updateHUD();
+        }, w.reloadTime * 1000);
+      }
     }
 
     window.buyWeapon = function(key) {
@@ -3187,7 +3208,7 @@
       }
 
       if (e.code === 'Space' && isGrounded) {
-        velY = 0.22;
+        velY = 6.9;
         isGrounded = false;
       }
 
@@ -3236,6 +3257,20 @@
 
     const raycaster = new THREE.Raycaster();
 
+    function fireBurstRounds(count = 3, interval = 0.055) {
+      const startKey = getCurrentWeaponKey();
+      if (isReloading || isDead || ammoState[startKey] <= 0) return;
+      fireCooldown = count * interval + 0.24;
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          if (getCurrentWeaponKey() === startKey && !isReloading && !isDead && ammoState[startKey] > 0) {
+            fireWeapon(false);
+            fireCooldown = Math.max(fireCooldown, 0.22);
+          }
+        }, i * interval * 1000);
+      }
+    }
+
     function fireWeapon(isHeavyAttack = false) {
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
@@ -3244,9 +3279,15 @@
 
       const wasZoomed = zoomLevel > 0;
 
+      let classicBurstShots = 3;
       if (key !== 'melee') {
         if (ammoState[key] <= 0) { startReload(); return; }
-        ammoState[key] -= 1;
+        if (key === 'classic' && isHeavyAttack) {
+          classicBurstShots = Math.min(3, ammoState[key]);
+          ammoState[key] -= classicBurstShots;
+        } else {
+          ammoState[key] -= 1;
+        }
         updateHUD();
         if (ammoState[key] === 0) startReload();
       }
@@ -3299,7 +3340,7 @@
 
       const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes];
       const isClassicRightClick = (key === 'classic' && isHeavyAttack);
-      const pelletCount = isClassicRightClick ? 3 : (w.pellets || 1);
+      const pelletCount = isClassicRightClick ? classicBurstShots : (w.pellets || 1);
       const extraPelletSpread = isClassicRightClick ? 0.065 : (w.pelletSpread || 0);
 
       let multiScoreCount = 0;
@@ -3550,12 +3591,23 @@
         if (e.button === 0) spectateTargetIndex++;
         return;
       }
+      const curK = getCurrentWeaponKey();
+      const w = WEAPONS[curK];
+      // 마샬 / 버키 1발씩 장전 중일 때 클릭 시 즉시 장전 캔슬(Reload Cancel)!
+      if (isReloading && w && w.shellReload && ammoState[curK] > 0) {
+        cancelReload();
+        gunGroup.rotation.x = 0;
+      }
       if (e.button === 0) {
         isMouseDown = true;
-        if (fireCooldown <= 0) fireWeapon();
+        if (fireCooldown <= 0) {
+          if ((curK === 'bulldog' || curK === 'stinger') && zoomLevel > 0) {
+            fireBurstRounds(3, 0.055);
+          } else {
+            fireWeapon();
+          }
+        }
       } else if (e.button === 2) {
-        const curK = getCurrentWeaponKey();
-        const w = WEAPONS[curK];
         if (curK === 'melee') {
           if (fireCooldown <= 0) fireWeapon(true); // 우클릭 회전 찌르기 강공격!
         } else if (curK === 'classic') {
@@ -3612,7 +3664,12 @@
       if (fireCooldown > 0) fireCooldown -= dt;
       const curWeapon = WEAPONS[getCurrentWeaponKey()];
       if (isMouseDown && curWeapon.auto && fireCooldown <= 0 && !isReloading && !isDead && document.pointerLockElement === document.body) {
-        fireWeapon();
+        const kNow = getCurrentWeaponKey();
+        if ((kNow === 'bulldog' || kNow === 'stinger') && zoomLevel > 0) {
+          fireBurstRounds(3, 0.055);
+        } else {
+          fireWeapon();
+        }
       }
 
       recoilPitchOffset = THREE.MathUtils.lerp(recoilPitchOffset, 0, 8 * dt);
@@ -3684,8 +3741,8 @@
       if (isDead && currentMap === 'brawl') {
         updateSpectatorCamera();
       } else if (!isGrounded) {
-        velY -= 0.012;
-        camera.position.y += velY;
+        velY -= 20.5 * dt;
+        camera.position.y += velY * dt;
         if (camera.position.y <= currentEyeHeight) {
           camera.position.y = currentEyeHeight;
           velY = 0;
