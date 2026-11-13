@@ -203,7 +203,7 @@
     <div>아레나 이탈!</div>
     <div style="font-size:18px; color:#00ffcc; margin-top:8px;">2.5초 후 리스폰됩니다...</div>
   </div>
-  <div id="streakBanner" style="position:fixed; bottom:84px; left:50%; transform:translateX(-50%) scale(0.85); opacity:0; pointer-events:none; z-index:45; transition: opacity 0.25s ease, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28); display:flex; flex-direction:column; align-items:center; filter: drop-shadow(0 0 14px rgba(45, 255, 196, 0.45));">
+  <div id="streakBanner" style="position:fixed; bottom:84px; left:50%; transform:translateX(-50%) scale(0.85); opacity:0; pointer-events:none; z-index:99; transition: opacity 0.25s ease, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28); display:flex; flex-direction:column; align-items:center; filter: drop-shadow(0 0 14px rgba(45, 255, 196, 0.45));">
     <div id="streakEmblemWrap" style="width:150px; height:150px;"></div>
   </div>
   <div id="damageIndicator" style="position:fixed; top:50%; left:50%; width:210px; height:210px; transform:translate(-50%, -50%) rotate(0deg); pointer-events:none; z-index:16; opacity:0; transition: opacity 0.35s ease-out;">
@@ -397,6 +397,32 @@
       5: 'champions-2021-kill-5-sound.mp3'
     };
 
+    // 킬 사운드 즉시 재생을 위한 오디오 사전 로딩(Preload) 캐시
+    const preloadedAudio = {};
+    [...Object.values(STREAK_FILES), ...Object.values(CHAMPIONS_2021_STREAK_FILES), 'champions-2021-finisher.mp3'].forEach(file => {
+      const a = new Audio(file);
+      a.preload = 'auto';
+      preloadedAudio[file] = a;
+    });
+
+    function playInstantAudio(file, volume = 0.88) {
+      if (!file) return null;
+      const cached = preloadedAudio[file];
+      if (cached) {
+        try {
+          cached.pause();
+          cached.currentTime = 0;
+          cached.volume = volume;
+          cached.play().catch(() => {});
+          return cached;
+        } catch (e) {}
+      }
+      const fallback = new Audio(file);
+      fallback.volume = volume;
+      fallback.play().catch(() => {});
+      return fallback;
+    }
+
     // 무기별 장착 스킨 상태
     const equippedSkins = {
       vandal: 'champions2021', // 기본으로 2021 챔피언스 장착 상태 (상점에서 언제든 전환 가능)
@@ -515,9 +541,7 @@
       const soundMap = isChamp2021Active ? CHAMPIONS_2021_STREAK_FILES : STREAK_FILES;
       const file = soundMap[soundTier];
       if (file) {
-        const sfx = new Audio(file);
-        sfx.volume = 0.88;
-        sfx.play().catch(() => {});
+        playInstantAudio(file, 0.9);
       }
 
       const banner = document.getElementById('streakBanner');
@@ -1367,7 +1391,7 @@
       if (roundPhase === 'END') return;
       roundPhase = 'END';
       roundPhaseTimer = 5.5;
-      resetScoreStreak(); // 라운드 종료 시 킬 카운트 자동 초기화
+      currentStreak = 0; // 카운트만 0으로 초기화하고, 방금 뜬 킬 배너는 1.6초 동안 화면에 정상 표시!
 
       if (winningTeam === 'red') redScore += 1;
       else blueScore += 1;
