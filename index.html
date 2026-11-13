@@ -183,6 +183,11 @@
   <div id="streakBanner" style="position:fixed; bottom:84px; left:50%; transform:translateX(-50%) scale(0.85); opacity:0; pointer-events:none; z-index:45; transition: opacity 0.25s ease, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28); display:flex; flex-direction:column; align-items:center; filter: drop-shadow(0 0 14px rgba(45, 255, 196, 0.45));">
     <div id="streakEmblemWrap" style="width:150px; height:150px;"></div>
   </div>
+  <div id="damageIndicator" style="position:fixed; top:50%; left:50%; width:210px; height:210px; transform:translate(-50%, -50%) rotate(0deg); pointer-events:none; z-index:16; opacity:0; transition: opacity 0.35s ease-out;">
+    <svg viewBox="0 0 200 200" width="210" height="210">
+      <path d="M 55 30 A 84 84 0 0 1 145 30" fill="none" stroke="#ff2a3c" stroke-width="7.5" stroke-linecap="round" style="filter: drop-shadow(0 0 8px rgba(255,42,60,0.9));" />
+    </svg>
+  </div>
   <div id="killfeed"></div>
 
   <div id="hud">
@@ -216,7 +221,7 @@
     let currentStreak = 0;
     let streakBannerTimer = null;
 
-    function buildStreakEmblemSVG(count) {
+    function buildStreakEmblemSVG(count, isHeadshot = false) {
       const tier = Math.min(6, Math.max(1, count));
       const r = 56;
       const cx = 100, cy = 100;
@@ -289,6 +294,15 @@
 
         <path d="M 80 74 Q 100 66 120 74 L 122 96 L 116 105 L 116 112 L 106 116 L 100 128 L 94 116 L 84 112 L 84 105 L 78 96 Z" fill="#eef3f5" />
         <path d="M 100 70 Q 112 70 120 74 L 122 96 L 116 105 L 116 112 L 106 116 L 100 128 Z" fill="#cfd8dc" />
+        ${isHeadshot ? `
+        <g stroke="#ff3b4e" stroke-width="2.1" stroke-linecap="round" style="filter: drop-shadow(0 0 3px rgba(255,59,78,0.85));">
+          <line x1="94" y1="73" x2="106" y2="85" />
+          <line x1="92" y1="78" x2="102" y2="88" />
+          <line x1="98" y1="70" x2="108" y2="80" />
+          <line x1="106" y1="73" x2="94" y2="85" />
+          <line x1="108" y1="78" x2="98" y2="88" />
+          <line x1="102" y1="70" x2="92" y2="80" />
+        </g>` : ''}
 
         <polygon points="84,92 96,96 93,103 85,101" fill="#10181c" />
         <polygon points="116,92 104,96 107,103 115,101" fill="#10181c" />
@@ -301,7 +315,7 @@
       </svg>`;
     }
 
-    function triggerScoreStreak(addCount = 1) {
+    function triggerScoreStreak(addCount = 1, isHeadshot = false) {
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
@@ -314,7 +328,7 @@
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = buildStreakEmblemSVG(currentStreak);
+      svgWrap.innerHTML = buildStreakEmblemSVG(currentStreak, isHeadshot);
 
       banner.style.transition = 'opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
       banner.style.opacity = '1';
@@ -826,15 +840,15 @@
           }
         } else if (msg.type === 'hit') {
           if (msg.targetId === myPeerId && !isDead) {
-            takeDamage(msg.dmg, msg.attackerNick, msg.attackerTeam, msg.weaponName, msg.isHead);
+            takeDamage(msg.dmg, msg.attackerNick, msg.attackerTeam, msg.weaponName, msg.isHead, conn.peer);
           }
         } else if (msg.type === 'killNotify') {
           redScore = msg.redScore;
           blueScore = msg.blueScore;
           updateScoreboard();
-          addKillFeed(`${msg.attackerNick} [${msg.weaponName}] ➔ ${msg.victimNick}`);
+          addKillFeed(`${msg.attackerNick} [${msg.weaponName}] ➔ ${msg.victimNick}${msg.isHead ? ' [헤드샷]' : ''}`);
         } else if (msg.type === 'scoreAck') {
-          triggerScoreStreak(1);
+          triggerScoreStreak(1, Boolean(msg.isHead));
         }
       });
 
@@ -903,9 +917,46 @@
       document.getElementById('blueScoreText').innerText = blueScore;
     }
 
+    let tagSlowMultiplier = 1.0;
+    let aimPunchPitch = 0;
+    let damageIndicatorTimer = null;
+
+    function triggerDamageIndicator(attackerPos) {
+      if (!attackerPos) return;
+      const dx = attackerPos.x - camera.position.x;
+      const dz = attackerPos.z - camera.position.z;
+      const worldAngle = Math.atan2(dx, dz);
+      const relAngleDeg = ((worldAngle - yaw) * 180 / Math.PI) + 180;
+
+      const indicator = document.getElementById('damageIndicator');
+      if (indicator) {
+        indicator.style.transition = 'none';
+        indicator.style.transform = `translate(-50%, -50%) rotate(${relAngleDeg.toFixed(1)}deg)`;
+        indicator.style.opacity = '1';
+        clearTimeout(damageIndicatorTimer);
+        damageIndicatorTimer = setTimeout(() => {
+          indicator.style.transition = 'opacity 0.4s ease-out';
+          indicator.style.opacity = '0';
+        }, 280);
+      }
+    }
+
     function takeDamage(dmg, attackerNick, attackerTeam, weaponName, isHead, attackerPeerId) {
       if (isDead) return;
       lastDamageTime = performance.now();
+
+      // 1. 데미지 표시기 (피격 방향 반원 UI)
+      const attackerObj = attackerPeerId && remotePlayers[attackerPeerId];
+      if (attackerObj && attackerObj.mesh) {
+        triggerDamageIndicator(attackerObj.mesh.position);
+      }
+
+      // 2. 에임 펀치 (헤드샷 피격 시 조준점이 위로 크게 튕김)
+      aimPunchPitch = Math.min(0.38, aimPunchPitch + (isHead ? 0.16 : 0.04));
+
+      // 3. 태깅 시스템 (총알 피격 시 이동 속도 급감)
+      tagSlowMultiplier = 0.35;
+
       let remaining = dmg;
       if (playerShield > 0) {
         const absorbed = Math.min(playerShield, remaining);
@@ -918,6 +969,8 @@
       if (playerHp <= 0) {
         playerHp = 0;
         isDead = true;
+        tagSlowMultiplier = 1.0;
+        aimPunchPitch = 0;
         setZoom(0);
         resetScoreStreak();
         document.getElementById('deathBanner').style.display = 'flex';
@@ -927,12 +980,16 @@
         updateScoreboard();
 
         const myNick = document.getElementById('nickInput').value || '플레이어';
-        addKillFeed(`${attackerNick} [${weaponName}] ➔ ${myNick}`, true);
-        broadcastData({ type: 'killNotify', attackerNick, victimNick: myNick, weaponName, redScore, blueScore });
+        addKillFeed(`${attackerNick} [${weaponName}] ➔ ${myNick}${isHead ? ' [헤드샷]' : ''}`, true);
+        broadcastData({ type: 'killNotify', attackerNick, victimNick: myNick, weaponName, redScore, blueScore, isHead: Boolean(isHead) });
 
-        Object.values(connections).forEach(conn => {
-          if (conn && conn.open) conn.send({ type: 'scoreAck' });
-        });
+        if (attackerPeerId && connections[attackerPeerId] && connections[attackerPeerId].open) {
+          connections[attackerPeerId].send({ type: 'scoreAck', isHead: Boolean(isHead) });
+        } else {
+          Object.values(connections).forEach(conn => {
+            if (conn && conn.open) conn.send({ type: 'scoreAck', isHead: Boolean(isHead) });
+          });
+        }
 
         setTimeout(() => {
           isDead = false;
@@ -1286,6 +1343,7 @@
 
       const hitTargetsSet = new Set();
       let multiScoreCount = 0;
+      let anyHeadshotKill = false;
 
       for (const hit of hits) {
         if (hitTargetsSet.size >= w.penetration) break;
@@ -1311,6 +1369,7 @@
           bd.hp -= rem;
           if (bd.hp <= 0) {
             multiScoreCount++;
+            if (part === 'head') anyHeadshotKill = true;
             respawnBot(botRoot);
           }
         } else if (hitObj.userData.targetType === 'player') {
@@ -1339,8 +1398,9 @@
 
       if (multiScoreCount > 0) {
         updateHUD();
-        triggerScoreStreak(multiScoreCount);
-        addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!` : `[${w.name}] 훈련봇 타겟 완료`, multiScoreCount >= 2);
+        triggerScoreStreak(multiScoreCount, anyHeadshotKill);
+        const hsTag = anyHeadshotKill ? ' [헤드샷]' : '';
+        addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!${hsTag}` : `[${w.name}] 훈련봇 타겟 완료${hsTag}`, multiScoreCount >= 2 || anyHeadshotKill);
       }
 
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
@@ -1411,10 +1471,12 @@
 
       recoilPitchOffset = THREE.MathUtils.lerp(recoilPitchOffset, 0, 8 * dt);
       recoilYawOffset = THREE.MathUtils.lerp(recoilYawOffset, 0, 8 * dt);
+      aimPunchPitch = THREE.MathUtils.lerp(aimPunchPitch, 0, 7.5 * dt);
+      tagSlowMultiplier = THREE.MathUtils.lerp(tagSlowMultiplier, 1.0, 2.2 * dt);
 
       camera.rotation.order = 'YXZ';
       camera.rotation.y = yaw + recoilYawOffset;
-      camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset));
+      camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset + aimPunchPitch));
 
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       const isWalking = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
@@ -1454,6 +1516,7 @@
           let moveSpeed = activeSlot === 3 ? 12 : 10;
           if (isCrouching) moveSpeed = 4.5;
           else if (isWalking || zoomLevel > 0) moveSpeed = 5.5;
+          moveSpeed *= tagSlowMultiplier;
 
           moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
         }
