@@ -15,7 +15,20 @@
     #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
     #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
 
-    /* 하단 상태창 (체력/보호막/무기/크레딧) */
+    /* 히트 이펙트 (크로스헤어 대각선 히트마커) */
+    #hitX {
+      position: fixed; top: 50%; left: 50%; width: 22px; height: 22px;
+      transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 11;
+      opacity: 0; transition: opacity 0.08s;
+    }
+    #hitX::before, #hitX::after {
+      content: ''; position: absolute; background: var(--hit-color, #ffffff);
+      box-shadow: 0 0 6px var(--hit-color, #ffffff);
+    }
+    #hitX::before { top: 10px; left: 0; width: 22px; height: 2px; }
+    #hitX::after { top: 0; left: 10px; width: 2px; height: 22px; }
+
+    /* 하단 상태창 */
     #hud {
       position: fixed; bottom: 25px; left: 25px; right: 25px;
       display: flex; justify-content: space-between; align-items: flex-end;
@@ -29,15 +42,9 @@
     .shield-val { font-size: 24px; color: #00ffcc; margin-left: 10px; }
     .regen-tag { font-size: 13px; color: #7ef9ff; display: block; margin-top: 2px; }
 
-    /* 우측 상단 킬피드 & 데미지 표시 */
     #killfeed {
-      position: fixed; top: 20px; right: 25px; color: #00ffcc; font-size: 16px; font-weight: bold;
+      position: fixed; top: 20px; right: 25px; color: #00ffcc; font-size: 15px; font-weight: bold;
       text-align: right; pointer-events: none; z-index: 5; line-height: 1.5;
-    }
-    #hitMarker {
-      position: fixed; top: 53%; left: 50%; transform: translate(-50%, 0);
-      color: #ff4655; font-size: 18px; font-weight: bold; pointer-events: none; z-index: 10;
-      text-shadow: 1px 1px 2px black;
     }
 
     /* 오버레이 (ESC 설정 & B 상점) */
@@ -87,7 +94,7 @@
     </div>
     <button id="startBtn" class="btn-primary">게임 시작 / 계속하기</button>
     <p style="color:#aaa; font-size:13px; margin-top:18px;">
-      WASD: 이동 | SPACE: 점프 | E: 이동방향 대시 | 좌클릭: 사격 | B: 상점 | ESC: 설정
+      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | SPACE: 점프 | E: 이동방향 대시 | B: 상점
     </p>
   </div>
 
@@ -99,32 +106,32 @@
     </div>
     <div class="shop-grid">
       <div class="shop-col">
-        <h2>주무기 / 보조무기</h2>
+        <h2>무기 (WEAPONS)</h2>
         <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')">
           <div>
             <div class="item-title">셰리프 (Sheriff)</div>
-            <div class="item-desc">단발 | 헤드 159 / 몸 55 / 다리 46</div>
+            <div class="item-desc">0~30m: 159/55/46 | 30m+: 145/50/42</div>
           </div>
           <div class="item-price">800 ¤</div>
         </div>
         <div class="shop-item" id="buy-phantom" onclick="buyWeapon('phantom')">
           <div>
             <div class="item-title">팬텀 (Phantom)</div>
-            <div class="item-desc">연사 · 저반동 | 헤드 140 / 몸 35 / 다리 29</div>
+            <div class="item-desc">0~15m: 156/39/33 | 15~30m: 140/35/29 | 30m+: 124/31/26</div>
           </div>
           <div class="item-price">2,900 ¤</div>
         </div>
         <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')">
           <div>
             <div class="item-title">밴달 (Vandal)</div>
-            <div class="item-desc">연사 · 고반동 | 헤드 160 / 몸 40 / 다리 34</div>
+            <div class="item-desc">전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div>
           </div>
           <div class="item-price">2,900 ¤</div>
         </div>
       </div>
 
       <div class="shop-col">
-        <h2>보호막 (SHIELDS)</h2>
+        <h2>보호막 (교체 시 기존 보호막 환불)</h2>
         <div class="shop-item" id="buy-light" onclick="buyShield('light')">
           <div>
             <div class="item-title">경형 보호막</div>
@@ -135,7 +142,7 @@
         <div class="shop-item" id="buy-regen" onclick="buyShield('regen')">
           <div>
             <div class="item-title">재생 보호막</div>
-            <div class="item-desc">보호막 +25 (피해 후 예비 50까지 자동 재생)</div>
+            <div class="item-desc">보호막 +25 (피해 후 예비 50까지 재생)</div>
           </div>
           <div class="item-price">650 ¤</div>
         </div>
@@ -152,7 +159,7 @@
   </div>
 
   <div id="crosshair"></div>
-  <div id="hitMarker"></div>
+  <div id="hitX"></div>
   <div id="killfeed"></div>
 
   <div id="hud">
@@ -176,11 +183,30 @@
   <script type="module">
     import * as THREE from 'three';
 
-    // === 무기 및 보호막 데이터 ===
+    // === 발로란트 실제 거리별 데미지 스탯 ===
     const WEAPONS = {
-      sheriff: { name: '셰리프', price: 800, auto: false, fireRate: 0.25, head: 159, body: 55, leg: 46, recoilPitch: 0.055, recoilYaw: 0.015, color: 0x8899aa, length: 0.35 },
-      phantom: { name: '팬텀', price: 2900, auto: true, fireRate: 0.095, head: 140, body: 35, leg: 29, recoilPitch: 0.018, recoilYaw: 0.012, color: 0x22262e, length: 0.68 },
-      vandal:  { name: '밴달', price: 2900, auto: true, fireRate: 0.105, head: 160, body: 40, leg: 34, recoilPitch: 0.028, recoilYaw: 0.020, color: 0x181818, length: 0.65 }
+      sheriff: {
+        name: '셰리프', price: 800, auto: false, fireRate: 0.25,
+        recoilPitch: 0.055, recoilYaw: 0.015,
+        getDamage: (dist, part) => {
+          if (dist < 30) return { head: 159, body: 55, leg: 46 }[part];
+          return { head: 145, body: 50, leg: 42 }[part];
+        }
+      },
+      phantom: {
+        name: '팬텀', price: 2900, auto: true, fireRate: 0.095,
+        recoilPitch: 0.018, recoilYaw: 0.012,
+        getDamage: (dist, part) => {
+          if (dist < 15) return { head: 156, body: 39, leg: 33 }[part];
+          if (dist < 30) return { head: 140, body: 35, leg: 29 }[part];
+          return { head: 124, body: 31, leg: 26 }[part];
+        }
+      },
+      vandal: {
+        name: '밴달', price: 2900, auto: true, fireRate: 0.105,
+        recoilPitch: 0.028, recoilYaw: 0.020,
+        getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
+      }
     };
 
     const SHIELDS = {
@@ -190,7 +216,6 @@
       heavy: { name: '중형 보호막', price: 1000, max: 50, reserve: 0 }
     };
 
-    // 플레이어 상태
     let credits = 3900;
     let score = 0;
     let currentWeaponKey = 'sheriff';
@@ -203,49 +228,142 @@
     // === 3D 씬 & 카메라 ===
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a242f);
-    scene.fog = new THREE.Fog(0x1a242f, 15, 95);
+    scene.fog = new THREE.Fog(0x1a242f, 20, 110);
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 2, 12);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
+    camera.position.set(0, 2.0, 15);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    const light = new THREE.DirectionalLight(0xffffff, 1.8);
+    const light = new THREE.DirectionalLight(0xffffff, 2.0);
     light.position.set(15, 25, 15);
-    scene.add(light, new THREE.AmbientLight(0x506070, 2.2));
+    scene.add(light, new THREE.AmbientLight(0x607080, 2.2));
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
+      new THREE.PlaneGeometry(120, 120),
       new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
     );
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
-    scene.add(new THREE.GridHelper(100, 50, 0xff4655, 0x34495e));
+    scene.add(new THREE.GridHelper(120, 60, 0xff4655, 0x34495e));
 
-    // 1인칭 총기 모델
+    // === 1인칭 무기 그룹 & 디테일한 셰리프 모델 ===
     const gunGroup = new THREE.Group();
-    const gunBodyMat = new THREE.MeshStandardMaterial({ color: 0x8899aa, metalness: 0.7, roughness: 0.3 });
-    const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, 0.35), gunBodyMat);
-    const gunAccent = new THREE.Mesh(
-      new THREE.BoxGeometry(0.095, 0.035, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0xff4655 })
-    );
-    gunAccent.position.set(0, 0.03, -0.02);
-    gunGroup.add(gunBody, gunAccent);
-    gunGroup.position.set(0.32, -0.26, -0.5);
+
+    function buildSheriffModel() {
+      const group = new THREE.Group();
+      const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2b2d30, metalness: 0.75, roughness: 0.35 });
+      const frameMetal = new THREE.MeshStandardMaterial({ color: 0x3a3d42, metalness: 0.65, roughness: 0.4 });
+      const chromeMetal = new THREE.MeshStandardMaterial({ color: 0xd0d5dd, metalness: 0.92, roughness: 0.15 });
+      const gripMat = new THREE.MeshStandardMaterial({ color: 0x18191b, roughness: 0.85 });
+      const sightMat = new THREE.MeshBasicMaterial({ color: 0xff9900 });
+
+      // 육중한 상단 총열 슈라우드
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.068, 0.28), frameMetal);
+      barrel.position.set(0, 0.032, -0.14);
+
+      // 하단 언더배럴 레일
+      const underBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.025, 0.22), darkMetal);
+      underBarrel.position.set(0, -0.01, -0.16);
+
+      // 주황색 가늠쇠 (앞쪽 조준기)
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.022), sightMat);
+      frontSight.position.set(0, 0.072, -0.255);
+
+      // 가늠자 (뒤쪽 조준기)
+      const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.014, 0.02), darkMetal);
+      rearSight.position.set(0, 0.071, 0.03);
+
+      // 은색 회전 리볼버 실린더
+      const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.085, 16), chromeMetal);
+      cylinder.rotation.x = Math.PI / 2;
+      cylinder.position.set(0, 0.018, 0.015);
+
+      // 실린더 감싸는 상부/후방 프레임
+      const topStrap = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.016, 0.11), frameMetal);
+      topStrap.position.set(0, 0.058, 0.015);
+
+      const rearFrame = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.075, 0.065), frameMetal);
+      rearFrame.position.set(0, 0.02, 0.085);
+
+      // 해머 (공이치기)
+      const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.025, 0.025), darkMetal);
+      hammer.rotation.x = -0.5;
+      hammer.position.set(0, 0.055, 0.12);
+
+      // 방아쇠 울 & 방아쇠
+      const triggerGuard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.065), darkMetal);
+      triggerGuard.position.set(0, -0.035, 0.035);
+
+      // 권총 손잡이 (그립)
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.145, 0.072), gripMat);
+      grip.rotation.x = 0.28;
+      grip.position.set(0, -0.075, 0.105);
+
+      group.add(barrel, underBarrel, frontSight, rearSight, cylinder, topStrap, rearFrame, hammer, triggerGuard, grip);
+      group.userData.cylinder = cylinder;
+      return group;
+    }
+
+    function buildRifleModel(colorHex) {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.11, 0.62),
+        new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.7, roughness: 0.3 })
+      );
+      const accent = new THREE.Mesh(
+        new THREE.BoxGeometry(0.074, 0.03, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0xff4655 })
+      );
+      accent.position.set(0, 0.025, -0.05);
+      group.add(body, accent);
+      return group;
+    }
+
+    const sheriffModel = buildSheriffModel();
+    const phantomModel = buildRifleModel(0x22262e);
+    const vandalModel  = buildRifleModel(0x181818);
+
+    function updateGunVisual() {
+      gunGroup.clear();
+      if (currentWeaponKey === 'sheriff') gunGroup.add(sheriffModel);
+      else if (currentWeaponKey === 'phantom') gunGroup.add(phantomModel);
+      else gunGroup.add(vandalModel);
+    }
+    updateGunVisual();
+
+    gunGroup.position.set(0.26, -0.22, -0.42);
     camera.add(gunGroup);
     scene.add(camera);
 
-    function updateGunVisual() {
-      const w = WEAPONS[currentWeaponKey];
-      gunBody.scale.z = w.length / 0.35;
-      gunAccent.scale.z = w.length / 0.35;
-      gunBodyMat.color.setHex(w.color);
+    // === 3D 피격 히트 이펙트 (불꽃 파티클 + 히트마커) ===
+    const hitParticles = [];
+    function spawnHitSpark(point, isHead) {
+      const color = isHead ? 0xff3344 : 0xffdd55;
+      const mat = new THREE.MeshBasicMaterial({ color });
+      for (let i = 0; i < (isHead ? 10 : 6); i++) {
+        const spark = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), mat);
+        spark.position.copy(point);
+        spark.userData.vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 6,
+          (Math.random() - 0.2) * 6,
+          (Math.random() - 0.5) * 6
+        );
+        spark.userData.life = 0.22;
+        scene.add(spark);
+        hitParticles.push(spark);
+      }
+
+      const hitX = document.getElementById('hitX');
+      hitX.style.setProperty('--hit-color', isHead ? '#ff4655' : '#ffffff');
+      hitX.style.opacity = '1';
+      clearTimeout(hitX._timer);
+      hitX._timer = setTimeout(() => { hitX.style.opacity = '0'; }, 120);
     }
 
-    // === 상점 구매 로직 (전역 연결) ===
+    // === 상점 구매 & 보호막 교체 환불 로직 ===
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
       if (currentWeaponKey === key) return;
@@ -258,13 +376,21 @@
     };
 
     window.buyShield = function(key) {
-      const s = SHIELDS[key];
-      if (currentShieldKey === key && playerShield === s.max) return;
-      if (credits >= s.price) {
-        credits -= s.price;
+      const newShield = SHIELDS[key];
+      const oldShield = SHIELDS[currentShieldKey];
+
+      // 이미 같은 보호막을 최대치로 끼고 있으면 무시
+      if (currentShieldKey === key && playerShield === newShield.max) return;
+
+      // 기존에 끼고 있던 보호막이 있으면 판매(환불) 금액 계산
+      const refund = currentShieldKey !== 'none' ? oldShield.price : 0;
+      const netCost = newShield.price - refund;
+
+      if (credits >= netCost) {
+        credits -= netCost;
         currentShieldKey = key;
-        playerShield = s.max;
-        shieldReserve = s.reserve;
+        playerShield = newShield.max;
+        shieldReserve = newShield.reserve;
         updateHUD();
       }
     };
@@ -281,7 +407,6 @@
       document.getElementById('weaponText').innerText = WEAPONS[currentWeaponKey].name;
       document.getElementById('score').innerText = score;
 
-      // 상점 선택 표시
       ['sheriff', 'phantom', 'vandal'].forEach(k => {
         document.getElementById('buy-' + k).classList.toggle('equipped', currentWeaponKey === k);
       });
@@ -291,7 +416,7 @@
     }
     updateHUD();
 
-    // === 훈련장 로봇(Bot) 생성 (헤드 / 몸통 / 다리 히트박스 & 보호막 보유) ===
+    // === 훈련장 로봇(Bot) 생성 ===
     const botHitboxes = [];
     const bots = [];
 
@@ -301,17 +426,14 @@
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x222831, metalness: 0.7, roughness: 0.3 });
       const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
 
-      // 다리 (Leg 히트박스)
       const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.85, 12), darkMat);
       legs.position.y = 0.425;
       legs.userData = { botRoot: botGroup, part: 'leg' };
 
-      // 몸통 (Body 히트박스)
       const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat);
       torso.position.y = 1.3;
       torso.userData = { botRoot: botGroup, part: 'body' };
 
-      // 양팔 (Body 판정)
       const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.24), darkMat);
       leftArm.position.set(-0.58, 1.3, 0);
       leftArm.userData = { botRoot: botGroup, part: 'body' };
@@ -320,12 +442,10 @@
       rightArm.position.set(0.58, 1.3, 0);
       rightArm.userData = { botRoot: botGroup, part: 'body' };
 
-      // 머리 (Head 히트박스)
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat);
       head.position.y = 2.08;
       head.userData = { botRoot: botGroup, part: 'head' };
 
-      // 눈 바이저
       const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat);
       visor.position.set(0, 2.08, 0.24);
       visor.userData = { botRoot: botGroup, part: 'head' };
@@ -340,8 +460,8 @@
     }
 
     function respawnBot(bot) {
-      bot.position.set((Math.random() - 0.5) * 44, 0, (Math.random() - 0.5) * 40 - 8);
-      // 적 봇도 랜덤으로 경형(25), 재생(25+50), 중형(50) 보호막 장착!
+      // 10m ~ 45m 거리까지 골고루 배치해서 거리별 딜 차이 체감 가능
+      bot.position.set((Math.random() - 0.5) * 44, 0, -Math.random() * 42 + 4);
       const types = [
         { name: '경형 보호막', shield: 25, reserve: 0 },
         { name: '재생 보호막', shield: 25, reserve: 50 },
@@ -357,14 +477,14 @@
 
     for (let i = 0; i < 8; i++) createTrainingBot();
 
-    // === 조작 & 상점 & ESC ===
+    // === 조작 (앉기 Ctrl, 걷기 Shift, 정확한 8방향 대시 E) ===
     const keys = {};
     let yaw = 0, pitch = 0, velY = 0, isGrounded = true;
+    let currentEyeHeight = 2.0;
     let dashCooldown = 0, dashTime = 0;
     let dashDir = new THREE.Vector3();
     let sensitivity = 1.0;
 
-    // 반동 누적 및 복구 변수
     let recoilPitchOffset = 0;
     let recoilYawOffset = 0;
     let isMouseDown = false;
@@ -418,10 +538,18 @@
       pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch - e.movementY * factor));
     });
 
+    // 정확한 정면/우측 수평 방향 벡터 계산 헬퍼
+    function getMoveVectors() {
+      const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+      return { forward, right };
+    }
+
     document.addEventListener('keydown', (e) => {
+      // 브라우저 기본 단축키(Ctrl+W 등) 간섭 최소화
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
       keys[e.code] = true;
 
-      // B키 상점 열기/닫기
       if (e.code === 'KeyB') {
         if (document.pointerLockElement === document.body) {
           isShopOpen = true;
@@ -440,19 +568,17 @@
         isGrounded = false;
       }
 
-      // E키: 현재 누르고 있는 WASD 이동 방향으로 제트 대시!
+      // E키: 정확한 WASD 방향 대시 (D=동쪽, A=서쪽, W=북쪽, S=남쪽)
       if (e.code === 'KeyE' && dashCooldown <= 0) {
-        const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-        const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-        const dir = new THREE.Vector3();
+        const { forward, right } = getMoveVectors();
+        const dir = new THREE.Vector3(0, 0, 0);
 
         if (keys['KeyW']) dir.add(forward);
         if (keys['KeyS']) dir.sub(forward);
         if (keys['KeyD']) dir.add(right);
         if (keys['KeyA']) dir.sub(right);
 
-        // 아무 방향키도 안 누르고 있으면 정면으로 대시
-        if (dir.length() === 0) dir.copy(forward);
+        if (dir.lengthSq() === 0) dir.copy(forward);
         else dir.normalize();
 
         dashDir.copy(dir);
@@ -462,34 +588,39 @@
     });
     document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-    // === 사격 및 반동 & 부위별 데미지 시스템 ===
+    // === 사격 판정 (히트 이펙트 + 거리별 데미지) ===
     const raycaster = new THREE.Raycaster();
-    const hitMarker = document.getElementById('hitMarker');
     const killfeed = document.getElementById('killfeed');
-    let hitTimer = null;
 
     function fireWeapon() {
       const w = WEAPONS[currentWeaponKey];
       fireCooldown = w.fireRate;
 
-      // 총기 킥백 애니메이션
-      gunGroup.position.z = -0.34;
-      gunGroup.rotation.x = 0.1;
+      // 총기 반동 애니메이션 & 셰리프 실린더 회전
+      gunGroup.position.z = -0.32;
+      gunGroup.rotation.x = 0.14;
+      if (currentWeaponKey === 'sheriff' && sheriffModel.userData.cylinder) {
+        sheriffModel.userData.cylinder.rotation.z += Math.PI / 3;
+      }
 
-      // 사격 판정 (현재 반동이 적용된 에임 기준)
       raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
       const hits = raycaster.intersectObjects(botHitboxes);
 
       if (hits.length > 0) {
-        const hitObj = hits[0].object;
-        const part = hitObj.userData.part; // 'head', 'body', 'leg'
+        const hit = hits[0];
+        const hitObj = hit.object;
+        const part = hitObj.userData.part;
         const botRoot = hitObj.userData.botRoot;
         const botData = botRoot.userData;
 
-        const dmg = w[part];
+        // 3D 피격 위치에 스파크 이펙트 생성
+        spawnHitSpark(hit.point, part === 'head');
+
+        // 거리 계산 (유닛 1 = 1m) 및 거리별 데미지 산출
+        const distance = hit.distance;
+        const dmg = w.getDamage(distance, part);
         botData.lastHitTime = performance.now();
 
-        // 보호막 먼저 차감 후 체력 차감
         let remaining = dmg;
         if (botData.shield > 0) {
           const absorbed = Math.min(botData.shield, remaining);
@@ -498,19 +629,13 @@
         }
         botData.hp -= remaining;
 
-        const partName = part === 'head' ? '헤드샷!' : (part === 'body' ? '몸통' : '다리');
-        hitMarker.innerText = `${partName} -${dmg} (남은 HP: ${Math.max(0, Math.ceil(botData.hp + botData.shield))})`;
-        hitMarker.style.color = part === 'head' ? '#ff4655' : '#00ffcc';
-        clearTimeout(hitTimer);
-        hitTimer = setTimeout(() => { hitMarker.innerText = ''; }, 1000);
-
         if (botData.hp <= 0) {
           score += 1;
-          credits += 300; // 킬 보상 300 크레딧
+          credits += 300;
           updateHUD();
 
           const line = document.createElement('div');
-          line.innerText = `[${w.name}] 봇 처치 (${botData.shieldType}) +300¤`;
+          line.innerText = `[${w.name}] 봇 처치 (${Math.round(distance)}m) +300¤`;
           line.style.color = part === 'head' ? '#ff4655' : '#00ffcc';
           killfeed.prepend(line);
           if (killfeed.children.length > 4) killfeed.lastChild.remove();
@@ -519,7 +644,6 @@
         }
       }
 
-      // 반동 적용 (위로 튀고 좌우로 흔들림)
       recoilPitchOffset = Math.min(0.28, recoilPitchOffset + w.recoilPitch);
       recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2;
     }
@@ -540,18 +664,37 @@
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
 
+      // 히트 스파크 파티클 업데이트
+      for (let i = hitParticles.length - 1; i >= 0; i--) {
+        const p = hitParticles[i];
+        p.userData.life -= dt;
+        p.position.addScaledVector(p.userData.vel, dt);
+        p.userData.vel.y -= 15 * dt;
+        if (p.userData.life <= 0) {
+          scene.remove(p);
+          hitParticles.splice(i, 1);
+        }
+      }
+
       if (fireCooldown > 0) fireCooldown -= dt;
       if (isMouseDown && WEAPONS[currentWeaponKey].auto && fireCooldown <= 0 && document.pointerLockElement === document.body) {
         fireWeapon();
       }
 
-      // 반동 서서히 회복
+      // 반동 복귀
       recoilPitchOffset = THREE.MathUtils.lerp(recoilPitchOffset, 0, 8 * dt);
       recoilYawOffset = THREE.MathUtils.lerp(recoilYawOffset, 0, 8 * dt);
 
       camera.rotation.order = 'YXZ';
       camera.rotation.y = yaw + recoilYawOffset;
       camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset));
+
+      // 앉기(Ctrl) & 걷기(Shift) 상태 판별
+      const isCrouching = keys['ControlLeft'] || keys['ControlRight'];
+      const isWalking = keys['ShiftLeft'] || keys['ShiftRight'];
+
+      const targetEyeHeight = isCrouching ? 1.25 : 2.0;
+      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 14 * dt);
 
       // 대시 쿨타임 & 이동 처리
       if (dashCooldown > 0) dashCooldown -= dt;
@@ -566,29 +709,42 @@
       } else {
         camera.fov = THREE.MathUtils.lerp(camera.fov, 75, 0.2);
         if (document.pointerLockElement === document.body) {
-          const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-          const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+          const { forward, right } = getMoveVectors();
           const move = new THREE.Vector3();
           if (keys['KeyW']) move.add(forward);
           if (keys['KeyS']) move.sub(forward);
           if (keys['KeyD']) move.add(right);
           if (keys['KeyA']) move.sub(right);
-          if (move.length() > 0) move.normalize();
-          camera.position.addScaledVector(move, 10 * dt);
+          if (move.lengthSq() > 0) move.normalize();
+
+          // 기본 달리기 10 | 걷기(Shift) 5.5 | 앉기(Ctrl) 4.5
+          let moveSpeed = 10;
+          if (isCrouching) moveSpeed = 4.5;
+          else if (isWalking) moveSpeed = 5.5;
+
+          camera.position.addScaledVector(move, moveSpeed * dt);
         }
       }
       camera.updateProjectionMatrix();
 
-      // 점프 & 중력
-      velY -= 0.012;
-      camera.position.y += velY;
-      if (camera.position.y <= 2) { camera.position.y = 2; velY = 0; isGrounded = true; }
+      // 점프 & 중력 & 앉기 높이 반영
+      if (!isGrounded) {
+        velY -= 0.012;
+        camera.position.y += velY;
+        if (camera.position.y <= currentEyeHeight) {
+          camera.position.y = currentEyeHeight;
+          velY = 0;
+          isGrounded = true;
+        }
+      } else {
+        camera.position.y = currentEyeHeight;
+      }
 
       // 총기 반동 위치 복귀
-      gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.5, 0.2);
+      gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.42, 0.2);
       gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
 
-      // 적 봇 회전 및 재생 보호막 회복 로직
+      // 적 봇 회전 및 재생 보호막 회복
       const now = performance.now();
       bots.forEach(bot => {
         bot.lookAt(camera.position.x, 0, camera.position.z);
