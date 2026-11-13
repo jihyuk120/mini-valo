@@ -138,7 +138,7 @@
           <div class="item-price">2,900 ¤</div>
         </div>
         <div class="shop-item" id="buy-operator" onclick="buyWeapon('operator')">
-          <div><div class="item-title">[1번] 오퍼레이터 (Operator)</div><div class="item-desc">5발 | 헤드 255 / 몸 150 / 다리 120 | 고관통·2단줌</div></div>
+          <div><div class="item-title">[1번] 오퍼레이터 (Operator)</div><div class="item-desc">5발 | 헤드 255 / 몸 150 / 다리 120 | 고관통·2단줌·사격 후 줌해제</div></div>
           <div class="item-price">4,700 ¤</div>
         </div>
       </div>
@@ -201,31 +201,31 @@
     const WEAPONS = {
       sheriff: {
         slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, zoomType: 'none',
-        magSize: 6, reloadTime: 1.5, penetration: 2, jumpSpread: 0.14,
+        magSize: 6, reloadTime: 1.5, penetration: 2, jumpSpread: 0.14, noScopeSpread: 0,
         recoilPitch: 0.055, recoilYaw: 0.015,
         getDamage: (dist, part) => dist < 30 ? { head: 159, body: 55, leg: 46 }[part] : { head: 145, body: 50, leg: 42 }[part]
       },
       phantom: {
         slot: 1, name: '팬텀', price: 2900, auto: true, fireRate: 0.095, zoomType: 'holo',
-        magSize: 30, reloadTime: 1.8, penetration: 2, jumpSpread: 0.16,
+        magSize: 30, reloadTime: 1.8, penetration: 2, jumpSpread: 0.16, noScopeSpread: 0,
         recoilPitch: 0.018, recoilYaw: 0.012,
         getDamage: (dist, part) => dist < 15 ? { head: 156, body: 39, leg: 33 }[part] : (dist < 30 ? { head: 140, body: 35, leg: 29 }[part] : { head: 124, body: 31, leg: 26 }[part])
       },
       vandal: {
         slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135, zoomType: 'holo',
-        magSize: 25, reloadTime: 1.8, penetration: 2, jumpSpread: 0.17,
+        magSize: 25, reloadTime: 1.8, penetration: 2, jumpSpread: 0.17, noScopeSpread: 0,
         recoilPitch: 0.030, recoilYaw: 0.022,
         getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
       },
       operator: {
         slot: 1, name: '오퍼레이터', price: 4700, auto: false, fireRate: 1.15, zoomType: 'sniper',
-        magSize: 5, reloadTime: 2.3, penetration: 5, jumpSpread: 0.24,
-        recoilPitch: 0.085, recoilYaw: 0.02,
+        magSize: 5, reloadTime: 2.3, penetration: 5, jumpSpread: 0.36, noScopeSpread: 0.22,
+        recoilPitch: 0.09, recoilYaw: 0.025,
         getDamage: (dist, part) => ({ head: 255, body: 150, leg: 120 }[part])
       },
       melee: {
         slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, zoomType: 'none',
-        magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0,
+        magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
         recoilPitch: 0, recoilYaw: 0,
         getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0)
       }
@@ -247,6 +247,7 @@
     let botStrafeMode = false, currentMap = 'brawl';
     let currentShieldKey = 'heavy', playerHp = 100, playerShield = 50, shieldReserve = 0, isShopOpen = false;
     let isDead = false, lastDamageTime = 0;
+    let swapAnimTimer = 0;
 
     let myTeam = 'red';
     let redScore = 0, blueScore = 0;
@@ -437,6 +438,8 @@
       gunGroup.position.set(0.26, -0.22, -0.42);
       gunGroup.rotation.set(0, 0, 0);
       setZoom(0);
+      // 스왑 모션 트리거 (특히 칼 스왑 시 한 바퀴 회전하며 뽑아 올리는 모션)
+      swapAnimTimer = 0.28;
     }
     updateGunVisual();
     camera.add(gunGroup);
@@ -493,7 +496,6 @@
       botHitboxes.push(legs, torso, head, visor);
     }
 
-    // 훈련봇을 무작위(랜덤) 위치에서 리스폰
     function respawnBot(bot) {
       bot.rotation.set(0, 0, 0);
       bot.userData.hp = 100;
@@ -504,8 +506,8 @@
       let valid = false;
 
       for (let attempt = 0; attempt < 25; attempt++) {
-        randX = (Math.random() - 0.5) * 60; // -30 ~ +30 랜덤 가로 위치
-        randZ = -4 - Math.random() * 44;     // -4 ~ -48 랜덤 사거리
+        randX = (Math.random() - 0.5) * 60;
+        randZ = -4 - Math.random() * 44;
         valid = true;
         for (const other of bots) {
           if (other !== bot && other.position.distanceTo(new THREE.Vector3(randX, 0, randZ)) < 2.2) {
@@ -1018,6 +1020,8 @@
       const w = WEAPONS[key];
       if (isReloading || isDead) return;
 
+      const wasZoomed = zoomLevel > 0;
+
       if (key !== 'melee') {
         if (ammoState[key] <= 0) { startReload(); return; }
         ammoState[key] -= 1;
@@ -1025,7 +1029,12 @@
         if (ammoState[key] === 0) startReload();
       }
 
-      fireCooldown = zoomLevel > 0 ? w.fireRate * 1.15 : w.fireRate;
+      fireCooldown = wasZoomed ? w.fireRate * 1.15 : w.fireRate;
+
+      // 오퍼레이터는 한 발 쏘면 스코프 줌 자동 해제
+      if (key === 'operator' && wasZoomed) {
+        setZoom(0);
+      }
 
       if (key === 'melee') {
         gunGroup.position.z = -0.64;
@@ -1041,8 +1050,15 @@
       const isMoving = Boolean(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
       const isWalking = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
       let spread = 0;
-      if (!isGrounded) spread = w.jumpSpread;
-      else if (isMoving && !isWalking) spread = w.jumpSpread * 0.45;
+
+      if (!isGrounded) {
+        spread = w.jumpSpread;
+      } else if (key === 'operator' && !wasZoomed) {
+        // 오퍼레이터 노줌(비조준) 시 탄퍼짐 크게 적용
+        spread = w.noScopeSpread + (isMoving && !isWalking ? 0.12 : 0);
+      } else if (isMoving && !isWalking) {
+        spread = w.jumpSpread * 0.45;
+      }
 
       const spreadX = (Math.random() - 0.5) * spread;
       const spreadY = (Math.random() - 0.5) * spread;
@@ -1112,10 +1128,12 @@
 
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       let recoilMult = isCrouching ? 0.65 : 1.0;
-      if (zoomLevel > 0) recoilMult *= 0.8;
+      if (wasZoomed) recoilMult *= 0.8;
+      // 오퍼레이터 노줌(비조준) 시 반동 크게 상승
+      if (key === 'operator' && !wasZoomed) recoilMult *= 2.4;
       if (!isGrounded) recoilMult *= 1.5;
 
-      recoilPitchOffset = Math.min(0.35, recoilPitchOffset + w.recoilPitch * recoilMult);
+      recoilPitchOffset = Math.min(0.45, recoilPitchOffset + w.recoilPitch * recoilMult);
       recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2 * recoilMult;
     }
 
@@ -1175,7 +1193,8 @@
       const isMoving = Boolean(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
 
       const crosshairEl = document.getElementById('crosshair');
-      const spreadScale = !isGrounded ? 2.4 : (isMoving && !isWalking ? 1.5 : 1.0);
+      const curKey = getCurrentWeaponKey();
+      const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isMoving && !isWalking ? 1.5 : 1.0));
       crosshairEl.style.transform = `translate(-50%, -50%) scale(${spreadScale})`;
 
       const targetEyeHeight = isCrouching ? 1.25 : 2.0;
@@ -1226,7 +1245,18 @@
         camera.position.y = currentEyeHeight;
       }
 
-      if (!isReloading && gunGroup.visible) {
+      // 무기 및 칼 스왑 모션 애니메이션
+      if (swapAnimTimer > 0) {
+        swapAnimTimer -= dt;
+        const progress = Math.max(0, swapAnimTimer / 0.28);
+        if (curKey === 'melee') {
+          gunGroup.position.set(0.26, -0.22 - progress * 0.25, -0.42 + progress * 0.15);
+          gunGroup.rotation.set(-progress * 1.4, progress * 0.8, progress * Math.PI * 2);
+        } else {
+          gunGroup.position.set(0.26, -0.22 - progress * 0.18, -0.42);
+          gunGroup.rotation.set(-progress * 0.6, 0, 0);
+        }
+      } else if (!isReloading && gunGroup.visible) {
         const targetGunX = zoomLevel > 0 ? 0.0 : 0.26;
         const targetGunY = zoomLevel > 0 ? -0.075 : -0.22;
         const targetGunZ = zoomLevel > 0 ? -0.28 : -0.42;
@@ -1234,6 +1264,8 @@
         gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetGunY, 0.25);
         gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetGunZ, 0.25);
         gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
+        gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0, 0.2);
+        gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, 0, 0.2);
       }
 
       if (currentMap === 'range' && botStrafeMode) {
