@@ -120,7 +120,7 @@
   <div id="shopModal" class="modal">
     <div class="shop-header">
       <h1 style="font-size:32px; margin:0;">무기고 (SHOP)</h1>
-      <div style="font-size:20px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">9000</span> ¤</div>
+      <div style="font-size:20px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">99999</span> ¤ (무제한)</div>
     </div>
     <div class="shop-grid">
       <div class="shop-col">
@@ -143,7 +143,7 @@
         </div>
       </div>
       <div class="shop-col">
-        <h2>보호막 (교체 시 기존 보호막 환불)</h2>
+        <h2>보호막 (무료 교체)</h2>
         <div class="shop-item" id="buy-light" onclick="buyShield('light')">
           <div><div class="item-title">경형 보호막</div><div class="item-desc">보호막 +25 (총 내구도 125)</div></div>
           <div class="item-price">400 ¤</div>
@@ -185,7 +185,7 @@
       <span class="regen-tag" id="regenText">중형 보호막</span>
     </div>
     <div class="hud-box" style="text-align:center;">
-      모드: <span id="mapNameText" style="color:#ffcc00;">난투 아레나</span> | 크레딧: <span id="creditText" style="color:#00ffcc;">9000</span> ¤<br>
+      모드: <span id="mapNameText" style="color:#ffcc00;">난투 아레나</span> | 크레딧: <span id="creditText" style="color:#00ffcc;">99999</span> ¤<br>
       <span style="font-size:13px; color:#ccc;">대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span> | 봇(F): <span id="botModeText" style="color:#ffcc00;">고정</span></span>
     </div>
     <div class="hud-box" style="text-align:right;">
@@ -221,6 +221,7 @@
         slot: 1, name: '오퍼레이터', price: 4700, auto: false, fireRate: 1.15, zoomType: 'sniper',
         magSize: 5, reloadTime: 2.3, penetration: 5, jumpSpread: 0.24,
         recoilPitch: 0.085, recoilYaw: 0.02,
+        // 헤드 255, 몸통 150 (풀방어구 150 원샷), 다리 120 (풀방어구 150 기준 30 생존)
         getDamage: (dist, part) => ({ head: 255, body: 150, leg: 120 }[part])
       },
       melee: {
@@ -238,7 +239,8 @@
       heavy: { name: '중형 보호막', price: 1000, max: 50, reserve: 0 }
     };
 
-    let credits = 9000;
+    // 훈련장 & 난투 모두 크레딧 99999 고정 (구매해도 줄어들지 않음)
+    const credits = 99999;
     let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
     let activeSlot = 2;
     let ammoState = { sheriff: 6, phantom: 30, vandal: 25, operator: 5, melee: Infinity };
@@ -805,33 +807,23 @@
       }, w.reloadTime * 1000);
     }
 
+    // 크레딧 99999 고정 (구매해도 줄어들지 않음)
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
-      if (slotWeapons[w.slot] === key) return;
-      if (credits >= w.price) {
-        credits -= w.price;
-        slotWeapons[w.slot] = key;
-        ammoState[key] = w.magSize;
-        cancelReload();
-        activeSlot = w.slot;
-        updateGunVisual();
-        updateHUD();
-      }
+      slotWeapons[w.slot] = key;
+      ammoState[key] = w.magSize;
+      cancelReload();
+      activeSlot = w.slot;
+      updateGunVisual();
+      updateHUD();
     };
 
     window.buyShield = function(key) {
       const newShield = SHIELDS[key];
-      const oldShield = SHIELDS[currentShieldKey];
-      if (currentShieldKey === key && playerShield === newShield.max) return;
-      const refund = currentShieldKey !== 'none' ? oldShield.price : 0;
-      const netCost = newShield.price - refund;
-      if (credits >= netCost) {
-        credits -= netCost;
-        currentShieldKey = key;
-        playerShield = newShield.max;
-        shieldReserve = newShield.reserve;
-        updateHUD();
-      }
+      currentShieldKey = key;
+      playerShield = newShield.max;
+      shieldReserve = newShield.reserve;
+      updateHUD();
     };
 
     function updateHUD() {
@@ -1069,7 +1061,8 @@
           hitTargetsSet.add(botRoot);
 
           const penIndex = hitTargetsSet.size - 1;
-          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 0.85 : 0.65);
+          // 오퍼레이터는 관통 시에도 몸통 150 이상 유지하여 뒤의 적까지 한 방
+          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
           const dmg = Math.round(baseDmg * penMult);
           spawnHitSpark(hit.point, part === 'head');
 
@@ -1079,7 +1072,6 @@
           bd.hp -= rem;
           if (bd.hp <= 0) {
             multiKillCount++;
-            credits += 300;
             respawnBot(botRoot);
           }
         } else if (hitObj.userData.targetType === 'player') {
@@ -1090,7 +1082,7 @@
           hitTargetsSet.add(targetPeerId);
 
           const penIndex = hitTargetsSet.size - 1;
-          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 0.85 : 0.65);
+          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
           const dmg = Math.round(baseDmg * penMult);
           spawnHitSpark(hit.point, part === 'head');
 
