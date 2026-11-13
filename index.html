@@ -5,97 +5,41 @@
   <title>MINI-VALO 3D</title>
   <style>
     body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
-    #crosshair {
-      position: fixed; top: 50%; left: 50%; width: 14px; height: 14px;
-      transform: translate(-50%, -50%); pointer-events: none; z-index: 10;
-    }
-    #crosshair::before, #crosshair::after {
-      content: ''; position: absolute; background: #00ffcc; box-shadow: 0 0 4px #00ffcc;
-    }
+    #crosshair { position: fixed; top: 50%; left: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ffcc; box-shadow: 0 0 4px #00ffcc; }
     #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
     #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
-
-    /* 우클릭 줌(ADS) 시 나타나는 발로란트 기본 노란색 네모 홀로그램 조준선 */
-    #adsReticle {
-      position: fixed; top: 50%; left: 50%; width: 34px; height: 34px;
-      transform: translate(-50%, -50%); pointer-events: none; z-index: 12;
-      border: 2px solid rgba(255, 215, 0, 0.9);
-      box-shadow: 0 0 8px rgba(255, 200, 0, 0.6), inset 0 0 6px rgba(255, 200, 0, 0.4);
-      border-radius: 3px;
-      display: none;
-    }
-    #adsReticle::after {
-      content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
-      background: #ffea00; border-radius: 50%; transform: translate(-50%, -50%);
-      box-shadow: 0 0 6px #ffea00;
-    }
-
-    #hitX {
-      position: fixed; top: 50%; left: 50%; width: 22px; height: 22px;
-      transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 11;
-      opacity: 0; transition: opacity 0.08s;
-    }
-    #hitX::before, #hitX::after {
-      content: ''; position: absolute; background: var(--hit-color, #ffffff);
-      box-shadow: 0 0 6px var(--hit-color, #ffffff);
-    }
+    #adsReticle { position: fixed; top: 50%; left: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); pointer-events: none; z-index: 12; border: 2px solid rgba(255, 215, 0, 0.9); box-shadow: 0 0 8px rgba(255, 200, 0, 0.6), inset 0 0 6px rgba(255, 200, 0, 0.4); border-radius: 3px; display: none; }
+    #adsReticle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #ffea00; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 6px #ffea00; }
+    #hitX { position: fixed; top: 50%; left: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 11; opacity: 0; transition: opacity 0.08s; }
+    #hitX::before, #hitX::after { content: ''; position: absolute; background: var(--hit-color, #ffffff); box-shadow: 0 0 6px var(--hit-color, #ffffff); }
     #hitX::before { top: 10px; left: 0; width: 22px; height: 2px; }
     #hitX::after { top: 0; left: 10px; width: 2px; height: 22px; }
-
-    #reloadMsg {
-      position: fixed; top: 56%; left: 50%; transform: translate(-50%, 0);
-      color: #ffcc00; font-size: 16px; font-weight: bold; letter-spacing: 2px;
-      pointer-events: none; z-index: 10; display: none; text-shadow: 1px 1px 3px black;
-    }
-
-    #hud {
-      position: fixed; bottom: 25px; left: 25px; right: 25px;
-      display: flex; justify-content: space-between; align-items: flex-end;
-      pointer-events: none; z-index: 5;
-    }
-    .hud-box {
-      background: rgba(15, 25, 35, 0.85); color: white; padding: 14px 24px;
-      border-bottom: 3px solid #ff4655; font-weight: bold; letter-spacing: 1px;
-    }
+    #reloadMsg { position: fixed; top: 56%; left: 50%; transform: translate(-50%, 0); color: #ffcc00; font-size: 16px; font-weight: bold; letter-spacing: 2px; pointer-events: none; z-index: 10; display: none; text-shadow: 1px 1px 3px black; }
+    #hud { position: fixed; bottom: 25px; left: 25px; right: 25px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; z-index: 5; }
+    .hud-box { background: rgba(15, 25, 35, 0.85); color: white; padding: 14px 24px; border-bottom: 3px solid #ff4655; font-weight: bold; letter-spacing: 1px; }
     .hp-val { font-size: 32px; color: #ece8e1; }
     .shield-val { font-size: 24px; color: #00ffcc; margin-left: 10px; }
     .regen-tag { font-size: 13px; color: #7ef9ff; display: block; margin-top: 2px; }
     .ammo-val { font-size: 28px; color: #00ffcc; margin-left: 10px; }
     .slot-bar { font-size: 12px; color: #aaa; margin-top: 4px; }
     .slot-active { color: #ff4655; font-weight: bold; }
-
-    #killfeed {
-      position: fixed; top: 20px; right: 25px; color: #00ffcc; font-size: 15px; font-weight: bold;
-      text-align: right; pointer-events: none; z-index: 5; line-height: 1.5;
-    }
-
-    .modal {
-      position: fixed; inset: 0; background: rgba(15, 25, 35, 0.92); color: white;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      z-index: 20;
-    }
+    #killfeed { position: fixed; top: 20px; right: 25px; color: #00ffcc; font-size: 15px; font-weight: bold; text-align: right; pointer-events: none; z-index: 5; line-height: 1.5; }
+    .modal { position: fixed; inset: 0; background: rgba(15, 25, 35, 0.92); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; }
     h1 { color: #ff4655; font-size: 48px; margin: 0 0 8px 0; letter-spacing: 4px; }
-    .settings-box {
-      background: rgba(255, 255, 255, 0.08); padding: 18px 30px; border-radius: 6px;
-      margin: 15px 0; border: 1px solid rgba(255, 255, 255, 0.15); text-align: center;
-    }
+    .settings-box { background: rgba(255, 255, 255, 0.08); padding: 18px 30px; border-radius: 6px; margin: 12px 0; border: 1px solid rgba(255, 255, 255, 0.15); text-align: center; }
     input[type="range"] { width: 220px; accent-color: #ff4655; cursor: pointer; }
-    .btn-primary {
-      background: #ff4655; color: white; border: none; padding: 14px 40px;
-      font-size: 18px; font-weight: bold; cursor: pointer; letter-spacing: 2px; margin-top: 10px;
-    }
+    .btn-row { display: flex; gap: 14px; margin-top: 10px; }
+    .btn-primary { background: #ff4655; color: white; border: none; padding: 14px 28px; font-size: 17px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }
     .btn-primary:hover { background: #ff2a3c; }
-
+    .btn-secondary { background: #1f3344; color: #00ffcc; border: 1px solid #00ffcc; padding: 14px 28px; font-size: 17px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }
+    .btn-secondary:hover { background: #29465e; }
     #shopModal { display: none; }
     .shop-header { width: 760px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 760px; }
     .shop-col { background: rgba(255,255,255,0.05); padding: 20px; border-top: 3px solid #00ffcc; }
     .shop-col h2 { margin: 0 0 15px 0; font-size: 20px; color: #00ffcc; letter-spacing: 1px; }
-    .shop-item {
-      background: rgba(20, 30, 40, 0.9); border: 1px solid rgba(255,255,255,0.2);
-      padding: 12px 16px; margin-bottom: 10px; cursor: pointer; transition: 0.15s;
-      display: flex; justify-content: space-between; align-items: center;
-    }
+    .shop-item { background: rgba(20, 30, 40, 0.9); border: 1px solid rgba(255,255,255,0.2); padding: 12px 16px; margin-bottom: 10px; cursor: pointer; transition: 0.15s; display: flex; justify-content: space-between; align-items: center; }
     .shop-item:hover { border-color: #ff4655; background: rgba(255, 70, 85, 0.15); }
     .shop-item.equipped { border-color: #00ffcc; background: rgba(0, 255, 204, 0.15); }
     .item-title { font-size: 17px; font-weight: bold; }
@@ -106,14 +50,17 @@
 <body>
   <div id="overlay" class="modal">
     <h1>MINI-VALO</h1>
-    <p id="menuSubtitle">훈련장 모드 (우클릭: 줌 | F: 봇 무빙 전환 | B: 상점 | ESC: 설정)</p>
+    <p id="menuSubtitle">맵 선택 및 설정 (ESC: 메뉴 | B: 상점 | F: 봇 무빙 전환)</p>
     <div class="settings-box">
       <label for="sensSlider">마우스 감도: <span id="sensValue" style="color:#00ffcc; font-weight:bold;">1.00</span></label><br><br>
       <input type="range" id="sensSlider" min="0.1" max="3.0" step="0.05" value="1.0">
     </div>
-    <button id="startBtn" class="btn-primary">게임 시작 / 계속하기</button>
+    <div class="btn-row">
+      <button id="btnRange" class="btn-secondary">사격장 (훈련봇 모드)</button>
+      <button id="btnAscent" class="btn-primary">어센트 맵 (미드·A·B)</button>
+    </div>
     <p style="color:#aaa; font-size:13px; margin-top:18px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | E: 대시 | R: 재장전 | 우클릭: 조준(줌) | F: 봇 무빙 ON/OFF
+      WASD: 이동 | Shift(홀드): 걷기 | Ctrl(홀드): 앉기 | E: 대시 | R: 재장전 | 우클릭: 줌 | F: 봇 무빙
     </p>
   </div>
 
@@ -126,49 +73,30 @@
       <div class="shop-col">
         <h2>무기 (1번 주무기 / 2번 보조무기)</h2>
         <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')">
-          <div>
-            <div class="item-title">[2번] 셰리프 (Sheriff)</div>
-            <div class="item-desc">6발 | 0~30m: 159/55/46 | 30m+: 145/50/42</div>
-          </div>
+          <div><div class="item-title">[2번] 셰리프 (Sheriff)</div><div class="item-desc">6발 | 0~30m: 159/55/46 | 30m+: 145/50/42</div></div>
           <div class="item-price">800 ¤</div>
         </div>
         <div class="shop-item" id="buy-phantom" onclick="buyWeapon('phantom')">
-          <div>
-            <div class="item-title">[1번] 팬텀 (Phantom)</div>
-            <div class="item-desc">30발 | 0~15m: 156/39/33 | 15~30m: 140/35/29</div>
-          </div>
+          <div><div class="item-title">[1번] 팬텀 (Phantom)</div><div class="item-desc">30발 | 0~15m: 156/39/33 | 15~30m: 140/35/29</div></div>
           <div class="item-price">2,900 ¤</div>
         </div>
         <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')">
-          <div>
-            <div class="item-title">[1번] 밴달 (Vandal)</div>
-            <div class="item-desc">25발 | 전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div>
-          </div>
+          <div><div class="item-title">[1번] 밴달 (Vandal)</div><div class="item-desc">25발 | 전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div></div>
           <div class="item-price">2,900 ¤</div>
         </div>
       </div>
-
       <div class="shop-col">
         <h2>보호막 (교체 시 기존 보호막 환불)</h2>
         <div class="shop-item" id="buy-light" onclick="buyShield('light')">
-          <div>
-            <div class="item-title">경형 보호막</div>
-            <div class="item-desc">보호막 +25 (총 내구도 125)</div>
-          </div>
+          <div><div class="item-title">경형 보호막</div><div class="item-desc">보호막 +25 (총 내구도 125)</div></div>
           <div class="item-price">400 ¤</div>
         </div>
         <div class="shop-item" id="buy-regen" onclick="buyShield('regen')">
-          <div>
-            <div class="item-title">재생 보호막</div>
-            <div class="item-desc">보호막 +25 (피해 후 예비 50까지 재생)</div>
-          </div>
+          <div><div class="item-title">재생 보호막</div><div class="item-desc">보호막 +25 (피해 후 예비 50까지 재생)</div></div>
           <div class="item-price">650 ¤</div>
         </div>
         <div class="shop-item" id="buy-heavy" onclick="buyShield('heavy')">
-          <div>
-            <div class="item-title">중형 보호막</div>
-            <div class="item-desc">보호막 +50 (총 내구도 150)</div>
-          </div>
+          <div><div class="item-title">중형 보호막</div><div class="item-desc">보호막 +50 (총 내구도 150)</div></div>
           <div class="item-price">1,000 ¤</div>
         </div>
       </div>
@@ -189,11 +117,8 @@
       <span class="regen-tag" id="regenText">보호막 없음 (B키로 구매)</span>
     </div>
     <div class="hud-box" style="text-align:center;">
-      크레딧: <span id="creditText" style="color:#00ffcc;">3900</span> ¤ | 처치: <span id="score">0</span><br>
-      <span style="font-size:13px; color:#ccc;">
-        대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span> |
-        훈련봇(F): <span id="botModeText" style="color:#ffcc00;">고정(스탠딩)</span>
-      </span>
+      맵: <span id="mapNameText" style="color:#ffcc00;">사격장</span> | 크레딧: <span id="creditText" style="color:#00ffcc;">3900</span> ¤ | 처치: <span id="score">0</span><br>
+      <span style="font-size:13px; color:#ccc;">대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span> | 봇 모드(F): <span id="botModeText" style="color:#ffcc00;">고정(스탠딩)</span></span>
     </div>
     <div class="hud-box" style="text-align:right;">
       <span id="weaponText" style="color:#ff4655; font-size:18px;">셰리프</span>
@@ -211,37 +136,10 @@
     import * as THREE from 'three';
 
     const WEAPONS = {
-      sheriff: {
-        slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, canZoom: false,
-        magSize: 6, reloadTime: 1.5,
-        recoilPitch: 0.055, recoilYaw: 0.015,
-        getDamage: (dist, part) => {
-          if (dist < 30) return { head: 159, body: 55, leg: 46 }[part];
-          return { head: 145, body: 50, leg: 42 }[part];
-        }
-      },
-      phantom: {
-        slot: 1, name: '팬텀', price: 2900, auto: true, fireRate: 0.095, canZoom: true,
-        magSize: 30, reloadTime: 1.8,
-        recoilPitch: 0.018, recoilYaw: 0.012,
-        getDamage: (dist, part) => {
-          if (dist < 15) return { head: 156, body: 39, leg: 33 }[part];
-          if (dist < 30) return { head: 140, body: 35, leg: 29 }[part];
-          return { head: 124, body: 31, leg: 26 }[part];
-        }
-      },
-      vandal: {
-        slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135, canZoom: true,
-        magSize: 25, reloadTime: 1.8,
-        recoilPitch: 0.030, recoilYaw: 0.022,
-        getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
-      },
-      melee: {
-        slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, canZoom: false,
-        magSize: Infinity, reloadTime: 0,
-        recoilPitch: 0, recoilYaw: 0,
-        getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0)
-      }
+      sheriff: { slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, canZoom: false, magSize: 6, reloadTime: 1.5, recoilPitch: 0.055, recoilYaw: 0.015, getDamage: (dist, part) => dist < 30 ? { head: 159, body: 55, leg: 46 }[part] : { head: 145, body: 50, leg: 42 }[part] },
+      phantom: { slot: 1, name: '팬텀', price: 2900, auto: true, fireRate: 0.095, canZoom: true, magSize: 30, reloadTime: 1.8, recoilPitch: 0.018, recoilYaw: 0.012, getDamage: (dist, part) => dist < 15 ? { head: 156, body: 39, leg: 33 }[part] : (dist < 30 ? { head: 140, body: 35, leg: 29 }[part] : { head: 124, body: 31, leg: 26 }[part]) },
+      vandal:  { slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135, canZoom: true, magSize: 25, reloadTime: 1.8, recoilPitch: 0.030, recoilYaw: 0.022, getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part]) },
+      melee:   { slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, canZoom: false, magSize: Infinity, reloadTime: 0, recoilPitch: 0, recoilYaw: 0, getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0) }
     };
 
     const SHIELDS = {
@@ -251,53 +149,126 @@
       heavy: { name: '중형 보호막', price: 1000, max: 50, reserve: 0 }
     };
 
-    let credits = 3900;
-    let score = 0;
-
+    let credits = 3900, score = 0;
     let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
     let activeSlot = 2;
     let ammoState = { sheriff: 6, phantom: 30, vandal: 25, melee: Infinity };
-    let isReloading = false;
-    let reloadTimer = null;
-    let isZoomed = false;
-    let botStrafeMode = false; // F키로 고정 / 좌우 무빙 전환
+    let isReloading = false, reloadTimer = null, isZoomed = false;
+    let botStrafeMode = false, currentMap = 'range';
+    let currentShieldKey = 'none', playerHp = 100, playerShield = 0, shieldReserve = 0, isShopOpen = false;
 
-    let currentShieldKey = 'none';
-    let playerHp = 100;
-    let playerShield = 0;
-    let shieldReserve = 0;
-    let isShopOpen = false;
-
-    function getCurrentWeaponKey() {
-      return slotWeapons[activeSlot] || 'melee';
-    }
+    function getCurrentWeaponKey() { return slotWeapons[activeSlot] || 'melee'; }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a242f);
-    scene.fog = new THREE.Fog(0x1a242f, 20, 110);
+    scene.background = new THREE.Color(0x87b5d6);
+    scene.fog = new THREE.Fog(0x87b5d6, 35, 160);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
-    camera.position.set(0, 2.0, 16);
-
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    const light = new THREE.DirectionalLight(0xffffff, 2.0);
-    light.position.set(15, 25, 15);
-    scene.add(light, new THREE.AmbientLight(0x607080, 2.2));
+    const sunLight = new THREE.DirectionalLight(0xfff5e4, 2.2);
+    sunLight.position.set(30, 50, 25);
+    scene.add(sunLight, new THREE.AmbientLight(0x708090, 2.0));
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(120, 120),
-      new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
-    scene.add(new THREE.GridHelper(120, 60, 0xff4655, 0x34495e));
+    // 맵 그룹 및 충돌 박스 배열
+    const mapGroup = new THREE.Group();
+    scene.add(mapGroup);
+    let wallColliders = [];
 
+    function addBlock(w, h, d, x, y, z, color, addCollider = true) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.1 })
+      );
+      mesh.position.set(x, y, z);
+      mapGroup.add(mesh);
+      if (addCollider) {
+        wallColliders.push({ minX: x - w / 2 - 0.55, maxX: x + w / 2 + 0.55, minZ: z - d / 2 - 0.55, maxZ: z + d / 2 + 0.55, maxY: y + h / 2 });
+      }
+      return mesh;
+    }
+
+    // 사격장 맵 빌드
+    function buildRangeMap() {
+      mapGroup.clear();
+      wallColliders = [];
+      scene.background = new THREE.Color(0x1a242f);
+      scene.fog = new THREE.Fog(0x1a242f, 25, 120);
+
+      addBlock(80, 1, 90, 0, -0.5, -15, 0x2c3e50, false);
+      const grid = new THREE.GridHelper(80, 40, 0xff4655, 0x34495e);
+      grid.position.set(0, 0.01, -15);
+      mapGroup.add(grid);
+
+      // 사격장 외벽 & 거리 표시 부스
+      addBlock(80, 8, 1, 0, 4, -55, 0x1e2b37);
+      addBlock(80, 8, 1, 0, 4, 25, 0x1e2b37);
+      addBlock(1, 8, 80, -40, 4, -15, 0x1e2b37);
+      addBlock(1, 8, 80, 40, 4, -15, 0x1e2b37);
+      addBlock(26, 1.1, 0.6, 0, 0.55, 10, 0xff4655); // 사격대 테이블
+    }
+
+    // 어센트(Ascent) 스타일 이탈리아 광장 맵 빌드 (미드 광장, 캣워크, 아치, A/B 사이트 구조물)
+    function buildAscentMap() {
+      mapGroup.clear();
+      wallColliders = [];
+      scene.background = new THREE.Color(0x88b8dc);
+      scene.fog = new THREE.Fog(0x88b8dc, 45, 180);
+
+      // 베이지 석재 바닥
+      addBlock(130, 1, 130, 0, -0.5, 0, 0xc8b99e, false);
+
+      const wallTerra = 0xc97b57; // 테라코타 건물벽
+      const wallCream = 0xdfd3be; // 크림색 회반죽 벽
+      const roofTile  = 0x8f3d2c; // 붉은 기와
+      const crateGreen = 0x3b5e47; // 라디어나이트 상자
+
+      // 외곽 경계벽
+      addBlock(130, 12, 2, 0, 6, -65, wallCream);
+      addBlock(130, 12, 2, 0, 6, 65, wallCream);
+      addBlock(2, 12, 130, -65, 6, 0, wallCream);
+      addBlock(2, 12, 130, 65, 6, 0, wallCream);
+
+      // 미드 중앙 분수대/엄폐 단상 (Mid Courtyard)
+      addBlock(7, 1.4, 7, 0, 0.7, 0, 0x9c8e78);
+      addBlock(2.5, 2.8, 2.5, 0, 1.4, 0, 0x8a7b66);
+
+      // 미드 탑(수비진영 아치 & 캣워크 연결 구조물)
+      addBlock(16, 8, 4, -18, 4, -22, wallTerra);
+      addBlock(16, 8, 4, 18, 4, -22, wallTerra);
+      addBlock(20, 3, 4, 0, 7.5, -22, wallCream); // 미드 아치 상단 다리
+      addBlock(21, 0.8, 4.6, 0, 9.2, -22, roofTile, false);
+
+      // 캣워크(Catwalk) & 트리하우스(Tree) 벽
+      addBlock(4, 7, 26, 15, 3.5, -6, wallCream);
+      addBlock(12, 7, 4, 21, 3.5, 6, wallTerra);
+
+      // 미드 마켓(Market) & 피자 가게 건물
+      addBlock(4, 7, 24, -16, 3.5, -4, wallTerra);
+      addBlock(12, 7, 4, -22, 3.5, -14, wallCream);
+
+      // A 사이트 (동쪽 구역) 엄폐물 & 제너레이터 상자
+      addBlock(4.5, 3.2, 4.5, 38, 1.6, -24, crateGreen);
+      addBlock(3.2, 2.2, 3.2, 46, 1.1, -14, crateGreen);
+      addBlock(18, 8, 3, 42, 4, -40, wallTerra); // A 사이트 후방 벽
+      addBlock(3, 8, 22, 54, 4, -22, wallCream);
+
+      // B 사이트 (서쪽 구역) 보트하우스 & 엄폐 상자
+      addBlock(4.5, 3.2, 4.5, -38, 1.6, -24, crateGreen);
+      addBlock(3.2, 2.2, 3.2, -45, 1.1, -12, crateGreen);
+      addBlock(18, 8, 3, -42, 4, -40, wallTerra);
+      addBlock(3, 8, 22, -54, 4, -22, wallCream);
+
+      // 공격팀 스폰(남쪽) 엄폐 기둥
+      addBlock(6, 6, 4, -10, 3, 32, wallCream);
+      addBlock(6, 6, 4, 10, 3, 32, wallCream);
+    }
+
+    // 1인칭 무기 모델들
     const gunGroup = new THREE.Group();
 
-    // 1. 셰리프 3D 모델
     function buildSheriffModel() {
       const group = new THREE.Group();
       const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2b2d30, metalness: 0.75, roughness: 0.35 });
@@ -306,154 +277,69 @@
       const gripMat = new THREE.MeshStandardMaterial({ color: 0x18191b, roughness: 0.85 });
       const sightMat = new THREE.MeshBasicMaterial({ color: 0xff9900 });
 
-      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.068, 0.28), frameMetal);
-      barrel.position.set(0, 0.032, -0.14);
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.068, 0.28), frameMetal); barrel.position.set(0, 0.032, -0.14);
+      const underBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.025, 0.22), darkMetal); underBarrel.position.set(0, -0.01, -0.16);
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.022), sightMat); frontSight.position.set(0, 0.072, -0.255);
+      const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.014, 0.02), darkMetal); rearSight.position.set(0, 0.071, 0.03);
+      const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.085, 16), chromeMetal); cylinder.rotation.x = Math.PI / 2; cylinder.position.set(0, 0.018, 0.015);
+      const topStrap = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.016, 0.11), frameMetal); topStrap.position.set(0, 0.058, 0.015);
+      const rearFrame = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.075, 0.065), frameMetal); rearFrame.position.set(0, 0.02, 0.085);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.145, 0.072), gripMat); grip.rotation.x = 0.28; grip.position.set(0, -0.075, 0.105);
 
-      const underBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.025, 0.22), darkMetal);
-      underBarrel.position.set(0, -0.01, -0.16);
-
-      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.022), sightMat);
-      frontSight.position.set(0, 0.072, -0.255);
-
-      const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.014, 0.02), darkMetal);
-      rearSight.position.set(0, 0.071, 0.03);
-
-      const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.085, 16), chromeMetal);
-      cylinder.rotation.x = Math.PI / 2;
-      cylinder.position.set(0, 0.018, 0.015);
-
-      const topStrap = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.016, 0.11), frameMetal);
-      topStrap.position.set(0, 0.058, 0.015);
-
-      const rearFrame = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.075, 0.065), frameMetal);
-      rearFrame.position.set(0, 0.02, 0.085);
-
-      const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.025, 0.025), darkMetal);
-      hammer.rotation.x = -0.5;
-      hammer.position.set(0, 0.055, 0.12);
-
-      const triggerGuard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.065), darkMetal);
-      triggerGuard.position.set(0, -0.035, 0.035);
-
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.145, 0.072), gripMat);
-      grip.rotation.x = 0.28;
-      grip.position.set(0, -0.075, 0.105);
-
-      group.add(barrel, underBarrel, frontSight, rearSight, cylinder, topStrap, rearFrame, hammer, triggerGuard, grip);
+      group.add(barrel, underBarrel, frontSight, rearSight, cylinder, topStrap, rearFrame, grip);
       group.userData.cylinder = cylinder;
       return group;
     }
 
-    // 홀로그램 도트 사이트(조준경) 공통 파츠 (우클릭 줌 시 노란 사각 렌즈 표시)
     function buildHoloSight() {
       const sightGroup = new THREE.Group();
       const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.8, roughness: 0.3 });
       const glassMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
-
       const base = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.012, 0.075), frameMat);
-      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.034, 0.065), frameMat);
-      leftWall.position.set(-0.019, 0.02, 0);
-      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.034, 0.065), frameMat);
-      rightWall.position.set(0.019, 0.02, 0);
-      const topHood = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.005, 0.065), frameMat);
-      topHood.position.set(0, 0.037, 0);
-      const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.034, 0.028), glassMat);
-      lens.position.set(0, 0.02, 0);
-
+      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.034, 0.065), frameMat); leftWall.position.set(-0.019, 0.02, 0);
+      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.034, 0.065), frameMat); rightWall.position.set(0.019, 0.02, 0);
+      const topHood = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.005, 0.065), frameMat); topHood.position.set(0, 0.037, 0);
+      const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.034, 0.028), glassMat); lens.position.set(0, 0.02, 0);
       sightGroup.add(base, leftWall, rightWall, topHood, lens);
       return sightGroup;
     }
 
-    // 2. 밴달 3D 모델 (첫 번째 사진: 굽은 바나나 탄창 + 다크 그레이 리시버 + 도트 사이트)
     function buildVandalModel() {
       const group = new THREE.Group();
       const receiverMat = new THREE.MeshStandardMaterial({ color: 0x2d3035, metalness: 0.72, roughness: 0.35 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x1b1d20, metalness: 0.65, roughness: 0.45 });
       const barrelMat = new THREE.MeshStandardMaterial({ color: 0x16171a, metalness: 0.85, roughness: 0.25 });
 
-      // 상부 리시버 & 총열 덮개
-      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.078, 0.34), receiverMat);
-      receiver.position.set(0, 0.01, -0.02);
-
-      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.064, 0.22), darkMat);
-      handguard.position.set(0, 0.012, -0.28);
-
-      // 총열 및 소염기
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 12), barrelMat);
-      barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.018, -0.45);
-
-      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.015, 0.045, 12), darkMat);
-      muzzle.rotation.x = Math.PI / 2;
-      muzzle.position.set(0, 0.018, -0.54);
-
-      // 밴달 특징: 2단으로 굽은 바나나형 탄창
-      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.068), darkMat);
-      magUpper.rotation.x = -0.22;
-      magUpper.position.set(0, -0.07, -0.10);
-
-      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.065), darkMat);
-      magLower.rotation.x = -0.48;
-      magLower.position.set(0, -0.155, -0.138);
-
-      // 권총 손잡이 & 개머리판
-      const pistolGrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.12, 0.052), darkMat);
-      pistolGrip.rotation.x = 0.32;
-      pistolGrip.position.set(0, -0.075, 0.07);
-
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.085, 0.22), receiverMat);
-      stock.position.set(0, 0.0, 0.24);
-
-      // 상단 홀로그램 도트 사이트
-      const sight = buildHoloSight();
-      sight.position.set(0, 0.055, -0.02);
-
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.078, 0.34), receiverMat); receiver.position.set(0, 0.01, -0.02);
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.064, 0.22), darkMat); handguard.position.set(0, 0.012, -0.28);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 12), barrelMat); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.018, -0.45);
+      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.015, 0.045, 12), darkMat); muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, 0.018, -0.54);
+      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.068), darkMat); magUpper.rotation.x = -0.22; magUpper.position.set(0, -0.07, -0.10);
+      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.065), darkMat); magLower.rotation.x = -0.48; magLower.position.set(0, -0.155, -0.138);
+      const pistolGrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.12, 0.052), darkMat); pistolGrip.rotation.x = 0.32; pistolGrip.position.set(0, -0.075, 0.07);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.085, 0.22), receiverMat); stock.position.set(0, 0.0, 0.24);
+      const sight = buildHoloSight(); sight.position.set(0, 0.055, -0.02);
       group.add(receiver, handguard, barrel, muzzle, magUpper, magLower, pistolGrip, stock, sight);
       return group;
     }
 
-    // 3. 팬텀 3D 모델 (두 번째 사진: 각진 직선 박스 탄창 + 굵은 일체형 소음기 + 도트 사이트)
     function buildPhantomModel() {
       const group = new THREE.Group();
       const bodyMat = new THREE.MeshStandardMaterial({ color: 0x26292e, metalness: 0.72, roughness: 0.35 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x191b1f, metalness: 0.65, roughness: 0.45 });
       const suppressorMat = new THREE.MeshStandardMaterial({ color: 0x202226, metalness: 0.8, roughness: 0.3 });
 
-      // 날렵한 상부 리시버
-      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.074, 0.34), bodyMat);
-      receiver.position.set(0, 0.01, -0.02);
-
-      // M-LOK 스타일 총열 덮개
-      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.058, 0.20), darkMat);
-      handguard.position.set(0, 0.014, -0.27);
-
-      // 팬텀 특징: 굵은 원통형 일체형 소음기
-      const suppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.22, 16), suppressorMat);
-      suppressor.rotation.x = Math.PI / 2;
-      suppressor.position.set(0, 0.016, -0.47);
-
-      // 팬텀 특징: 각진 수직 직선 박스 탄창
-      const straightMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.175, 0.068), darkMat);
-      straightMag.rotation.x = -0.08;
-      straightMag.position.set(0, -0.105, -0.095);
-
-      // 권총 손잡이 & 개머리판
-      const pistolGrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.115, 0.05), darkMat);
-      pistolGrip.rotation.x = 0.28;
-      pistolGrip.position.set(0, -0.072, 0.065);
-
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.08, 0.22), bodyMat);
-      stock.position.set(0, 0.004, 0.24);
-
-      // 상단 홀로그램 도트 사이트
-      const sight = buildHoloSight();
-      sight.position.set(0, 0.052, -0.02);
-
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.074, 0.34), bodyMat); receiver.position.set(0, 0.01, -0.02);
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.058, 0.20), darkMat); handguard.position.set(0, 0.014, -0.27);
+      const suppressor = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.22, 16), suppressorMat); suppressor.rotation.x = Math.PI / 2; suppressor.position.set(0, 0.016, -0.47);
+      const straightMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.175, 0.068), darkMat); straightMag.rotation.x = -0.08; straightMag.position.set(0, -0.105, -0.095);
+      const pistolGrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.115, 0.05), darkMat); pistolGrip.rotation.x = 0.28; pistolGrip.position.set(0, -0.072, 0.065);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.08, 0.22), bodyMat); stock.position.set(0, 0.004, 0.24);
+      const sight = buildHoloSight(); sight.position.set(0, 0.052, -0.02);
       group.add(receiver, handguard, suppressor, straightMag, pistolGrip, stock, sight);
       return group;
     }
 
-    // 4. 무광 블랙 전술 나이프 3D 모델
     function buildMeleeModel() {
       const group = new THREE.Group();
       const matteBlackBlade = new THREE.MeshStandardMaterial({ color: 0x26282c, metalness: 0.75, roughness: 0.32 });
@@ -461,97 +347,58 @@
       const gripMat = new THREE.MeshStandardMaterial({ color: 0x18191c, roughness: 0.85 });
       const rivetMat = new THREE.MeshStandardMaterial({ color: 0xd8dee9, metalness: 0.95, roughness: 0.15 });
 
-      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.044, 0.145), gripMat);
-      handle.position.set(0, 0, 0.065);
-
-      const frontGuard = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.058, 0.024), gripMat);
-      frontGuard.position.set(0, -0.006, -0.005);
-
-      const pommelTop = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.014, 0.035), matteBlackBlade);
-      pommelTop.position.set(0, 0.018, 0.148);
-      const pommelBack = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.045, 0.012), matteBlackBlade);
-      pommelBack.position.set(0, 0.002, 0.162);
-
-      const frontRivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.034, 12), rivetMat);
-      frontRivet.rotation.z = Math.PI / 2;
-      frontRivet.position.set(0, 0.004, 0.005);
-
-      const rearRivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.030, 12), rivetMat);
-      rearRivet.rotation.z = Math.PI / 2;
-      rearRivet.position.set(0, 0.008, 0.125);
-
-      const bladeBody = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.042, 0.175), matteBlackBlade);
-      bladeBody.position.set(0, 0.002, -0.102);
-
-      const bladeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.17), edgeSteel);
-      bladeEdge.position.set(0, -0.021, -0.10);
-
-      const tipCone = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.068, 4), matteBlackBlade);
-      tipCone.rotation.x = -Math.PI / 2;
-      tipCone.rotation.z = Math.PI / 4;
-      tipCone.scale.set(0.32, 1.0, 1.0);
-      tipCone.position.set(0, -0.002, -0.22);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.044, 0.145), gripMat); handle.position.set(0, 0, 0.065);
+      const frontGuard = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.058, 0.024), gripMat); frontGuard.position.set(0, -0.006, -0.005);
+      const pommelTop = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.014, 0.035), matteBlackBlade); pommelTop.position.set(0, 0.018, 0.148);
+      const pommelBack = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.045, 0.012), matteBlackBlade); pommelBack.position.set(0, 0.002, 0.162);
+      const frontRivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.034, 12), rivetMat); frontRivet.rotation.z = Math.PI / 2; frontRivet.position.set(0, 0.004, 0.005);
+      const rearRivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.030, 12), rivetMat); rearRivet.rotation.z = Math.PI / 2; rearRivet.position.set(0, 0.008, 0.125);
+      const bladeBody = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.042, 0.175), matteBlackBlade); bladeBody.position.set(0, 0.002, -0.102);
+      const bladeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.17), edgeSteel); bladeEdge.position.set(0, -0.021, -0.10);
+      const tipCone = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.068, 4), matteBlackBlade); tipCone.rotation.x = -Math.PI / 2; tipCone.rotation.z = Math.PI / 4; tipCone.scale.set(0.32, 1.0, 1.0); tipCone.position.set(0, -0.002, -0.22);
 
       group.add(handle, frontGuard, pommelTop, pommelBack, frontRivet, rearRivet, bladeBody, bladeEdge, tipCone);
-
       for (let i = 0; i < 6; i++) {
         const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.008, 0.012), matteBlackBlade);
         tooth.position.set(0, 0.026, -0.045 - i * 0.02);
         group.add(tooth);
       }
-
       group.rotation.set(0.18, 0.42, -0.45);
       return group;
     }
 
-    const models = {
-      sheriff: buildSheriffModel(),
-      phantom: buildPhantomModel(),
-      vandal:  buildVandalModel(),
-      melee:   buildMeleeModel()
-    };
+    const models = { sheriff: buildSheriffModel(), phantom: buildPhantomModel(), vandal: buildVandalModel(), melee: buildMeleeModel() };
 
     function updateGunVisual() {
       gunGroup.clear();
-      const key = getCurrentWeaponKey();
-      gunGroup.add(models[key]);
+      gunGroup.add(models[getCurrentWeaponKey()]);
       gunGroup.position.set(0.26, -0.22, -0.42);
       gunGroup.rotation.set(0, 0, 0);
       setZoom(false);
     }
     updateGunVisual();
-
     camera.add(gunGroup);
     scene.add(camera);
 
-    // === 우클릭 줌(ADS) 상태 전환 ===
     function setZoom(state) {
-      const key = getCurrentWeaponKey();
-      const w = WEAPONS[key];
+      const w = WEAPONS[getCurrentWeaponKey()];
       if (!w.canZoom || isReloading) state = false;
       isZoomed = state;
-
       document.getElementById('crosshair').style.display = isZoomed ? 'none' : 'block';
       document.getElementById('adsReticle').style.display = isZoomed ? 'block' : 'none';
     }
 
     const hitParticles = [];
     function spawnHitSpark(point, isHead) {
-      const color = isHead ? 0xff3344 : 0xffdd55;
-      const mat = new THREE.MeshBasicMaterial({ color });
+      const mat = new THREE.MeshBasicMaterial({ color: isHead ? 0xff3344 : 0xffdd55 });
       for (let i = 0; i < (isHead ? 10 : 6); i++) {
         const spark = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), mat);
         spark.position.copy(point);
-        spark.userData.vel = new THREE.Vector3(
-          (Math.random() - 0.5) * 6,
-          (Math.random() - 0.2) * 6,
-          (Math.random() - 0.5) * 6
-        );
+        spark.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.2) * 6, (Math.random() - 0.5) * 6);
         spark.userData.life = 0.22;
         scene.add(spark);
         hitParticles.push(spark);
       }
-
       const hitX = document.getElementById('hitX');
       hitX.style.setProperty('--hit-color', isHead ? '#ff4655' : '#ffffff');
       hitX.style.opacity = '1';
@@ -579,14 +426,11 @@
     function startReload() {
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
-      if (key === 'melee' || isReloading) return;
-      if (ammoState[key] >= w.magSize) return;
-
+      if (key === 'melee' || isReloading || ammoState[key] >= w.magSize) return;
       setZoom(false);
       isReloading = true;
       document.getElementById('reloadMsg').style.display = 'block';
       gunGroup.rotation.x = -0.45;
-
       reloadTimer = setTimeout(() => {
         ammoState[key] = w.magSize;
         isReloading = false;
@@ -614,10 +458,8 @@
       const newShield = SHIELDS[key];
       const oldShield = SHIELDS[currentShieldKey];
       if (currentShieldKey === key && playerShield === newShield.max) return;
-
       const refund = currentShieldKey !== 'none' ? oldShield.price : 0;
       const netCost = newShield.price - refund;
-
       if (credits >= netCost) {
         credits -= netCost;
         currentShieldKey = key;
@@ -630,25 +472,16 @@
     function updateHUD() {
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
-
       document.getElementById('hpText').innerText = playerHp;
       document.getElementById('shieldText').innerText = `🛡️ ${Math.ceil(playerShield)}`;
-      const sInfo = SHIELDS[currentShieldKey];
-      document.getElementById('regenText').innerText = currentShieldKey === 'regen'
-        ? `재생 보호막 (예비 재생량: ${Math.ceil(shieldReserve)})`
-        : `${sInfo.name}`;
+      document.getElementById('regenText').innerText = currentShieldKey === 'regen' ? `재생 보호막 (예비 재생량: ${Math.ceil(shieldReserve)})` : `${SHIELDS[currentShieldKey].name}`;
       document.getElementById('creditText').innerText = credits;
       document.getElementById('shopCredits').innerText = credits;
       document.getElementById('score').innerText = score;
-
       document.getElementById('weaponText').innerText = w.name;
-      document.getElementById('ammoText').innerText = key === 'melee'
-        ? '∞'
-        : `${ammoState[key]} / ${w.magSize}`;
+      document.getElementById('ammoText').innerText = key === 'melee' ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
-      const s1 = document.getElementById('slot1');
-      const s2 = document.getElementById('slot2');
-      const s3 = document.getElementById('slot3');
+      const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3');
       s1.innerText = `[1] ${slotWeapons[1] ? WEAPONS[slotWeapons[1]].name : '없음'}`;
       s2.innerText = `[2] ${WEAPONS[slotWeapons[2]].name}`;
       s3.innerText = `[3] 근접`;
@@ -656,70 +489,78 @@
       s2.className = activeSlot === 2 ? 'slot-active' : '';
       s3.className = activeSlot === 3 ? 'slot-active' : '';
 
-      ['sheriff', 'phantom', 'vandal'].forEach(k => {
-        const slot = WEAPONS[k].slot;
-        document.getElementById('buy-' + k).classList.toggle('equipped', slotWeapons[slot] === k);
-      });
-      ['light', 'regen', 'heavy'].forEach(k => {
-        document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k);
-      });
+      ['sheriff', 'phantom', 'vandal'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k));
+      ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
     }
     updateHUD();
 
-    // === 훈련장 로봇(Bot) 생성 (체력 150 통일, 스탠딩/무빙 모드 지원) ===
+    // === 훈련봇 생성 및 배치 (사격장 일렬 스탠딩 / 어센트 주요 포인트 배치) ===
     const botHitboxes = [];
     const bots = [];
 
-    function createTrainingBot() {
+    const ASCENT_SPOTS = [
+      [0, -10], [8, -16], [-9, -15], [22, -12], [-22, -12], [40, -18], [-40, -18], [0, -28]
+    ];
+
+    function createTrainingBot(idx) {
       const botGroup = new THREE.Group();
       const armorMat = new THREE.MeshStandardMaterial({ color: 0xd93848, metalness: 0.4, roughness: 0.4 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x222831, metalness: 0.7, roughness: 0.3 });
       const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
 
-      const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.85, 12), darkMat);
-      legs.position.y = 0.425;
-      legs.userData = { botRoot: botGroup, part: 'leg' };
-
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat);
-      torso.position.y = 1.3;
-      torso.userData = { botRoot: botGroup, part: 'body' };
-
-      const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.24), darkMat);
-      leftArm.position.set(-0.58, 1.3, 0);
-      leftArm.userData = { botRoot: botGroup, part: 'body' };
-
-      const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.24), darkMat);
-      rightArm.position.set(0.58, 1.3, 0);
-      rightArm.userData = { botRoot: botGroup, part: 'body' };
-
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat);
-      head.position.y = 2.08;
-      head.userData = { botRoot: botGroup, part: 'head' };
-
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat);
-      visor.position.set(0, 2.08, 0.24);
-      visor.userData = { botRoot: botGroup, part: 'head' };
+      const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.85, 12), darkMat); legs.position.y = 0.425; legs.userData = { botRoot: botGroup, part: 'leg' };
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat); torso.position.y = 1.3; torso.userData = { botRoot: botGroup, part: 'body' };
+      const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.24), darkMat); leftArm.position.set(-0.58, 1.3, 0); leftArm.userData = { botRoot: botGroup, part: 'body' };
+      const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.24), darkMat); rightArm.position.set(0.58, 1.3, 0); rightArm.userData = { botRoot: botGroup, part: 'body' };
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat); head.position.y = 2.08; head.userData = { botRoot: botGroup, part: 'head' };
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat); visor.position.set(0, 2.08, 0.24); visor.userData = { botRoot: botGroup, part: 'head' };
 
       botGroup.add(legs, torso, leftArm, rightArm, head, visor);
-      botGroup.userData = { hp: 100, shield: 50, strafeDir: 1, strafeTimer: 1.5 };
-      respawnBot(botGroup);
+      botGroup.userData = { idx, hp: 100, shield: 50, strafeDir: 1, strafeTimer: 1.2, baseX: 0 };
       scene.add(botGroup);
-
       bots.push(botGroup);
       botHitboxes.push(legs, torso, leftArm, rightArm, head, visor);
     }
 
     function respawnBot(bot) {
-      bot.position.set((Math.random() - 0.5) * 40, 0, -Math.random() * 38 + 2);
       bot.rotation.set(0, 0, 0);
       bot.userData.hp = 100;
       bot.userData.shield = 50;
       bot.userData.strafeDir = Math.random() < 0.5 ? 1 : -1;
       bot.userData.strafeTimer = 0.8 + Math.random() * 1.4;
+
+      if (currentMap === 'range') {
+        // 사격장: 앞쪽 사격 구역에 10m ~ 35m 간격으로 일렬 정렬 (꼬챙이/스탠딩)
+        const bx = -14 + bot.userData.idx * 4;
+        const bz = -5 - (bot.userData.idx % 3) * 12;
+        bot.position.set(bx, 0, bz);
+        bot.userData.baseX = bx;
+      } else {
+        // 어센트 맵: 미드/A/B 주요 거점 배치
+        const spot = ASCENT_SPOTS[bot.userData.idx % ASCENT_SPOTS.length];
+        bot.position.set(spot[0] + (Math.random() - 0.5) * 4, 0, spot[1] + (Math.random() - 0.5) * 4);
+        bot.userData.baseX = bot.position.x;
+      }
     }
 
-    for (let i = 0; i < 8; i++) createTrainingBot();
+    for (let i = 0; i < 8; i++) createTrainingBot(i);
 
+    function loadMap(mapType) {
+      currentMap = mapType;
+      document.getElementById('mapNameText').innerText = mapType === 'range' ? '사격장' : '어센트(Ascent)';
+      if (mapType === 'range') {
+        buildRangeMap();
+        camera.position.set(0, 2.0, 16);
+      } else {
+        buildAscentMap();
+        camera.position.set(0, 2.0, 44);
+      }
+      yaw = 0; pitch = 0; velY = 0; isGrounded = true;
+      bots.forEach(b => respawnBot(b));
+    }
+    loadMap('range');
+
+    // === 조작 (Ctrl 홀드 앉기, Shift 홀드 걷기, E 대시) ===
     const keys = {};
     let yaw = 0, pitch = 0, velY = 0, isGrounded = true;
     let currentEyeHeight = 2.0;
@@ -727,15 +568,11 @@
     let dashDir = new THREE.Vector3();
     let sensitivity = 1.0;
 
-    let recoilPitchOffset = 0;
-    let recoilYawOffset = 0;
-    let isMouseDown = false;
-    let fireCooldown = 0;
+    let recoilPitchOffset = 0, recoilYawOffset = 0;
+    let isMouseDown = false, fireCooldown = 0;
 
     const overlay = document.getElementById('overlay');
     const shopModal = document.getElementById('shopModal');
-    const startBtn = document.getElementById('startBtn');
-    const closeShopBtn = document.getElementById('closeShopBtn');
     const sensSlider = document.getElementById('sensSlider');
 
     sensSlider.addEventListener('input', (e) => {
@@ -743,13 +580,21 @@
       document.getElementById('sensValue').innerText = sensitivity.toFixed(2);
     });
 
-    startBtn.addEventListener('click', () => {
+    document.getElementById('btnRange').addEventListener('click', () => {
+      if (currentMap !== 'range') loadMap('range');
       isShopOpen = false;
       shopModal.style.display = 'none';
       document.body.requestPointerLock();
     });
 
-    closeShopBtn.addEventListener('click', () => {
+    document.getElementById('btnAscent').addEventListener('click', () => {
+      if (currentMap !== 'ascent') loadMap('ascent');
+      isShopOpen = false;
+      shopModal.style.display = 'none';
+      document.body.requestPointerLock();
+    });
+
+    document.getElementById('closeShopBtn').addEventListener('click', () => {
       isShopOpen = false;
       shopModal.style.display = 'none';
       document.body.requestPointerLock();
@@ -764,19 +609,28 @@
       } else {
         isMouseDown = false;
         setZoom(false);
+        // 포인터 락 해제 시 눌림 상태 초기화
+        keys['ControlLeft'] = false;
+        keys['ControlRight'] = false;
+        keys['ShiftLeft'] = false;
+        keys['ShiftRight'] = false;
         if (isShopOpen) {
           shopModal.style.display = 'flex';
           overlay.style.display = 'none';
         } else {
-          document.getElementById('menuSubtitle').innerText = '일시정지 및 감도 설정 (ESC)';
+          document.getElementById('menuSubtitle').innerText = '맵 선택 및 설정 (ESC)';
           overlay.style.display = 'flex';
         }
       }
     });
 
+    window.addEventListener('blur', () => {
+      Object.keys(keys).forEach(k => keys[k] = false);
+      isMouseDown = false;
+    });
+
     document.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement !== document.body) return;
-      // 줌 상태에서는 정밀 조준을 위해 감도 살짝 낮춤
       const zoomSensMult = isZoomed ? 0.72 : 1.0;
       const factor = 0.002 * sensitivity * zoomSensMult;
       yaw -= e.movementX * factor;
@@ -811,7 +665,6 @@
       if (e.code === 'Digit3') switchSlot(3);
       if (e.code === 'KeyR') startReload();
 
-      // F키: 훈련봇 고정(스탠딩) <-> 좌우 무빙 전환
       if (e.code === 'KeyF') {
         botStrafeMode = !botStrafeMode;
         const modeEl = document.getElementById('botModeText');
@@ -824,28 +677,47 @@
         isGrounded = false;
       }
 
-      // E키: 대시 거리 상향 (속도 50, 지속시간 0.19초 -> 약 9.5m 돌진)
       if (e.code === 'KeyE' && dashCooldown <= 0) {
         const { forward, right } = getMoveVectors();
         const dir = new THREE.Vector3(0, 0, 0);
-
         if (keys['KeyW']) dir.add(forward);
         if (keys['KeyS']) dir.sub(forward);
         if (keys['KeyD']) dir.add(right);
         if (keys['KeyA']) dir.sub(right);
-
         if (dir.lengthSq() === 0) dir.copy(forward);
         else dir.normalize();
-
         dashDir.copy(dir);
         dashTime = 0.19;
         dashCooldown = 3.0;
       }
     });
-    document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-    // 우클릭 메뉴 방지
+    document.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // 간단한 벽 충돌 체크
+    function moveWithCollision(dx, dz) {
+      const nextX = camera.position.x + dx;
+      let blockedX = false;
+      for (const c of wallColliders) {
+        if (nextX > c.minX && nextX < c.maxX && camera.position.z > c.minZ && camera.position.z < c.maxZ && camera.position.y - currentEyeHeight < c.maxY - 0.5) {
+          blockedX = true; break;
+        }
+      }
+      if (!blockedX) camera.position.x = nextX;
+
+      const nextZ = camera.position.z + dz;
+      let blockedZ = false;
+      for (const c of wallColliders) {
+        if (camera.position.x > c.minX && camera.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ && camera.position.y - currentEyeHeight < c.maxY - 0.5) {
+          blockedZ = true; break;
+        }
+      }
+      if (!blockedZ) camera.position.z = nextZ;
+    }
 
     const raycaster = new THREE.Raycaster();
     const killfeed = document.getElementById('killfeed');
@@ -856,18 +728,12 @@
       if (isReloading) return;
 
       if (key !== 'melee') {
-        if (ammoState[key] <= 0) {
-          startReload();
-          return;
-        }
+        if (ammoState[key] <= 0) { startReload(); return; }
         ammoState[key] -= 1;
         updateHUD();
-        if (ammoState[key] === 0) {
-          startReload();
-        }
+        if (ammoState[key] === 0) startReload();
       }
 
-      // 발로란트 줌 사격 시 연사 간격 약간 증가
       fireCooldown = isZoomed ? w.fireRate * 1.15 : w.fireRate;
 
       if (key === 'melee') {
@@ -894,7 +760,6 @@
         if (dmg > 0) {
           const botRoot = hitObj.userData.botRoot;
           const botData = botRoot.userData;
-
           spawnHitSpark(hit.point, part === 'head');
 
           let remaining = dmg;
@@ -909,19 +774,17 @@
             score += 1;
             credits += 300;
             updateHUD();
-
             const line = document.createElement('div');
             line.innerText = `[${w.name}] 봇 처치 (${Math.round(distance)}m) +300¤`;
             line.style.color = part === 'head' ? '#ff4655' : '#00ffcc';
             killfeed.prepend(line);
             if (killfeed.children.length > 4) killfeed.lastChild.remove();
-
             respawnBot(botRoot);
           }
         }
       }
 
-      const isCrouching = keys['ControlLeft'] || keys['ControlRight'];
+      const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       let recoilMult = isCrouching ? 0.65 : 1.0;
       if (isZoomed) recoilMult *= 0.8;
 
@@ -935,7 +798,6 @@
         isMouseDown = true;
         if (fireCooldown <= 0) fireWeapon();
       } else if (e.button === 2) {
-        // 우클릭 토글 줌
         setZoom(!isZoomed);
       }
     });
@@ -973,25 +835,25 @@
       camera.rotation.y = yaw + recoilYawOffset;
       camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset));
 
-      const isCrouching = keys['ControlLeft'] || keys['ControlRight'];
-      const isWalking = keys['ShiftLeft'] || keys['ShiftRight'];
+      // Ctrl 키를 꾹 누르고 있는 동안만 앉기 유지 (손을 떼면 즉시 기립)
+      const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
+      const isWalking = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
 
       const targetEyeHeight = isCrouching ? 1.25 : 2.0;
-      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 14 * dt);
+      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 16 * dt);
 
       if (dashCooldown > 0) dashCooldown -= dt;
       const dashEl = document.getElementById('dashStatus');
       dashEl.innerText = dashCooldown > 0 ? dashCooldown.toFixed(1) + '초' : '준비완료';
       dashEl.style.color = dashCooldown > 0 ? '#ff4655' : '#00ffcc';
 
-      // 목표 FOV (대시 시 96, 우클릭 줌 시 55, 기본 75)
       let targetFov = 75;
       if (dashTime > 0) targetFov = 96;
       else if (isZoomed) targetFov = 55;
 
       if (dashTime > 0) {
         dashTime -= dt;
-        camera.position.addScaledVector(dashDir, 50 * dt);
+        moveWithCollision(dashDir.x * 50 * dt, dashDir.z * 50 * dt);
       } else {
         if (document.pointerLockElement === document.body) {
           const { forward, right } = getMoveVectors();
@@ -1006,7 +868,7 @@
           if (isCrouching) moveSpeed = 4.5;
           else if (isWalking || isZoomed) moveSpeed = 5.5;
 
-          camera.position.addScaledVector(move, moveSpeed * dt);
+          moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
         }
       }
       camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.22);
@@ -1024,30 +886,28 @@
         camera.position.y = currentEyeHeight;
       }
 
-      // 총기 위치 (우클릭 줌 시 정중앙 눈높이로 부드럽게 이동)
       if (!isReloading) {
         const targetGunX = isZoomed ? 0.0 : 0.26;
         const targetGunY = isZoomed ? -0.075 : -0.22;
         const targetGunZ = isZoomed ? -0.28 : -0.42;
-
         gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, targetGunX, 0.25);
         gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetGunY, 0.25);
         gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetGunZ, 0.25);
         gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
       }
 
-      // 훈련봇 좌우 무빙(F키 활성화 시)
       if (botStrafeMode) {
         bots.forEach(bot => {
           const bd = bot.userData;
           bd.strafeTimer -= dt;
           if (bd.strafeTimer <= 0) {
             bd.strafeDir *= -1;
-            bd.strafeTimer = 0.7 + Math.random() * 1.5;
+            bd.strafeTimer = 0.7 + Math.random() * 1.4;
           }
-          bot.position.x += bd.strafeDir * 5.5 * dt;
-          if (bot.position.x > 24) { bot.position.x = 24; bd.strafeDir = -1; }
-          if (bot.position.x < -24) { bot.position.x = -24; bd.strafeDir = 1; }
+          bot.position.x += bd.strafeDir * 5.0 * dt;
+          if (Math.abs(bot.position.x - bd.baseX) > 4.5) {
+            bd.strafeDir *= -1;
+          }
         });
       }
 
