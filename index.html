@@ -382,45 +382,107 @@
     }
 
     const STREAK_FILES = {
-      1: 'multikill-1.mp3',
-      2: 'valorant-2-kills.mp3',
-      3: 'valorant-3-kills.mp3',
-      4: 'valorant-4-kills.mp3',
-      5: 'valorant-5-kills.mp3'
+      1: ['multikill-1.mp3', './multikill-1.mp3', 'valorant-1-kill.mp3'],
+      2: ['valorant-2-kills.mp3', './valorant-2-kills.mp3', 'multikill-2.mp3'],
+      3: ['valorant-3-kills.mp3', './valorant-3-kills.mp3', 'multikill-3.mp3'],
+      4: ['valorant-4-kills.mp3', './valorant-4-kills.mp3', 'multikill-4.mp3'],
+      5: ['valorant-5-kills.mp3', './valorant-5-kills.mp3', 'multikill-5.mp3', 'valorant-ace.mp3']
     };
 
     const CHAMPIONS_2021_STREAK_FILES = {
-      1: 'champions-2021-kill-1-sound.mp3',
-      2: 'champions-2021-kill-2-sound.mp3',
-      3: 'champions-2021-kill-3-sound.mp3',
-      4: 'champions-2021-kill-4-sound.mp3',
-      5: 'champions-2021-kill-5-sound.mp3'
+      1: ['champions-2021-kill-1-sound.mp3', './champions-2021-kill-1-sound.mp3', 'champions-2021-kill-1.mp3'],
+      2: ['champions-2021-kill-2-sound.mp3', './champions-2021-kill-2-sound.mp3', 'champions-2021-kill-2.mp3'],
+      3: ['champions-2021-kill-3-sound.mp3', './champions-2021-kill-3-sound.mp3', 'champions-2021-kill-3.mp3'],
+      4: ['champions-2021-kill-4-sound.mp3', './champions-2021-kill-4-sound.mp3', 'champions-2021-kill-4.mp3'],
+      5: ['champions-2021-kill-5-sound.mp3', './champions-2021-kill-5-sound.mp3', 'champions-2021-kill-5.mp3', 'champions-2021-ace.mp3']
     };
 
-    // 킬 사운드 즉시 재생을 위한 오디오 사전 로딩(Preload) 캐시
-    const preloadedAudio = {};
-    [...Object.values(STREAK_FILES), ...Object.values(CHAMPIONS_2021_STREAK_FILES), 'champions-2021-finisher.mp3'].forEach(file => {
-      const a = new Audio(file);
-      a.preload = 'auto';
-      preloadedAudio[file] = a;
-    });
+    // Web Audio API 발로란트 스타일 킬/에이스(5킬) 사운드 합성기 (mp3 파일이 없거나 막혀도 즉시 소리 재생!)
+    function playSynthKillSound(tier = 1, isChamp2021 = false, isHeadshot = false) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
 
-    function playInstantAudio(file, volume = 0.88) {
-      if (!file) return null;
-      const cached = preloadedAudio[file];
-      if (cached) {
-        try {
-          cached.pause();
-          cached.currentTime = 0;
-          cached.volume = volume;
-          cached.play().catch(() => {});
-          return cached;
-        } catch (e) {}
+      // 1~5킬 올라갈수록 음정이 웅장하게 상승하는 코드 구성
+      const baseNotes = isChamp2021
+        ? [293.66, 349.23, 440.00, 523.25, 587.33] // D4, F4, A4, C5, D5 (챔피언스 다크 골드 화음)
+        : [329.63, 392.00, 493.88, 587.33, 659.25]; // E4, G4, B4, D5, E5
+
+      const clampedTier = Math.min(5, Math.max(1, tier));
+      const rootFreq = baseNotes[clampedTier - 1];
+
+      // 묵직한 킬 임팩트 펄스
+      const subOsc = audioCtx.createOscillator();
+      const subGain = audioCtx.createGain();
+      subOsc.type = 'triangle';
+      subOsc.frequency.setValueAtTime(140, now);
+      subOsc.frequency.exponentialRampToValueAtTime(48, now + 0.35);
+      subGain.gain.setValueAtTime(0.45, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+      subOsc.connect(subGain); subGain.connect(audioCtx.destination);
+      subOsc.start(now); subOsc.stop(now + 0.4);
+
+      // 화음 차임 사운드 (5킬일 때는 웅장한 에이스 아르페지오 코드 재생)
+      const chordRatios = clampedTier === 5 ? [0.5, 1, 1.25, 1.5, 2.0] : [1, 1.5];
+      chordRatios.forEach((ratio, idx) => {
+        const startT = now + (clampedTier === 5 ? idx * 0.055 : 0);
+        const dur = clampedTier === 5 ? 1.35 : 0.65;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = isChamp2021 ? 'sawtooth' : 'sine';
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(isChamp2021 ? 1800 : 2800, startT);
+
+        osc.frequency.setValueAtTime(rootFreq * ratio, startT);
+        gain.gain.setValueAtTime(0.001, startT);
+        gain.gain.linearRampToValueAtTime(clampedTier === 5 ? 0.22 : 0.26, startT + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startT + dur);
+
+        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(startT); osc.stop(startT + dur + 0.02);
+      });
+
+      // 헤드샷 킬일 경우 날카로운 크리스탈 딩- 고음 추가
+      if (isHeadshot) {
+        const hsOsc = audioCtx.createOscillator();
+        const hsGain = audioCtx.createGain();
+        hsOsc.type = 'sine';
+        hsOsc.frequency.setValueAtTime(1760, now);
+        hsOsc.frequency.exponentialRampToValueAtTime(2349.32, now + 0.12);
+        hsGain.gain.setValueAtTime(0.28, now);
+        hsGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        hsOsc.connect(hsGain); hsGain.connect(audioCtx.destination);
+        hsOsc.start(now); hsOsc.stop(now + 0.3);
       }
-      const fallback = new Audio(file);
-      fallback.volume = volume;
-      fallback.play().catch(() => {});
-      return fallback;
+    }
+
+    function playKillStreakAudio(tier, isChamp2021, isHeadshot) {
+      const soundTier = Math.min(5, Math.max(1, tier));
+      const candidates = (isChamp2021 ? CHAMPIONS_2021_STREAK_FILES[soundTier] : STREAK_FILES[soundTier]) || [];
+
+      let idx = 0;
+      function tryNextFile() {
+        if (idx >= candidates.length) {
+          // 모든 mp3 후보가 없거나 로드 실패하면 내장 합성 킬사운드 즉시 재생!
+          playSynthKillSound(soundTier, isChamp2021, isHeadshot);
+          return;
+        }
+        const src = candidates[idx++];
+        const audio = new Audio(src);
+        audio.volume = 0.92;
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            tryNextFile();
+          });
+        }
+        audio.onerror = () => {
+          tryNextFile();
+        };
+      }
+      tryNextFile();
     }
 
     // 무기별 장착 스킨 상태
@@ -647,8 +709,12 @@
         <polygon points="100,106 115,123 115,132 100,116 85,132 85,123" fill="url(#goldLeaf)" />
 
         ${isHeadshot ? `
-        <!-- 헤드샷 시 상단 황금-크림슨 광채 링 추가 -->
-        <circle cx="100" cy="100" r="46" fill="none" stroke="#ffdf6b" stroke-width="4.5" style="filter: drop-shadow(0 0 8px #ffb700);" />
+        <!-- 헤드샷 시 선명한 크림슨 레드 링 & 중앙 헤드샷 X 마크 표시 -->
+        <circle cx="100" cy="100" r="46" fill="none" stroke="#ff2a3c" stroke-width="4.5" style="filter: drop-shadow(0 0 9px #ff1e32);" />
+        <g stroke="#ff2a3c" stroke-width="2.6" stroke-linecap="round" style="filter: drop-shadow(0 0 5px #ff0019);">
+          <line x1="91" y1="70" x2="109" y2="88" />
+          <line x1="109" y1="70" x2="91" y2="88" />
+        </g>
         ` : ''}
       </svg>`;
     }
@@ -661,11 +727,7 @@
       if (isChamp2021Active) {
         championsAuraTimer = 5.0; // 5초간 챔피언스 오라 발광
       }
-      const soundMap = isChamp2021Active ? CHAMPIONS_2021_STREAK_FILES : STREAK_FILES;
-      const file = soundMap[soundTier];
-      if (file) {
-        playInstantAudio(file, 0.9);
-      }
+      playKillStreakAudio(soundTier, isChamp2021Active, isHeadshot);
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
@@ -1279,14 +1341,13 @@
     function triggerChampions2021Finisher(pos) {
       clearChampionsFinisher();
 
-      // 마무리 모션 전용 사운드 (champions-2021-finisher.mp3가 있으면 재생, 없으면 5킬 에이스 음원 재생)
-      let finAudio = new Audio('champions-2021-finisher.mp3');
-      finAudio.volume = 0.9;
-      finAudio.play().catch(() => {
-        finAudio = new Audio('champions-2021-kill-5-sound.mp3');
-        finAudio.volume = 0.9;
+      // 마지막 킬 사운드(5킬 에이스 사운드 등)가 먼저 들리도록 0.8초 뒤에 피니셔 오디오 재생
+      let finAudio = null;
+      setTimeout(() => {
+        finAudio = new Audio('champions-2021-finisher.mp3');
+        finAudio.volume = 0.85;
         finAudio.play().catch(() => {});
-      });
+      }, 800);
 
       const group = new THREE.Group();
       group.position.set(pos.x, 0, pos.z);
