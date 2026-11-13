@@ -390,11 +390,11 @@
     };
 
     const CHAMPIONS_2021_STREAK_FILES = {
-      1: ['champions-2021-kill-1-sound.mp3', './champions-2021-kill-1-sound.mp3', 'champions-2021-kill-1.mp3'],
+      1: ['champions-2021-kill-1-sound.mp3', './champions-2021-kill-1-sound.mp3', 'champions-2021-kill-1.mp3', 'multikill-1.mp3'],
       2: ['champions-2021-kill-2-sound.mp3', './champions-2021-kill-2-sound.mp3', 'champions-2021-kill-2.mp3'],
       3: ['champions-2021-kill-3-sound.mp3', './champions-2021-kill-3-sound.mp3', 'champions-2021-kill-3.mp3'],
       4: ['champions-2021-kill-4-sound.mp3', './champions-2021-kill-4-sound.mp3', 'champions-2021-kill-4.mp3'],
-      5: ['champions-2021-kill-5-sound.mp3', './champions-2021-kill-5-sound.mp3', 'champions-2021-kill-5.mp3', 'champions-2021-ace.mp3']
+      5: ['champions-2021-kill-5-sound_p9BfzU1.mp3', 'champions-2021-kill-5-sound.mp3', './champions-2021-kill-5-sound.mp3', 'champions-2021-kill-5.mp3', 'champions-2021-ace.mp3']
     };
 
     // Web Audio API 발로란트 스타일 킬/에이스(5킬) 사운드 합성기 (mp3 파일이 없거나 막혀도 즉시 소리 재생!)
@@ -709,9 +709,8 @@
         <polygon points="100,106 115,123 115,132 100,116 85,132 85,123" fill="url(#goldLeaf)" />
 
         ${isHeadshot ? `
-        <!-- 헤드샷 시 선명한 크림슨 레드 링 & 중앙 헤드샷 X 마크 표시 -->
-        <circle cx="100" cy="100" r="46" fill="none" stroke="#ff2a3c" stroke-width="4.5" style="filter: drop-shadow(0 0 9px #ff1e32);" />
-        <g stroke="#ff2a3c" stroke-width="2.6" stroke-linecap="round" style="filter: drop-shadow(0 0 5px #ff0019);">
+        <!-- 헤드샷 시 빨간 원 없이 빨간 X 표식만 선명하게 표시 -->
+        <g stroke="#ff2a3c" stroke-width="2.8" stroke-linecap="round" style="filter: drop-shadow(0 0 5px #ff0019);">
           <line x1="91" y1="70" x2="109" y2="88" />
           <line x1="109" y1="70" x2="91" y2="88" />
         </g>
@@ -1341,13 +1340,13 @@
     function triggerChampions2021Finisher(pos) {
       clearChampionsFinisher();
 
-      // 마지막 킬 사운드(5킬 에이스 사운드 등)가 먼저 들리도록 0.8초 뒤에 피니셔 오디오 재생
+      // 마지막 킬 사운드가 먼저 들리도록 0.65초 뒤에 2021 챔피언스 마무리 사운드(valorant-2021-champions.mp3) 재생
       let finAudio = null;
       setTimeout(() => {
-        finAudio = new Audio('champions-2021-finisher.mp3');
-        finAudio.volume = 0.85;
+        finAudio = new Audio('valorant-2021-champions.mp3');
+        finAudio.volume = 0.9;
         finAudio.play().catch(() => {});
-      }, 800);
+      }, 650);
 
       const group = new THREE.Group();
       group.position.set(pos.x, 0, pos.z);
@@ -2008,6 +2007,7 @@
             rp.mesh.position.set(msg.x, msg.y - 2.0, msg.z);
             rp.mesh.rotation.y = msg.yaw;
             rp.mesh.visible = !msg.isDead;
+            if (msg.weaponKey) rp.weaponKey = msg.weaponKey;
           }
         } else if (msg.type === 'hit') {
           if (msg.targetId === myPeerId && !isDead) {
@@ -2079,8 +2079,18 @@
       const line = document.createElement('div');
       line.innerText = text;
       line.style.color = isHighlight ? '#ffcc00' : '#00ffcc';
+      line.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      line.style.opacity = '1';
       killfeed.prepend(line);
       if (killfeed.children.length > 5) killfeed.lastChild.remove();
+
+      setTimeout(() => {
+        line.style.opacity = '0';
+        line.style.transform = 'translateX(14px)';
+        setTimeout(() => {
+          if (line.parentNode) line.remove();
+        }, 520);
+      }, 4000);
     }
 
     function updateScoreboard() {
@@ -2666,24 +2676,24 @@
       // 살아있는 아군 우선
       for (const b of brawlBots) {
         if (!b.userData.dead && b.userData.team === myTeam) {
-          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false });
+          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false, weaponKey: b.userData.weaponKey || 'vandal' });
         }
       }
       Object.values(remotePlayers).forEach(rp => {
         if (rp.mesh && rp.mesh.visible && rp.team === myTeam) {
-          list.push({ name: `[아군] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true });
+          list.push({ name: `[아군] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true, weaponKey: rp.weaponKey || 'vandal' });
         }
       });
       // 아군이 다 죽었으면 적군이라도 관전
       if (list.length === 0) {
         for (const b of brawlBots) {
           if (!b.userData.dead) {
-            list.push({ name: `[관전] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false });
+            list.push({ name: `[관전] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false, weaponKey: b.userData.weaponKey || 'vandal' });
           }
         }
         Object.values(remotePlayers).forEach(rp => {
           if (rp.mesh && rp.mesh.visible) {
-            list.push({ name: `[관전] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true });
+            list.push({ name: `[관전] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true, weaponKey: rp.weaponKey || 'vandal' });
           }
         });
       }
@@ -2691,12 +2701,17 @@
     }
 
     let currentSpectatedMesh = null;
+    let currentSpectatedWeaponKey = null;
 
     function updateSpectatorCamera() {
       if (!isDead || currentMap !== 'brawl') {
         if (currentSpectatedMesh) {
           currentSpectatedMesh.visible = true;
           currentSpectatedMesh = null;
+        }
+        if (currentSpectatedWeaponKey !== null) {
+          currentSpectatedWeaponKey = null;
+          updateGunVisual();
         }
         return;
       }
@@ -2715,6 +2730,15 @@
         currentSpectatedMesh = target.mesh;
       }
 
+      // 관전 대상이 들고 있는 총기 모델로 1인칭 뷰모델 교체 (칼 들고 있는 버그 수정)
+      const specWKey = target.weaponKey || 'vandal';
+      if (currentSpectatedWeaponKey !== specWKey) {
+        currentSpectatedWeaponKey = specWKey;
+        while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
+        gunGroup.add(getActiveModelForWeapon(specWKey));
+        gunGroup.position.set(0.26, -0.22, -0.42);
+        gunGroup.rotation.set(0, 0, 0);
+      }
       gunGroup.visible = true;
       document.getElementById('deathBanner').style.background = 'rgba(15, 25, 35, 0.08)';
       const titleEl = document.querySelector('#deathBanner div:nth-child(1)');
@@ -2871,7 +2895,10 @@
         camera.position.y = currentEyeHeight;
       }
 
-      if (swapAnimTimer > 0) {
+      if (isDead && currentMap === 'brawl') {
+        gunGroup.position.set(0.26, -0.22, -0.42);
+        gunGroup.rotation.set(0, 0, 0);
+      } else if (swapAnimTimer > 0) {
         swapAnimTimer -= dt;
         const progress = Math.max(0, swapAnimTimer / 0.28);
         if (curKey === 'melee') {
@@ -2938,7 +2965,8 @@
           y: camera.position.y,
           z: camera.position.z,
           yaw: yaw,
-          isDead: isDead
+          isDead: isDead,
+          weaponKey: getCurrentWeaponKey()
         });
       }
 
