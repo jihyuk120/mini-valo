@@ -221,7 +221,6 @@
         slot: 1, name: '오퍼레이터', price: 4700, auto: false, fireRate: 1.15, zoomType: 'sniper',
         magSize: 5, reloadTime: 2.3, penetration: 5, jumpSpread: 0.24,
         recoilPitch: 0.085, recoilYaw: 0.02,
-        // 헤드 255, 몸통 150 (풀방어구 150 원샷), 다리 120 (풀방어구 150 기준 30 생존)
         getDamage: (dist, part) => ({ head: 255, body: 150, leg: 120 }[part])
       },
       melee: {
@@ -239,7 +238,6 @@
       heavy: { name: '중형 보호막', price: 1000, max: 50, reserve: 0 }
     };
 
-    // 훈련장 & 난투 모두 크레딧 99999 고정 (구매해도 줄어들지 않음)
     const credits = 99999;
     let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
     let activeSlot = 2;
@@ -495,20 +493,31 @@
       botHitboxes.push(legs, torso, head, visor);
     }
 
+    // 훈련봇을 무작위(랜덤) 위치에서 리스폰
     function respawnBot(bot) {
       bot.rotation.set(0, 0, 0);
       bot.userData.hp = 100;
       bot.userData.shield = 50;
-      if (bot.userData.idx < 3) {
-        const bz = -8 - bot.userData.idx * 5;
-        bot.position.set(0, 0, bz);
-        bot.userData.baseX = 0;
-      } else {
-        const bx = -15 + (bot.userData.idx - 3) * 7.5;
-        const bz = -14 - ((bot.userData.idx - 3) % 2) * 12;
-        bot.position.set(bx, 0, bz);
-        bot.userData.baseX = bx;
+
+      let randX = 0;
+      let randZ = -15;
+      let valid = false;
+
+      for (let attempt = 0; attempt < 25; attempt++) {
+        randX = (Math.random() - 0.5) * 60; // -30 ~ +30 랜덤 가로 위치
+        randZ = -4 - Math.random() * 44;     // -4 ~ -48 랜덤 사거리
+        valid = true;
+        for (const other of bots) {
+          if (other !== bot && other.position.distanceTo(new THREE.Vector3(randX, 0, randZ)) < 2.2) {
+            valid = false;
+            break;
+          }
+        }
+        if (valid) break;
       }
+
+      bot.position.set(randX, 0, randZ);
+      bot.userData.baseX = randX;
     }
 
     for (let i = 0; i < 8; i++) createTrainingBot(i);
@@ -807,7 +816,6 @@
       }, w.reloadTime * 1000);
     }
 
-    // 크레딧 99999 고정 (구매해도 줄어들지 않음)
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
       slotWeapons[w.slot] = key;
@@ -1061,7 +1069,6 @@
           hitTargetsSet.add(botRoot);
 
           const penIndex = hitTargetsSet.size - 1;
-          // 오퍼레이터는 관통 시에도 몸통 150 이상 유지하여 뒤의 적까지 한 방
           const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
           const dmg = Math.round(baseDmg * penMult);
           spawnHitSpark(hit.point, part === 'head');
