@@ -1480,7 +1480,7 @@
       bot.visible = true;
     }
 
-    function createSingleBrawlBot(index, team) {
+    function createSingleBrawlBot(i, team) {
       const botGroup = new THREE.Group();
       const teamColor = team === 'red' ? 0xff4655 : 0x38bdf8;
         const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
@@ -1977,6 +1977,10 @@
       document.getElementById('topScoreboard').style.display = mapType === 'brawl' ? 'flex' : 'none';
 
       if (mapType === 'range') {
+        clearPrepBarriers();
+        clearChampionsFinisher();
+        const banner = document.getElementById('roundCenterBanner');
+        if (banner) banner.style.display = 'none';
         buildRangeMap();
         clearBrawlBots();
         bots.forEach(b => { b.visible = true; respawnBot(b); });
