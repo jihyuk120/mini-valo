@@ -206,8 +206,14 @@
           <div class="item-price" style="font-size:12px;">2,250 ¤</div>
         </div>
         <div class="shop-item" id="buy-phantom" onclick="buyWeapon('phantom')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">팬텀 (Phantom)</div><div class="item-desc" style="font-size:11px;">30발 | 0~15m 헤드156 / 소음기</div></div>
-          <div class="item-price" style="font-size:12px;">2,900 ¤</div>
+          <div>
+            <div class="item-title" style="font-size:13px;">팬텀 (Phantom) <span id="phantomSkinBadge" style="font-size:10px; background:#3b1e54; color:#e0aaff; padding:1px 5px; border-radius:3px;">2024 챔피언스</span></div>
+            <div class="item-desc" style="font-size:11px;">30발 | 0~15m 헤드156 / 소음기</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+            <div class="item-price" style="font-size:12px;">2,900 ¤</div>
+            <button id="togglePhantomSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('phantom');" style="background:#241136; border:1px solid #c77dff; color:#f3c6ff; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">기본 스킨으로 변경</button>
+          </div>
         </div>
         <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')" style="padding:7px 10px;">
           <div>
@@ -532,6 +538,14 @@
       5: ['champions-2021-kill-5-sound_p9BfzU1.mp3', 'champions-2021-kill-5-sound.mp3', './champions-2021-kill-5-sound.mp3', 'champions-2021-kill-5.mp3', 'champions-2021-ace.mp3']
     };
 
+    const CHAMPIONS_2024_STREAK_FILES = {
+      1: ['valorant-champions-2024-kill-1.mp3', './valorant-champions-2024-kill-1.mp3', 'champions-2024-kill-1.mp3'],
+      2: ['valorant-champions-2024-kill-2.mp3', './valorant-champions-2024-kill-2.mp3', 'champions-2024-kill-2.mp3'],
+      3: ['valorant-champions-2024-kill-3.mp3', './valorant-champions-2024-kill-3.mp3', 'champions-2024-kill-3.mp3'],
+      4: ['valorant-champions-2024-kill-4.mp3', './valorant-champions-2024-kill-4.mp3', 'champions-2024-kill-4.mp3'],
+      5: ['valorant-champions-2024-kill-5.mp3', './valorant-champions-2024-kill-5.mp3', 'champions-2024-kill-5.mp3']
+    };
+
     // Web Audio API 발로란트 스타일 킬/에이스(5킬) 사운드 합성기 (mp3 파일이 없거나 막혀도 즉시 소리 재생!)
     function playSynthKillSound(tier = 1, isChamp2021 = false, isHeadshot = false) {
       initAudio();
@@ -593,15 +607,21 @@
       }
     }
 
-    function playKillStreakAudio(tier, isChamp2021, isHeadshot) {
+    function playKillStreakAudio(tier, champEdition, isHeadshot) {
       const soundTier = Math.min(5, Math.max(1, tier));
-      const candidates = (isChamp2021 ? CHAMPIONS_2021_STREAK_FILES[soundTier] : STREAK_FILES[soundTier]) || [];
+      const isChamp2024 = champEdition === '2024';
+      const isChamp2021 = champEdition === '2021' || champEdition === true;
+      const candidates = (
+        isChamp2024 ? CHAMPIONS_2024_STREAK_FILES[soundTier] :
+        isChamp2021 ? CHAMPIONS_2021_STREAK_FILES[soundTier] :
+        STREAK_FILES[soundTier]
+      ) || [];
 
       let idx = 0;
       function tryNextFile() {
         if (idx >= candidates.length) {
           // 모든 mp3 후보가 없거나 로드 실패하면 내장 합성 킬사운드 즉시 재생!
-          playSynthKillSound(soundTier, isChamp2021, isHeadshot);
+          playSynthKillSound(soundTier, isChamp2021 || isChamp2024, isHeadshot);
           return;
         }
         const src = candidates[idx++];
@@ -623,12 +643,13 @@
     // 무기별 장착 스킨 상태
     const equippedSkins = {
       vandal: 'champions2021', // 기본으로 2021 챔피언스 장착 상태 (상점에서 언제든 전환 가능)
-      phantom: 'standard',
+      phantom: 'champions2024', // 기본으로 2024 챔피언스 장착 상태 (상점에서 언제든 전환 가능)
       sheriff: 'standard',
       operator: 'standard',
       melee: 'champions2021'
     };
-    let championsAuraTimer = 0; // 킬 달성 시 총신 황금 오라 지속시간
+    let championsAuraTimer = 0; // 2021 킬 달성 시 총신 황금 오라 지속시간
+    let champions2024AuraTimer = 0; // 2024 킬 달성 시 보라·황금 오라 지속시간
 
     let currentStreak = 0;
     let streakBannerTimer = null;
@@ -853,21 +874,144 @@
       </svg>`;
     }
 
+    function buildChampions2024EmblemSVG(count, isHeadshot = false) {
+      // 7킬 제외: 1~6킬까지만 단계별 황금 쉐브론 날개 확장 (이미지 참고)
+      const tier = Math.min(6, Math.max(1, count));
+
+      // 킬 단계별 확장 날개 (1~6킬)
+      const tier1Wing = `
+        <g stroke="#e8d29c" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px rgba(255,215,120,0.65));">
+          <polyline points="86,66 100,53 114,66" />
+          <polyline points="91,71 100,62 109,71" stroke="#fff3cf" stroke-width="1.6" />
+        </g>`;
+
+      const tier2Wing = `
+        <g stroke="#e8d29c" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px rgba(255,215,120,0.65));">
+          <polyline points="86,134 100,147 114,134" />
+          <polyline points="91,129 100,138 109,129" stroke="#fff3cf" stroke-width="1.6" />
+        </g>`;
+
+      const tier3Wing = `
+        <g stroke="#e8d29c" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px rgba(255,215,120,0.65));">
+          <polyline points="66,86 53,100 66,114" />
+          <polyline points="71,91 62,100 71,109" stroke="#fff3cf" stroke-width="1.6" />
+        </g>`;
+
+      const tier4Wing = `
+        <g stroke="#e8d29c" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px rgba(255,215,120,0.65));">
+          <polyline points="134,86 147,100 134,114" />
+          <polyline points="129,91 138,100 129,109" stroke="#fff3cf" stroke-width="1.6" />
+        </g>`;
+
+      const tier5Wing = `
+        <g stroke="#d4b978" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.95">
+          <polyline points="66,78 66,66 78,66" />
+          <polyline points="134,78 134,66 122,66" />
+          <polyline points="66,122 66,134 78,134" />
+          <polyline points="134,122 134,134 122,134" />
+          <line x1="58" y1="58" x2="64" y2="64" stroke="#fff2cc" stroke-width="1.5" />
+          <line x1="142" y1="58" x2="136" y2="64" stroke="#fff2cc" stroke-width="1.5" />
+          <line x1="58" y1="142" x2="64" y2="136" stroke="#fff2cc" stroke-width="1.5" />
+          <line x1="142" y1="142" x2="136" y2="136" stroke="#fff2cc" stroke-width="1.5" />
+        </g>`;
+
+      const tier6Wing = `
+        <g stroke="#f5dfa4" stroke-width="2.0" fill="none" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 5px rgba(255,208,110,0.75));">
+          <polyline points="82,53 100,37 118,53" />
+          <polyline points="82,147 100,163 118,147" />
+          <polyline points="53,82 37,100 53,118" />
+          <polyline points="147,82 163,100 147,118" />
+          <line x1="48" y1="73" x2="43" y2="69" stroke="#ffeaa7" stroke-width="1.6" />
+          <line x1="152" y1="73" x2="157" y2="69" stroke="#ffeaa7" stroke-width="1.6" />
+          <line x1="48" y1="127" x2="43" y2="131" stroke="#ffeaa7" stroke-width="1.6" />
+          <line x1="152" y1="127" x2="157" y2="131" stroke="#ffeaa7" stroke-width="1.6" />
+        </g>`;
+
+      const wingsHtml = [
+        tier >= 1 ? tier1Wing : '',
+        tier >= 2 ? tier2Wing : '',
+        tier >= 3 ? tier3Wing : '',
+        tier >= 4 ? tier4Wing : '',
+        tier >= 5 ? tier5Wing : '',
+        tier >= 6 ? tier6Wing : ''
+      ].join('');
+
+      return `
+      <svg viewBox="0 0 200 200" width="154" height="154" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="c24Bg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(28, 12, 36, 0.86)" />
+            <stop offset="68%" stop-color="rgba(18, 12, 24, 0.45)" />
+            <stop offset="100%" stop-color="rgba(12, 10, 16, 0)" />
+          </radialGradient>
+          <linearGradient id="c24SparkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ff5e7e" />
+            <stop offset="50%" stop-color="#ff2e63" />
+            <stop offset="100%" stop-color="#ff9a5a" />
+          </linearGradient>
+          <linearGradient id="c24GoldArm" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fff4cc" />
+            <stop offset="50%" stop-color="#e3c47a" />
+            <stop offset="100%" stop-color="#9e7f3a" />
+          </linearGradient>
+        </defs>
+
+        <!-- 배경 다크 퍼플-골드 오라 -->
+        <circle cx="100" cy="100" r="80" fill="url(#c24Bg)" />
+
+        <!-- 1~6킬 단계별 황금 쉐브론 날개 (7킬 외곽 날개 제외) -->
+        ${wingsHtml}
+
+        <!-- 상·하단 45도 골드 블레이드 암 (X자 프레임) -->
+        <polygon points="73,79 81,71 96,86 88,94" fill="url(#c24GoldArm)" stroke="#fff3cf" stroke-width="0.9" />
+        <polygon points="127,79 119,71 104,86 112,94" fill="url(#c24GoldArm)" stroke="#fff3cf" stroke-width="0.9" />
+        <polygon points="73,121 81,129 96,114 88,106" fill="url(#c24GoldArm)" stroke="#fff3cf" stroke-width="0.9" />
+        <polygon points="127,121 119,129 104,114 112,106" fill="url(#c24GoldArm)" stroke="#fff3cf" stroke-width="0.9" />
+
+        <!-- 좌우 내부 골드 포인터 -->
+        <polygon points="74,94 84,100 74,106 78,100" fill="#fff0c2" />
+        <polygon points="126,94 116,100 126,106 122,100" fill="#fff0c2" />
+
+        <!-- 중앙 코어 다크 다이아몬드 & 아메시스트-핑크 2024 스파크 -->
+        <polygon points="100,82 118,100 100,118 82,100" fill="#18121e" stroke="#f7df9c" stroke-width="1.6" />
+        <polygon points="86,89 98,100 86,111 91,100" fill="url(#c24SparkGrad)" style="filter: drop-shadow(0 0 5px #ff477e);" />
+        <polygon points="114,89 102,100 114,111 109,100" fill="url(#c24SparkGrad)" style="filter: drop-shadow(0 0 5px #ff477e);" />
+        <polygon points="100,87 104,96 100,100 96,96" fill="#ffd166" />
+        <polygon points="100,113 104,104 100,100 96,104" fill="#ff758f" />
+
+        ${isHeadshot ? `
+        <!-- 헤드샷 X 크로스 라인 -->
+        <g stroke="#fff5d6" stroke-width="2.4" stroke-linecap="round" style="filter: drop-shadow(0 0 4px #ff2e63);">
+          <line x1="92" y1="92" x2="108" y2="108" />
+          <line x1="108" y1="92" x2="92" y2="108" />
+        </g>
+        ` : ''}
+      </svg>`;
+    }
+
     function triggerScoreStreak(addCount = 1, isHeadshot = false) {
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
-      const isChamp2021Active = (getCurrentWeaponKey() === 'vandal' && equippedSkins.vandal === 'champions2021') || (getCurrentWeaponKey() === 'melee' && equippedSkins.melee === 'champions2021');
-      if (isChamp2021Active) {
-        championsAuraTimer = 5.0; // 5초간 챔피언스 오라 발광
+      const curW = getCurrentWeaponKey();
+      const isChamp2024Active = (curW === 'phantom' && equippedSkins.phantom === 'champions2024');
+      const isChamp2021Active = (curW === 'vandal' && equippedSkins.vandal === 'champions2021') || (curW === 'melee' && equippedSkins.melee === 'champions2021');
+      if (isChamp2024Active) {
+        champions2024AuraTimer = 5.0; // 5초간 2024 챔피언스 보라·골드 오라 발광
       }
-      playKillStreakAudio(soundTier, isChamp2021Active, isHeadshot);
+      if (isChamp2021Active) {
+        championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
+      }
+      const champEdition = isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null);
+      playKillStreakAudio(soundTier, champEdition, isHeadshot);
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = isChamp2021Active
-        ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
-        : buildStreakEmblemSVG(currentStreak, isHeadshot);
+      svgWrap.innerHTML = isChamp2024Active
+        ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
+        : (isChamp2021Active
+          ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
+          : buildStreakEmblemSVG(currentStreak, isHeadshot));
 
       banner.style.transition = 'opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
       banner.style.opacity = '1';
@@ -1294,6 +1438,232 @@
 
       const tex = new THREE.CanvasTexture(canvas);
       return tex;
+    }
+
+    function createChampions2024Texture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      // 1. 깊은 아메시스트 퍼플 & 다크 바이올렛 베이스 (사진 참고)
+      const baseGrad = ctx.createLinearGradient(0, 0, 512, 256);
+      baseGrad.addColorStop(0.0, '#1e1035');
+      baseGrad.addColorStop(0.32, '#5a248c');
+      baseGrad.addColorStop(0.68, '#8d36a8');
+      baseGrad.addColorStop(1.0, '#2a1242');
+      ctx.fillStyle = baseGrad;
+      ctx.fillRect(0, 0, 512, 256);
+
+      // 2. 유려한 핑크-골드-오렌지 아메시스트 에너지 소용돌이 (이미지 전방/측면 마블링)
+      const neb1 = ctx.createRadialGradient(340, 120, 12, 340, 120, 165);
+      neb1.addColorStop(0.0, 'rgba(255, 224, 130, 0.92)');
+      neb1.addColorStop(0.35, 'rgba(255, 92, 141, 0.78)');
+      neb1.addColorStop(0.75, 'rgba(131, 56, 236, 0.35)');
+      neb1.addColorStop(1.0, 'rgba(40, 16, 70, 0)');
+      ctx.fillStyle = neb1;
+      ctx.fillRect(0, 0, 512, 256);
+
+      const neb2 = ctx.createRadialGradient(135, 145, 10, 135, 145, 130);
+      neb2.addColorStop(0.0, 'rgba(255, 117, 151, 0.65)');
+      neb2.addColorStop(0.55, 'rgba(114, 9, 183, 0.4)');
+      neb2.addColorStop(1.0, 'rgba(20, 10, 35, 0)');
+      ctx.fillStyle = neb2;
+      ctx.fillRect(0, 0, 512, 256);
+
+      // 3. 어두운 성운 결 & 황금 균열 라인
+      ctx.strokeStyle = 'rgba(255, 214, 102, 0.85)';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(0, 210);
+      ctx.quadraticCurveTo(180, 195, 320, 145);
+      ctx.quadraticCurveTo(420, 110, 512, 130);
+      ctx.stroke();
+
+      // 4. 후방 리시버 위 발광하는 핑크·골드 발로란트 스파크 로고 (사진 우측 하단 디테일)
+      ctx.save();
+      ctx.translate(105, 112);
+      ctx.shadowColor = '#ff5e9c';
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = '#ffe5ec';
+      ctx.beginPath();
+      ctx.moveTo(-26, -18);
+      ctx.lineTo(-4, 6);
+      ctx.lineTo(-4, 18);
+      ctx.lineTo(-18, 18);
+      ctx.lineTo(-26, 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(26, -18);
+      ctx.lineTo(26, 2);
+      ctx.lineTo(18, 18);
+      ctx.lineTo(5, 18);
+      ctx.lineTo(14, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      return tex;
+    }
+
+    function buildChampions2024PhantomModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const c24Tex = createChampions2024Texture();
+
+      const amethystBodyMat = new THREE.MeshStandardMaterial({
+        map: c24Tex,
+        metalness: 0.72,
+        roughness: 0.24,
+        emissive: new THREE.Color(0x9d4edd),
+        emissiveIntensity: 0.22
+      });
+      const goldTrimMat = new THREE.MeshStandardMaterial({
+        color: 0xffd166,
+        metalness: 0.92,
+        roughness: 0.16,
+        emissive: new THREE.Color(0xffb703),
+        emissiveIntensity: 0.22
+      });
+      const whiteArmorMat = new THREE.MeshStandardMaterial({
+        color: 0xf4f5f8,
+        metalness: 0.35,
+        roughness: 0.32
+      });
+      const darkObsidianMat = new THREE.MeshStandardMaterial({
+        color: 0x15121e,
+        metalness: 0.82,
+        roughness: 0.28
+      });
+      const coreCrystalMat = new THREE.MeshStandardMaterial({
+        color: 0xff6b9d,
+        emissive: new THREE.Color(0xff477e),
+        emissiveIntensity: 0.85,
+        metalness: 0.3,
+        roughness: 0.15,
+        transparent: true,
+        opacity: 0.92
+      });
+
+      // 1. 메인 퍼플-핑크-골드 아메시스트 리시버 & 후방 아치
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.076, 0.34), amethystBodyMat);
+      receiver.position.set(0, 0.012, -0.02);
+
+      // 리시버 하단 황금 테두리 스커트
+      const goldTrimBottom = new THREE.Mesh(new THREE.BoxGeometry(0.061, 0.012, 0.33), goldTrimMat);
+      goldTrimBottom.position.set(0, -0.024, -0.02);
+
+      // 후방 아치형 스파인 & 발광 V 스파크 패널
+      const rearSpine = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.022, 0.14), amethystBodyMat);
+      rearSpine.rotation.x = -0.14;
+      rearSpine.position.set(0, 0.054, 0.07);
+
+      const topSparkPlate = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.006, 0.05), coreCrystalMat);
+      topSparkPlate.rotation.x = -0.14;
+      topSparkPlate.position.set(0, 0.066, 0.07);
+
+      // 2. 중앙 측면 황금 링 코어 챔버 (사진 속 둥근 황금 링 + 회전하는 아메시스트 코어!)
+      const coreChamberRingL = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0045, 10, 24), goldTrimMat);
+      coreChamberRingL.rotation.y = Math.PI / 2;
+      coreChamberRingL.position.set(-0.030, 0.006, -0.055);
+
+      const coreChamberRingR = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0045, 10, 24), goldTrimMat);
+      coreChamberRingR.rotation.y = Math.PI / 2;
+      coreChamberRingR.position.set(0.030, 0.006, -0.055);
+
+      const crystalOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.019, 1), coreCrystalMat);
+      crystalOrb.position.set(0, 0.006, -0.055);
+
+      // 3. 전방 핸드가드 & 화이트-골드 소음기 (Suppressor)
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.054, 0.16), amethystBodyMat);
+      handguard.position.set(0, 0.014, -0.25);
+
+      const handguardGoldLip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.014, 0.15), goldTrimMat);
+      handguardGoldLip.position.set(0, -0.014, -0.25);
+
+      // 화이트 & 옵시디언 & 골드 포인트 소음기
+      const suppressorBody = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.025, 0.22, 16), whiteArmorMat);
+      suppressorBody.rotation.x = Math.PI / 2;
+      suppressorBody.position.set(0, 0.016, -0.43);
+
+      const suppressorCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.0265, 0.0265, 0.032, 16), goldTrimMat);
+      suppressorCollar.rotation.x = Math.PI / 2;
+      suppressorCollar.position.set(0, 0.016, -0.34);
+
+      const suppressorTip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.0245, 0.045, 16), darkObsidianMat);
+      suppressorTip.rotation.x = Math.PI / 2;
+      suppressorTip.position.set(0, 0.016, -0.545);
+
+      const suppressorTipGold = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.012, 16), goldTrimMat);
+      suppressorTipGold.rotation.x = Math.PI / 2;
+      suppressorTipGold.position.set(0, 0.016, -0.52);
+
+      // 전방 가늠쇠 (골드-핑크 발광)
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.018), goldTrimMat);
+      frontSight.position.set(0, 0.046, -0.31);
+      const frontSightDot = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.008, 0.010), coreCrystalMat);
+      frontSightDot.position.set(0, 0.054, -0.31);
+
+      // 4. 팬텀 전용 직선형 다크 퍼플 & 골드 탄창
+      const straightMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.165, 0.068), darkObsidianMat);
+      straightMag.rotation.x = -0.08;
+      straightMag.position.set(0, -0.10, -0.095);
+
+      const magGoldStrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.022, 0.070), goldTrimMat);
+      magGoldStrip.rotation.x = -0.08;
+      magGoldStrip.position.set(0, -0.178, -0.102);
+
+      // 5. 왼쪽 측면에 매달린 2024 서울 챔피언스 건 버디
+      const buddyRing = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.003, 8, 16), goldTrimMat);
+      buddyRing.position.set(-0.034, -0.008, -0.19);
+      const buddyCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.011, 0), coreCrystalMat);
+      buddyCrystal.position.set(-0.034, -0.026, -0.19);
+
+      // 6. 화이트·골드 콤팩트 홀로그램 사이트 (사진 상단 화이트 사이트 반영)
+      const sight = new THREE.Group();
+      const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.014, 0.082), whiteArmorMat);
+      const sightGoldFrame = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.022, 0.045), goldTrimMat);
+      sightGoldFrame.position.set(0, 0.014, -0.005);
+      const sightLens = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.028, 0.018),
+        new THREE.MeshBasicMaterial({ color: 0xe0aaff, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      );
+      sightLens.position.set(0, 0.016, -0.005);
+      const sightDot = new THREE.Mesh(new THREE.SphereGeometry(0.0022, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+      sightDot.position.set(0, 0.016, -0.005);
+      sight.add(sightBase, sightGoldFrame, sightLens, sightDot);
+      sight.position.set(0, 0.054, -0.12);
+
+      // 7. 킬 달성 시 총신에 감기는 보랏빛·황금색 챔피언스 오라 쉘
+      const auraMat = new THREE.MeshBasicMaterial({
+        color: 0xd977ff,
+        transparent: true,
+        opacity: 0.0,
+        wireframe: true
+      });
+      const auraShell = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.092, 0.64), auraMat);
+      auraShell.position.set(0, 0.014, -0.18);
+
+      group.add(
+        receiver, goldTrimBottom, rearSpine, topSparkPlate,
+        coreChamberRingL, coreChamberRingR, crystalOrb,
+        handguard, handguardGoldLip,
+        suppressorBody, suppressorCollar, suppressorTip, suppressorTipGold,
+        frontSight, frontSightDot,
+        straightMag, magGoldStrip,
+        buddyRing, buddyCrystal,
+        sight, auraShell
+      );
+
+      group.userData.auraMat = auraMat;
+      group.userData.amethystBodyMat = amethystBodyMat;
+      group.userData.coreCrystalMat = coreCrystalMat;
+      group.userData.crystalOrb = crystalOrb;
+      group.userData.buddyCrystal = buddyCrystal;
+      return group;
     }
 
     function buildChampions2021VandalModel() {
@@ -1833,6 +2203,7 @@
       bulldog: buildBulldogModel(),
       guardian: buildGuardianModel(),
       phantom: buildPhantomModel(),
+      phantom_champions2024: buildChampions2024PhantomModel(),
       vandal: buildVandalModel(),
       vandal_champions2021: buildChampions2021VandalModel(),
       marshal: buildSniperModel({ bodyColor: 0x323840 }),
@@ -1845,6 +2216,9 @@
     };
 
     function getActiveModelForWeapon(wKey) {
+      if (wKey === 'phantom' && equippedSkins.phantom === 'champions2024') {
+        return models.phantom_champions2024;
+      }
       if (wKey === 'vandal' && equippedSkins.vandal === 'champions2021') {
         return models.vandal_champions2021;
       }
@@ -1855,7 +2229,11 @@
     }
 
     window.toggleWeaponSkin = function(wKey) {
-      if (wKey === 'vandal') {
+      if (wKey === 'phantom') {
+        equippedSkins.phantom = equippedSkins.phantom === 'champions2024' ? 'standard' : 'champions2024';
+        updateHUD();
+        if (getCurrentWeaponKey() === 'phantom') updateGunVisual();
+      } else if (wKey === 'vandal') {
         equippedSkins.vandal = equippedSkins.vandal === 'champions2021' ? 'standard' : 'champions2021';
         updateHUD();
         if (getCurrentWeaponKey() === 'vandal') updateGunVisual();
@@ -2186,11 +2564,232 @@
       };
     }
 
+    function playSynthChampions2024Finisher() {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      // 2024 챔피언스 SUPERPOWER 하이라이트 신스 진행
+      const chords = [
+        { t: 0.0, freqs: [130.81, 196.00, 261.63, 311.13, 392.00], dur: 1.4 },
+        { t: 1.35, freqs: [103.83, 207.65, 261.63, 311.13, 415.30], dur: 1.4 },
+        { t: 2.7, freqs: [155.56, 233.08, 311.13, 392.00, 466.16], dur: 1.4 },
+        { t: 4.05, freqs: [116.54, 233.08, 293.66, 349.23, 523.25], dur: 1.8 }
+      ];
+      chords.forEach(c => {
+        c.freqs.forEach(freq => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          const filter = audioCtx.createBiquadFilter();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now + c.t);
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(1650, now + c.t);
+          gain.gain.setValueAtTime(0.001, now + c.t);
+          gain.gain.linearRampToValueAtTime(0.085, now + c.t + 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + c.t + c.dur);
+          osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(now + c.t);
+          osc.stop(now + c.t + c.dur + 0.05);
+        });
+      });
+    }
+
+    function triggerChampions2024Finisher(pos) {
+      clearChampionsFinisher();
+
+      stopFinisherAudio();
+      const finAudio = new Audio('valorant-2024-champions.mp3');
+      finAudio.volume = 0.92;
+      finAudio.currentTime = 0;
+      currentFinisherAudio = finAudio;
+      const playPromise = finAudio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+          playSynthChampions2024Finisher();
+        });
+      }
+      finAudio.onerror = () => {
+        if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+        playSynthChampions2024Finisher();
+      };
+
+      const group = new THREE.Group();
+      group.position.set(pos.x, 0, pos.z);
+
+      // 1단계: 아메시스트·핑크 크리스탈 발로란트 스파크 폭발 & 빛기둥
+      const beamGeo = new THREE.CylinderGeometry(0.24, 1.35, 18, 16, 1, true);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xd966ff,
+        transparent: true,
+        opacity: 0.55,
+        side: THREE.DoubleSide
+      });
+      const beam = new THREE.Mesh(beamGeo, beamMat);
+      beam.position.y = 9.0;
+      group.add(beam);
+
+      const sparkGroup = new THREE.Group();
+      sparkGroup.position.y = 3.2;
+      const sparkMat = new THREE.MeshBasicMaterial({
+        color: 0xff66b3,
+        transparent: true,
+        opacity: 0.95
+      });
+      const goldEdgeMat = new THREE.MeshBasicMaterial({
+        color: 0xffe066,
+        transparent: true,
+        opacity: 0.95
+      });
+      const leftSpark = new THREE.Mesh(new THREE.BoxGeometry(0.42, 2.4, 0.24), sparkMat);
+      leftSpark.position.set(-0.65, 0, 0);
+      leftSpark.rotation.z = 0.36;
+      const rightSpark = new THREE.Mesh(new THREE.BoxGeometry(0.42, 2.4, 0.24), goldEdgeMat);
+      rightSpark.position.set(0.65, 0, 0);
+      rightSpark.rotation.z = -0.36;
+      sparkGroup.add(leftSpark, rightSpark);
+      group.add(sparkGroup);
+
+      // 폭발 충격파 링
+      const shockGeo = new THREE.RingGeometry(0.4, 0.85, 36);
+      const shockMat = new THREE.MeshBasicMaterial({
+        color: 0xff85c0,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9
+      });
+      const shockRing = new THREE.Mesh(shockGeo, shockMat);
+      shockRing.rotation.x = -Math.PI / 2;
+      shockRing.position.y = 0.15;
+      group.add(shockRing);
+
+      // 2단계: 하늘에 떠오르는 거대한 황금 에너지 구체(태양) & 챔피언스 트로피 + 손을 뻗는 에이전트 실루엣 (영상 후반 연출!)
+      const ascentGroup = new THREE.Group();
+      ascentGroup.position.set(0, 14, 0);
+
+      const sunOrbMat = new THREE.MeshBasicMaterial({
+        color: 0xffd166,
+        transparent: true,
+        opacity: 0.0
+      });
+      const sunOrb = new THREE.Mesh(new THREE.SphereGeometry(3.4, 24, 24), sunOrbMat);
+      sunOrb.position.set(0, 7.5, -1.5);
+
+      const haloRingMat = new THREE.MeshBasicMaterial({
+        color: 0xc77dff,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.0
+      });
+      const haloRing = new THREE.Mesh(new THREE.RingGeometry(4.1, 4.45, 36), haloRingMat);
+      haloRing.position.set(0, 7.5, -1.5);
+
+      // 상단 황금 2024 챔피언스 트로피
+      const trophyMat = new THREE.MeshBasicMaterial({
+        color: 0xffe680,
+        transparent: true,
+        opacity: 0.0
+      });
+      const trophyCup = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.38, 1.8, 12), trophyMat);
+      trophyCup.position.set(0, 7.8, 0.4);
+      const trophyHandleL = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.09, 8, 16), trophyMat);
+      trophyHandleL.position.set(-0.95, 8.0, 0.4);
+      const trophyHandleR = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.09, 8, 16), trophyMat);
+      trophyHandleR.position.set(0.95, 8.0, 0.4);
+
+      // 트로피를 향해 공중으로 도약해 손을 뻗는 에이전트 실루엣
+      const agentMat = new THREE.MeshBasicMaterial({
+        color: 0x160b24,
+        transparent: true,
+        opacity: 0.0
+      });
+      const agentBody = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.3, 0.65), agentMat);
+      agentBody.position.set(-1.3, 3.6, 0.6);
+      agentBody.rotation.z = -0.28;
+      const agentHead = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 12), agentMat);
+      agentHead.position.set(-0.95, 5.1, 0.6);
+      const reachArm = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.9, 0.32), agentMat);
+      reachArm.position.set(-0.45, 5.7, 0.6);
+      reachArm.rotation.z = -0.52;
+
+      ascentGroup.add(sunOrb, haloRing, trophyCup, trophyHandleL, trophyHandleR, agentBody, agentHead, reachArm);
+      group.add(ascentGroup);
+
+      scene.add(group);
+
+      // 보랏빛 성운 밤하늘 전환
+      scene.background = new THREE.Color(0x280c42);
+      if (scene.fog) scene.fog.color.setHex(0x280c42);
+
+      activeFinisher = {
+        edition: '2024',
+        group,
+        sparkGroup,
+        sparkMat,
+        goldEdgeMat,
+        shockRing,
+        shockMat,
+        beamMat,
+        ascentGroup,
+        haloRing,
+        sunOrbMat,
+        haloRingMat,
+        trophyMat,
+        agentMat,
+        timer: 0,
+        duration: 7.5,
+        audio: finAudio
+      };
+    }
+
     function updateChampionsFinisher(dt) {
       if (!activeFinisher) return;
       const f = activeFinisher;
       f.timer += dt;
 
+      if (f.edition === '2024') {
+        f.sparkGroup.rotation.y += dt * 3.4;
+        f.ascentGroup.lookAt(camera.position.x, f.ascentGroup.position.y, camera.position.z);
+        f.haloRing.rotation.z += dt * 1.4;
+
+        // 0~1.2초: 크리스탈 스파크 팽창 & 충격파 확산
+        if (f.timer <= 1.2) {
+          const p = f.timer / 1.2;
+          const s = 1.0 + p * 1.35;
+          f.sparkGroup.scale.set(s, s, s);
+          f.sparkGroup.position.y = 3.2 + p * 2.5;
+          const ringScale = 1.0 + p * 9.0;
+          f.shockRing.scale.set(ringScale, ringScale, 1);
+          f.shockMat.opacity = Math.max(0, 0.9 * (1 - p));
+        } else {
+          f.sparkMat.opacity = Math.max(0, 0.95 - (f.timer - 1.2) * 1.4);
+          f.goldEdgeMat.opacity = Math.max(0, 0.95 - (f.timer - 1.2) * 1.4);
+        }
+
+        // 0.9초 이후: 상공 황금 구체, 트로피, 손 뻗는 에이전트 실루엣 등장
+        if (f.timer > 0.9) {
+          const rise = Math.min(1, (f.timer - 0.9) / 1.8);
+          f.sunOrbMat.opacity = rise * 0.92;
+          f.haloRingMat.opacity = rise * 0.85;
+          f.trophyMat.opacity = rise * 0.98;
+          f.agentMat.opacity = rise * 0.92;
+          f.ascentGroup.position.y = 11.5 + rise * 3.5;
+        }
+
+        // 보랏빛 성운 번개 섬광 효과
+        const lightningFlash = Math.sin(f.timer * 19) > 0.92 ? 0x4b1878 : 0x280c42;
+        scene.background.setHex(lightningFlash);
+        if (scene.fog) scene.fog.color.setHex(lightningFlash);
+
+        f.beamMat.opacity = 0.36 + Math.sin(f.timer * 15) * 0.16;
+
+        if (f.timer >= f.duration) {
+          clearChampionsFinisher();
+        }
+        return;
+      }
+
+      // 2021 챔피언스 피니셔 업데이트
       f.emblemGroup.rotation.y += dt * 1.8;
       f.ringMesh.lookAt(camera.position);
       f.titanGroup.lookAt(camera.position.x, f.titanGroup.position.y, camera.position.z);
@@ -2324,18 +2923,20 @@
       showRoundBanner(`ROUND ${roundNumber}`, '준비 시간 (8초) - 장벽 해제 전까지 상점(B) 이용 가능', '#00ffcc', 2600);
     }
 
-    function endBrawlRound(winningTeam, killerPos = null, usedChamp2021 = false) {
+    function endBrawlRound(winningTeam, killerPos = null, usedChampEdition = false) {
       if (roundPhase === 'END') return;
       roundPhase = 'END';
-      roundPhaseTimer = usedChamp2021 ? 7.5 : 5.0;
+      roundPhaseTimer = usedChampEdition ? 7.5 : 5.0;
       currentStreak = 0; // 카운트만 0으로 초기화하고, 방금 뜬 킬 배너는 1.6초 동안 화면에 정상 표시!
 
       if (winningTeam === 'red') redScore += 1;
       else blueScore += 1;
       updateScoreboard();
 
-      // 마지막 적 처치 시 2021 챔피언스 마무리 모션 발동!
-      if (usedChamp2021 && killerPos) {
+      // 마지막 적 처치 시 챔피언스 마무리 모션 발동!
+      if (usedChampEdition === '2024' && killerPos) {
+        triggerChampions2024Finisher(killerPos);
+      } else if ((usedChampEdition === '2021' || usedChampEdition === true) && killerPos) {
         triggerChampions2021Finisher(killerPos);
       }
 
@@ -3046,7 +3647,11 @@
       document.getElementById('creditText').innerText = credits;
       document.getElementById('shopCredits').innerText = credits;
       const isMeleeChamp = equippedSkins.melee === 'champions2021';
-      document.getElementById('weaponText').innerText = (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' : w.name;
+      const isPhantom2024 = equippedSkins.phantom === 'champions2024';
+      document.getElementById('weaponText').innerText =
+        (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
+        (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
+        (key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name;
       document.getElementById('ammoText').innerText = key === 'melee' ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
       const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3');
@@ -3059,6 +3664,15 @@
 
       ['classic', 'shorty', 'frenzy', 'ghost', 'bandit', 'sheriff', 'stinger', 'spectre', 'bucky', 'judge', 'bulldog', 'guardian', 'phantom', 'vandal', 'marshal', 'outlaw', 'operator', 'ares', 'odin'].forEach(k => { const el = document.getElementById('buy-' + k); if (el) el.classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k); });
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
+      const pBadge = document.getElementById('phantomSkinBadge');
+      const pBtn = document.getElementById('togglePhantomSkinBtn');
+      if (pBadge) {
+        pBadge.innerText = isPhantom2024 ? '2024 챔피언스' : '기본 스킨';
+        pBadge.style.background = isPhantom2024 ? '#3b1e54' : '#333';
+        pBadge.style.color = isPhantom2024 ? '#e0aaff' : '#ccc';
+      }
+      if (pBtn) pBtn.innerText = isPhantom2024 ? '기본 스킨으로 변경' : '2024 챔피언스 장착';
+
       const isChamp = equippedSkins.vandal === 'champions2021';
       const badge = document.getElementById('vandalSkinBadge');
       const btn = document.getElementById('toggleVandalSkinBtn');
@@ -3390,8 +4004,8 @@
           if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
           }
-          const isChamp2021 = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
-          spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator' || isChamp2021);
+          const isChampSkin = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'phantom' && equippedSkins.phantom === 'champions2024');
+          spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator' || isChampSkin);
         }
 
         const hitTargetsSet = new Set();
@@ -3472,7 +4086,9 @@
               const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
               const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
               if (remainingEnemies === 0) {
-                const usedChamp = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
+                const usedChamp = (key === 'phantom' && equippedSkins.phantom === 'champions2024')
+                  ? '2024'
+                  : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false);
                 endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
               }
             }
@@ -3485,8 +4101,12 @@
         triggerScoreStreak(multiScoreCount, anyHeadshotKill);
         const hsTag = anyHeadshotKill ? ' [헤드샷]' : '';
         addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!${hsTag}` : `[${w.name}] 훈련봇 타겟 완료${hsTag}`, multiScoreCount >= 2 || anyHeadshotKill);
-        if (currentMap === 'range' && currentStreak > 0 && currentStreak % 5 === 0 && key === 'vandal' && equippedSkins.vandal === 'champions2021') {
-          triggerChampions2021Finisher(hits[0].point);
+        if (currentMap === 'range' && currentStreak > 0 && currentStreak % 5 === 0) {
+          if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
+            triggerChampions2024Finisher(hits[0].point);
+          } else if (key === 'vandal' && equippedSkins.vandal === 'champions2021') {
+            triggerChampions2021Finisher(hits[0].point);
+          }
         }
       }
 
@@ -3917,6 +4537,25 @@
             handObj.userData.thumbPivot.rotation.z = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.z, 0, 0.25);
             handObj.userData.thumbPivot.rotation.x = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.x, 0, 0.25);
           }
+        }
+      }
+
+      // 2024 챔피언스 팬텀 코어 & 오라 애니메이션
+      if (champions2024AuraTimer > 0) champions2024AuraTimer -= dt;
+      const isAura2024On = champions2024AuraTimer > 0;
+      const champ2024Model = models.phantom_champions2024;
+      if (champ2024Model) {
+        if (champ2024Model.userData.crystalOrb) {
+          champ2024Model.userData.crystalOrb.rotation.y += dt * (isAura2024On ? 5.2 : 1.8);
+          champ2024Model.userData.crystalOrb.rotation.x += dt * 1.1;
+        }
+        if (champ2024Model.userData.buddyCrystal) {
+          champ2024Model.userData.buddyCrystal.rotation.y += dt * 3.0;
+        }
+        if (champ2024Model.userData.auraMat) {
+          champ2024Model.userData.auraMat.opacity = isAura2024On ? (0.34 + Math.sin(performance.now() * 0.016) * 0.15) : 0.0;
+          champ2024Model.userData.amethystBodyMat.emissiveIntensity = isAura2024On ? 0.58 : 0.22;
+          champ2024Model.userData.coreCrystalMat.emissiveIntensity = isAura2024On ? 1.45 : 0.85;
         }
       }
 
