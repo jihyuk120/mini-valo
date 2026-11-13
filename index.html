@@ -860,6 +860,7 @@
     let meleeSlashTimer = 0;
     let meleeSlashDuration = 0.28;
     let isMeleeHeavySlash = false;
+    let meleeComboStep = 0;
     let isInspecting = false;
     let inspectTimer = 0;
 
@@ -1209,8 +1210,8 @@
       const accentTrimMat = new THREE.MeshStandardMaterial({ color: 0xff4655, roughness: 0.4, metalness: 0.3 });
 
       if (mode === 'karambit') {
-        // 카람빗 전용 오른손: 원점(0,0,0) 고리에 검지 손가락이 끼워져 있고, 나머지 손가락이 손잡이를 감싸쥐는 형태
-        // 1. 검지 손가락 (고리 구멍을 관통하는 구부러진 검지)
+        // 카람빗 전용 오른손: 원점(0,0,0) 고리에 검지가 끼워지고, 중지·약지·소지·엄지가 곡선 손잡이를 단단히 감싸쥐며
+        // Y키 무한 스핀 시 중지~소지가 열리고 엄지가 튕겨주는 애니메이션이 작동하도록 fingerPivots 저장
         const indexBase = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0095, 0.042, 10), skinMat);
         indexBase.rotation.set(Math.PI / 2, 0, -0.15);
         indexBase.position.set(0.014, 0.003, 0.006);
@@ -1219,34 +1220,41 @@
         indexTip.rotation.set(0.85, 0.25, 0.4);
         indexTip.position.set(0.022, -0.012, -0.014);
 
-        // 2. 손등 & 전술 너클 아머
-        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.046, 0.088), gloveMat);
-        palm.position.set(0.056, -0.008, 0.036);
+        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.046, 0.092), gloveMat);
+        palm.position.set(0.056, -0.008, 0.038);
         palm.rotation.set(0.08, -0.12, -0.15);
 
-        const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.012, 0.024), armorPadMat);
+        const knuckleGuard = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.012, 0.026), armorPadMat);
         knuckleGuard.position.set(0.052, 0.017, 0.004);
         knuckleGuard.rotation.y = -0.12;
 
-        // 3. 손잡이를 감싸쥐는 중지, 약지, 소지 (반장갑 형태라 손가락 끝은 피부색)
+        // 중지·약지·소지: 손잡이 곡선을 감싸쥐는 피벗 그룹
+        const gripFingers = [];
         for (let i = 0; i < 3; i++) {
-          const offsetX = 0.042 + i * 0.018;
-          const fingerUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.0085, 0.032, 10), gloveMat);
-          fingerUpper.rotation.x = Math.PI / 2.2;
-          fingerUpper.position.set(offsetX, -0.006, -0.006);
+          const fingerPivot = new THREE.Group();
+          fingerPivot.position.set(0.040 + i * 0.019, -0.004, -0.004);
 
-          const fingerLower = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.008, 0.028, 10), skinMat);
-          fingerLower.rotation.x = 0.45;
-          fingerLower.position.set(offsetX, -0.024, -0.012);
-          handGroup.add(fingerUpper, fingerLower);
+          const fingerUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.0082, 0.0088, 0.034, 10), gloveMat);
+          fingerUpper.rotation.x = Math.PI / 2.1;
+          fingerUpper.position.set(0, -0.004, -0.012);
+
+          const fingerLower = new THREE.Mesh(new THREE.CylinderGeometry(0.0074, 0.0082, 0.032, 10), skinMat);
+          fingerLower.rotation.x = 0.25;
+          fingerLower.position.set(0, -0.022, -0.018);
+
+          fingerPivot.add(fingerUpper, fingerLower);
+          handGroup.add(fingerPivot);
+          gripFingers.push(fingerPivot);
         }
 
-        // 4. 엄지손가락 (손잡이 위쪽을 지지)
-        const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.010, 0.044, 10), skinMat);
-        thumb.rotation.set(0.3, 0.2, 1.05);
-        thumb.position.set(0.035, 0.014, 0.014);
+        // 엄지손가락 피벗 (Y키 스핀 시 카람빗을 튕기는 모션)
+        const thumbPivot = new THREE.Group();
+        thumbPivot.position.set(0.036, 0.014, 0.016);
+        const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.0086, 0.0102, 0.046, 10), skinMat);
+        thumb.rotation.set(0.32, 0.18, 1.08);
+        thumb.position.set(-0.012, -0.002, -0.010);
+        thumbPivot.add(thumb);
 
-        // 5. 손목 & 팔뚝 소매 (화면 우측 하단 모서리로 자연스럽게 이어짐)
         const wristBand = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.038, 0.028, 14), accentTrimMat);
         wristBand.rotation.set(Math.PI / 2.1, 0, -0.25);
         wristBand.position.set(0.072, -0.018, 0.092);
@@ -1255,22 +1263,49 @@
         forearm.rotation.set(Math.PI / 2.15, 0, -0.28);
         forearm.position.set(0.105, -0.035, 0.215);
 
-        handGroup.add(indexBase, indexTip, palm, knuckleGuard, thumb, wristBand, forearm);
+        handGroup.add(indexBase, indexTip, palm, knuckleGuard, thumbPivot, wristBand, forearm);
+        handGroup.userData.gripFingers = gripFingers;
+        handGroup.userData.thumbPivot = thumbPivot;
       } else {
-        // 총기 파지용 오른손 그립 & 팔뚝
-        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.068, 0.082), gloveMat);
-        palm.position.set(0.015, -0.055, 0.085);
-        palm.rotation.set(0.25, 0, -0.15);
+        // 모든 총기 양손 파지: 오른손 방아쇠 그립 + 왼손 총열/핸드가드 하단 받침 그립
+        // 1. 오른손 (방아쇠 손잡이)
+        const rightPalm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.068, 0.082), gloveMat);
+        rightPalm.position.set(0.015, -0.055, 0.085);
+        rightPalm.rotation.set(0.25, 0, -0.15);
 
-        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.044, 0.24, 14), gloveMat);
-        forearm.rotation.set(1.25, 0, -0.22);
-        forearm.position.set(0.045, -0.11, 0.21);
+        const rightForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.044, 0.24, 14), gloveMat);
+        rightForearm.rotation.set(1.25, 0, -0.22);
+        rightForearm.position.set(0.045, -0.11, 0.21);
 
-        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.035, 0.022, 14), accentTrimMat);
-        cuff.rotation.set(1.25, 0, -0.22);
-        cuff.position.set(0.026, -0.078, 0.13);
+        const rightCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.035, 0.022, 14), accentTrimMat);
+        rightCuff.rotation.set(1.25, 0, -0.22);
+        rightCuff.position.set(0.026, -0.078, 0.13);
 
-        handGroup.add(palm, forearm, cuff);
+        // 2. 왼손 (총열/핸드가드 하단을 감싸 받치는 전술 그립 & 왼팔)
+        const leftPalm = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.044, 0.086), gloveMat);
+        leftPalm.position.set(-0.012, -0.034, -0.19);
+        leftPalm.rotation.set(-0.08, 0.18, 0.28);
+
+        const leftKnuckle = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.036, 0.068), armorPadMat);
+        leftKnuckle.position.set(-0.038, -0.016, -0.19);
+
+        // 총열 왼쪽을 감싸 올라오는 왼손 손가락들
+        for (let i = 0; i < 4; i++) {
+          const lf = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.008, 0.036, 8), i === 0 ? skinMat : gloveMat);
+          lf.rotation.z = -0.35;
+          lf.position.set(-0.032, -0.002, -0.165 - i * 0.017);
+          handGroup.add(lf);
+        }
+
+        const leftWrist = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.034, 0.022, 14), accentTrimMat);
+        leftWrist.rotation.set(1.18, 0.48, 0.45);
+        leftWrist.position.set(-0.065, -0.068, -0.11);
+
+        const leftForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.045, 0.28, 14), gloveMat);
+        leftForearm.rotation.set(1.18, 0.52, 0.48);
+        leftForearm.position.set(-0.145, -0.125, 0.01);
+
+        handGroup.add(rightPalm, rightForearm, rightCuff, leftPalm, leftKnuckle, leftWrist, leftForearm);
       }
 
       return handGroup;
@@ -1412,11 +1447,12 @@
       bladeAura.position.set(-0.004, 0.002, -0.0045);
       spinPivot.add(bladeAura);
 
-      // 기본 파지 각도: 손잡이는 오른손이 쥐고, 초승달 커브드 칼날이 화면 안쪽(좌상단 방향)으로 멋지게 드러나는 각도
-      rootGroup.rotation.set(0.24, -0.68, 0.36);
+      // 기본 파지 각도: 손목은 우측 하단, 초승달 커브드 칼날은 화면 안쪽(왼쪽 방향)을 향하도록 정렬
+      rootGroup.rotation.set(0.26, -2.35, -0.22);
 
       rootGroup.userData = {
         spinPivot,
+        karambitHand,
         trailMat,
         bladeAuraMat,
         blackCarbonMat,
@@ -2850,6 +2886,9 @@
 
       if (key === 'melee') {
         isMeleeHeavySlash = isHeavyAttack;
+        if (!isHeavyAttack) {
+          meleeComboStep = (meleeComboStep % 3) + 1; // 1: 왼쪽 베기 -> 2: 오른쪽 베기 -> 3: 위로 올려베기
+        }
         meleeSlashDuration = isHeavyAttack ? 0.52 : 0.28;
         fireCooldown = isHeavyAttack ? 0.72 : 0.36;
       } else {
@@ -3304,56 +3343,89 @@
       } else if (meleeSlashTimer > 0 && curKey === 'melee') {
         meleeSlashTimer -= dt;
         const t = 1.0 - Math.max(0, meleeSlashTimer / meleeSlashDuration);
-        const thrust = t < 0.35 ? (t / 0.35) : (1.0 - (t - 0.35) / 0.65);
+        const swing = Math.sin(t * Math.PI);
         if (isKarambitEquipped && karambitModel) {
           if (isMeleeHeavySlash) {
-            // 우클릭 강공격: 고리를 한 바퀴 반 돌리며 대각선으로 강하게 내려찍는 피니셔 슬래시!
-            gunGroup.position.set(0.18 - thrust * 0.28, -0.06 - thrust * 0.14, -0.32 - thrust * 0.32);
-            gunGroup.rotation.set(0.25 - thrust * 0.85, thrust * 0.75, -0.4 + thrust * 1.45);
+            // 우클릭 강공격: 고리를 한 바퀴 돌리며 대각선으로 강하게 내려찍는 피니셔 슬래시
+            gunGroup.position.set(0.18 - swing * 0.28, -0.06 - swing * 0.14, -0.32 - swing * 0.32);
+            gunGroup.rotation.set(0.25 - swing * 0.85, swing * 0.75, -0.4 + swing * 1.45);
             karambitModel.userData.spinPivot.rotation.z = -t * Math.PI * 2;
-            karambitModel.userData.trailMat.opacity = Math.sin(t * Math.PI) * 0.88;
+            karambitModel.userData.trailMat.opacity = swing * 0.88;
+          } else if (meleeComboStep === 1) {
+            // 1타: 왼쪽으로 베기 (우 -> 좌 가로 슬래시)
+            const sweep = Math.cos(t * Math.PI);
+            gunGroup.position.set(0.10 + sweep * 0.22, -0.14, -0.32 - swing * 0.18);
+            gunGroup.rotation.set(-0.12 * swing, 0.65 - sweep * 0.85, 0.55 * swing);
+            karambitModel.userData.spinPivot.rotation.z = -swing * 0.45;
+            karambitModel.userData.trailMat.opacity = swing * 0.78;
+          } else if (meleeComboStep === 2) {
+            // 2타: 오른쪽으로 베기 (좌 -> 우 역방향 가로 슬래시)
+            const sweep = -Math.cos(t * Math.PI);
+            gunGroup.position.set(0.14 + sweep * 0.24, -0.13, -0.32 - swing * 0.18);
+            gunGroup.rotation.set(0.15 * swing, -0.55 - sweep * 0.85, -0.65 * swing);
+            karambitModel.userData.spinPivot.rotation.z = swing * 0.45;
+            karambitModel.userData.trailMat.opacity = swing * 0.78;
           } else {
-            // 좌클릭 약공격: 날카로운 가로 베기 슬래시 & 황금 잔상
-            gunGroup.position.set(0.18 - thrust * 0.26, -0.13 + thrust * 0.08, -0.33 - thrust * 0.24);
-            gunGroup.rotation.set(-thrust * 0.35, thrust * 0.95, thrust * 0.85);
-            karambitModel.userData.spinPivot.rotation.z = -thrust * 0.9;
-            karambitModel.userData.trailMat.opacity = thrust * 0.72;
+            // 3타: 위로 올려베기 (하 -> 상 어퍼컷 슬래시)
+            const rise = -Math.cos(t * Math.PI);
+            gunGroup.position.set(0.14 - swing * 0.08, -0.14 + rise * 0.18, -0.33 - swing * 0.22);
+            gunGroup.rotation.set(0.35 + rise * 0.75, 0.22 * swing, -0.25 * swing);
+            karambitModel.userData.spinPivot.rotation.z = -swing * 0.65;
+            karambitModel.userData.trailMat.opacity = swing * 0.85;
           }
         } else {
           if (isMeleeHeavySlash) {
-            // 기본 칼 우클릭 강공격: 위에서 아래로 묵직하게 내리찍기
-            gunGroup.position.set(0.22 - thrust * 0.18, -0.10 - thrust * 0.14, -0.38 - thrust * 0.38);
-            gunGroup.rotation.set(0.35 - thrust * 1.15, -thrust * 0.25, thrust * 0.35);
+            gunGroup.position.set(0.22 - swing * 0.18, -0.10 - swing * 0.14, -0.38 - swing * 0.38);
+            gunGroup.rotation.set(0.35 - swing * 1.15, -swing * 0.25, swing * 0.35);
+          } else if (meleeComboStep === 1) {
+            const sweep = Math.cos(t * Math.PI);
+            gunGroup.position.set(0.16 + sweep * 0.20, -0.22, -0.40 - swing * 0.22);
+            gunGroup.rotation.set(-0.2 * swing, 0.55 - sweep * 0.75, 0.45 * swing);
+          } else if (meleeComboStep === 2) {
+            const sweep = -Math.cos(t * Math.PI);
+            gunGroup.position.set(0.20 + sweep * 0.22, -0.21, -0.40 - swing * 0.22);
+            gunGroup.rotation.set(0.15 * swing, -0.45 - sweep * 0.75, -0.5 * swing);
           } else {
-            gunGroup.position.set(0.26 - thrust * 0.14, -0.22 + thrust * 0.05, -0.42 - thrust * 0.36);
-            gunGroup.rotation.set(-thrust * 0.62, -thrust * 0.35, thrust * 0.45);
+            const rise = -Math.cos(t * Math.PI);
+            gunGroup.position.set(0.22, -0.22 + rise * 0.18, -0.40 - swing * 0.26);
+            gunGroup.rotation.set(0.3 + rise * 0.75, 0, 0);
           }
         }
       } else if (isInspecting && gunGroup.visible) {
         inspectTimer += dt;
         if (isKarambitEquipped && karambitModel) {
-          // 영상 속 2021 챔피언스 카람빗 무한 스핀 자세히 보기(Y) 모션!
-          // 화면 중앙 우측 앞으로 손을 들어올리고 검지 고리를 축으로 연속 고속 회전
+          // Y키: 쥐고 있던 중지·약지·소지가 활짝 펴지고 엄지가 튕겨주며 검지 고리 축으로 무한 회전!
           gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.15, 0.18);
           gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.12 + Math.sin(inspectTimer * 4.5) * 0.012, 0.18);
           gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.34, 0.18);
-          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.22, 0.18);
-          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.32, 0.18);
-          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.28, 0.18);
+          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.18, 0.18);
+          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.24, 0.18);
+          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.22, 0.18);
 
-          const spinSpeed = 13.5; // 1초에 약 2.15바퀴 연속 회전
+          const handObj = karambitModel.userData.karambitHand;
+          if (handObj && handObj.userData.gripFingers) {
+            handObj.userData.gripFingers.forEach((fp, idx) => {
+              fp.rotation.x = THREE.MathUtils.lerp(fp.rotation.x, -0.85 - idx * 0.08, 0.22);
+            });
+          }
+          if (handObj && handObj.userData.thumbPivot) {
+            // 엄지손가락이 튕기는 리듬 동작
+            const flick = Math.max(0, Math.sin(inspectTimer * 13.5)) * 0.55;
+            handObj.userData.thumbPivot.rotation.z = -0.35 + flick;
+            handObj.userData.thumbPivot.rotation.x = -0.25 + flick * 0.5;
+          }
+
+          const spinSpeed = 13.5;
           karambitModel.userData.spinAngle -= spinSpeed * dt;
           karambitModel.userData.spinPivot.rotation.z = karambitModel.userData.spinAngle;
           karambitModel.userData.trailMat.opacity = 0.48 + Math.sin(inspectTimer * 18) * 0.15;
 
-          // 반 바퀴(PI) 돌 때마다 휙- 휙- 바람 소리 자동 재생
           karambitModel.userData.whooshAccum += spinSpeed * dt;
           if (karambitModel.userData.whooshAccum >= Math.PI * 1.15) {
             karambitModel.userData.whooshAccum = 0;
             playKarambitWhooshSound(0.95 + Math.random() * 0.2);
           }
         } else {
-          // 총기/기본 칼 자세히 보기(Y) 옆면 감상 각도
           gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.14, 0.15);
           gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.14, 0.15);
           gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.35, 0.15);
@@ -3377,12 +3449,23 @@
         gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, 0, 0.2);
 
         if (karambitModel && karambitModel.userData.spinPivot) {
-          // 자세히 보기를 끄면 가장 가까운 정배수(2*PI) 각도로 부드럽게 딱 멈춤
           const currentZ = karambitModel.userData.spinPivot.rotation.z;
           const nearestFullTurn = Math.round(currentZ / (Math.PI * 2)) * (Math.PI * 2);
           karambitModel.userData.spinPivot.rotation.z = THREE.MathUtils.lerp(currentZ, nearestFullTurn, 0.25);
           karambitModel.userData.spinAngle = karambitModel.userData.spinPivot.rotation.z;
           karambitModel.userData.trailMat.opacity = THREE.MathUtils.lerp(karambitModel.userData.trailMat.opacity, 0, 0.25);
+
+          // 스핀 종료 시 펼쳐졌던 손가락들이 다시 손잡이를 꽉 감싸쥐도록 복귀
+          const handObj = karambitModel.userData.karambitHand;
+          if (handObj && handObj.userData.gripFingers) {
+            handObj.userData.gripFingers.forEach(fp => {
+              fp.rotation.x = THREE.MathUtils.lerp(fp.rotation.x, 0, 0.25);
+            });
+          }
+          if (handObj && handObj.userData.thumbPivot) {
+            handObj.userData.thumbPivot.rotation.z = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.z, 0, 0.25);
+            handObj.userData.thumbPivot.rotation.x = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.x, 0, 0.25);
+          }
         }
       }
 
