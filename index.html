@@ -125,7 +125,7 @@
     </div>
 
     <p style="color:#999; font-size:12px; margin-top:14px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | B: 상점 | 우클릭: 줌 | F: 훈련봇 무빙
+      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | 우클릭: 줌 | F: 훈련봇 무빙
     </p>
   </div>
 
@@ -173,6 +173,17 @@
         <div class="shop-item" id="buy-heavy" onclick="buyShield('heavy')">
           <div><div class="item-title">중형 보호막</div><div class="item-desc">보호막 +50 (총 내구도 150)</div></div>
           <div class="item-price">1,000 ¤</div>
+        </div>
+        <h2 style="margin-top:16px;">근접무기 스킨 ([3번] 슬롯 · Y 자세히 보기)</h2>
+        <div class="shop-item equipped" id="buy-melee-skin" onclick="switchSlot(3)">
+          <div>
+            <div class="item-title">[3번] 근접무기 <span id="meleeSkinBadge" style="font-size:11px; background:#4a3800; color:#ffd700; padding:2px 6px; border-radius:3px; margin-left:6px;">2021 챔피언스 카람빗</span></div>
+            <div class="item-desc">Y키: 검지 손가락 고리 무한 스핀 자세히 보기 & 황금 궤적</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+            <div class="item-price">장착됨</div>
+            <button id="toggleMeleeSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('melee');" style="background:#2a210c; border:1px solid #ffd700; color:#ffd700; font-size:11px; font-weight:bold; padding:3px 8px; border-radius:3px; cursor:pointer;">기본 칼로 변경</button>
+          </div>
         </div>
       </div>
     </div>
@@ -263,20 +274,33 @@
       if (distGain <= 0.06) return;
 
       if (weaponKey === 'melee') {
-        // 칼 휘두르는 바람 소리
+        // 칼 휘두르는 날카로운 휙- 바람 소리
         const noise = audioCtx.createBufferSource();
         noise.buffer = noiseBuffer;
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(600, now);
-        filter.frequency.exponentialRampToValueAtTime(2200, now + 0.09);
-        filter.Q.value = 3;
+        filter.frequency.setValueAtTime(650, now);
+        filter.frequency.exponentialRampToValueAtTime(2400, now + 0.09);
+        filter.Q.value = 3.2;
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.01, now);
-        gain.gain.linearRampToValueAtTime(0.28 * distGain, now + 0.04);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        gain.gain.linearRampToValueAtTime(0.32 * distGain, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
         noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
-        noise.start(now); noise.stop(now + 0.15);
+        noise.start(now); noise.stop(now + 0.16);
+
+        // 2021 챔피언스 카람빗일 경우 미세한 금속 차임 울림 추가
+        if (equippedSkins.melee === 'champions2021') {
+          const chime = audioCtx.createOscillator();
+          const cGain = audioCtx.createGain();
+          chime.type = 'sine';
+          chime.frequency.setValueAtTime(1480, now);
+          chime.frequency.exponentialRampToValueAtTime(2150, now + 0.12);
+          cGain.gain.setValueAtTime(0.09 * distGain, now);
+          cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+          chime.connect(cGain); cGain.connect(audioCtx.destination);
+          chime.start(now); chime.stop(now + 0.16);
+        }
         return;
       }
 
@@ -364,6 +388,31 @@
       nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
       noise.connect(filter); filter.connect(nGain); nGain.connect(audioCtx.destination);
       noise.start(now); noise.stop(now + 0.065);
+    }
+
+    function playKarambitWhooshSound(pitchBoost = 1.0) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(420 * pitchBoost, now);
+      filter.frequency.exponentialRampToValueAtTime(1850 * pitchBoost, now + 0.075);
+      filter.frequency.exponentialRampToValueAtTime(520 * pitchBoost, now + 0.16);
+      filter.Q.value = 2.8;
+
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.24, now + 0.055);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start(now);
+      noise.stop(now + 0.18);
     }
 
     function playHitMarkerSound(isHead = false) {
@@ -491,7 +540,7 @@
       phantom: 'standard',
       sheriff: 'standard',
       operator: 'standard',
-      melee: 'standard'
+      melee: 'champions2021'
     };
     let championsAuraTimer = 0; // 킬 달성 시 총신 황금 오라 지속시간
 
@@ -722,7 +771,7 @@
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
-      const isChamp2021Active = (getCurrentWeaponKey() === 'vandal' && equippedSkins.vandal === 'champions2021');
+      const isChamp2021Active = (getCurrentWeaponKey() === 'vandal' && equippedSkins.vandal === 'champions2021') || (getCurrentWeaponKey() === 'melee' && equippedSkins.melee === 'champions2021');
       if (isChamp2021Active) {
         championsAuraTimer = 5.0; // 5초간 챔피언스 오라 발광
       }
@@ -805,6 +854,8 @@
     let isDead = false, lastDamageTime = 0;
     let swapAnimTimer = 0;
     let meleeSlashTimer = 0;
+    let isInspecting = false;
+    let inspectTimer = 0;
 
     let myTeam = 'red';
     let redScore = 0, blueScore = 0;
@@ -1139,18 +1190,169 @@
       return group;
     }
 
+    function buildChampions2021KarambitModel() {
+      // 루트 그룹의 원점(0, 0, 0)이 곧 손가락 고리(Finger Ring) 중심이 되어,
+      // Y(자세히 보기) 무한 스핀 시 영상처럼 손가락 고리를 축으로 초승달 칼날이 빙글빙글 회전!
+      const rootGroup = new THREE.Group();
+      const spinPivot = new THREE.Group();
+      rootGroup.add(spinPivot);
+
+      const blackCarbonMat = new THREE.MeshStandardMaterial({
+        color: 0x16181c,
+        metalness: 0.82,
+        roughness: 0.28,
+        emissive: new THREE.Color(0xffb700),
+        emissiveIntensity: 0.06
+      });
+      const royalGoldMat = new THREE.MeshStandardMaterial({
+        color: 0xffd23f,
+        metalness: 0.92,
+        roughness: 0.16,
+        emissive: new THREE.Color(0xffaa00),
+        emissiveIntensity: 0.18
+      });
+      const crimsonRedMat = new THREE.MeshStandardMaterial({
+        color: 0xe62e3d,
+        metalness: 0.55,
+        roughness: 0.3,
+        emissive: new THREE.Color(0xff1e32),
+        emissiveIntensity: 0.28
+      });
+      const silverEdgeMat = new THREE.MeshStandardMaterial({
+        color: 0xe6ebf2,
+        metalness: 0.95,
+        roughness: 0.12
+      });
+
+      // 1. 피벗(0,0,0) 손가락 고리 (검지가 들어가는 황금 & 크림슨 링)
+      const outerRing = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0052, 14, 28), royalGoldMat);
+      const innerRedRing = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0022, 10, 24), crimsonRedMat);
+      spinPivot.add(outerRing, innerRedRing);
+
+      // 2. 인체공학적 곡선 손잡이 (고리에서 앞쪽으로 뻗어나가는 블랙 & 골드 핸들)
+      const handleShape = new THREE.Shape();
+      handleShape.moveTo(0.018, -0.012);
+      handleShape.quadraticCurveTo(0.068, 0.012, 0.118, -0.004);
+      handleShape.lineTo(0.114, -0.032);
+      handleShape.quadraticCurveTo(0.065, -0.018, 0.016, -0.030);
+      handleShape.closePath();
+
+      const handleGeo = new THREE.ExtrudeGeometry(handleShape, {
+        depth: 0.014,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: 0.002,
+        bevelThickness: 0.002
+      });
+      handleGeo.center();
+      const handleMesh = new THREE.Mesh(handleGeo, blackCarbonMat);
+      handleMesh.position.set(0.066, -0.012, 0);
+      spinPivot.add(handleMesh);
+
+      // 손잡이 위 황금 핀(리벳) 2개 & 붉은 포인트
+      const rivet1 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.020, 12), royalGoldMat);
+      rivet1.rotation.x = Math.PI / 2;
+      rivet1.position.set(0.048, -0.010, 0);
+      const rivet2 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.020, 12), crimsonRedMat);
+      rivet2.rotation.x = Math.PI / 2;
+      rivet2.position.set(0.088, -0.012, 0);
+      spinPivot.add(rivet1, rivet2);
+
+      // 3. 시그니처 초승달 커브드 블레이드 (발톱처럼 안쪽으로 휘어지는 챔피언스 칼날)
+      const bladeShape = new THREE.Shape();
+      bladeShape.moveTo(0.110, 0.002);
+      // 바깥쪽 날등 (크림슨 & 골드 라인)
+      bladeShape.bezierCurveTo(0.165, 0.012, 0.225, -0.025, 0.252, -0.098);
+      // 뾰족한 칼끝
+      bladeShape.lineTo(0.244, -0.104);
+      // 안쪽 예리한 커브 날
+      bladeShape.bezierCurveTo(0.205, -0.048, 0.155, -0.024, 0.108, -0.030);
+      bladeShape.closePath();
+
+      const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, {
+        depth: 0.005,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: 0.0015,
+        bevelThickness: 0.0015
+      });
+      const bladeMesh = new THREE.Mesh(bladeGeo, blackCarbonMat);
+      bladeMesh.position.set(0, 0, -0.0025);
+      spinPivot.add(bladeMesh);
+
+      // 칼날 바깥 등 황금 장식 & 크림슨 V 포인트
+      const goldSpineShape = new THREE.Shape();
+      goldSpineShape.moveTo(0.114, 0.004);
+      goldSpineShape.bezierCurveTo(0.168, 0.014, 0.226, -0.022, 0.253, -0.098);
+      goldSpineShape.lineTo(0.246, -0.094);
+      goldSpineShape.bezierCurveTo(0.218, -0.026, 0.164, 0.004, 0.114, -0.005);
+      goldSpineShape.closePath();
+      const goldSpineGeo = new THREE.ExtrudeGeometry(goldSpineShape, { depth: 0.006, bevelEnabled: false });
+      const goldSpineMesh = new THREE.Mesh(goldSpineGeo, royalGoldMat);
+      goldSpineMesh.position.set(0, 0, -0.003);
+      spinPivot.add(goldSpineMesh);
+
+      // 칼날 끝부분 붉은 챔피언스 하이라이트 + 킬 오라 발광 링
+      const redTip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.007, 0.0075), crimsonRedMat);
+      redTip.position.set(0.236, -0.078, 0);
+      redTip.rotation.z = -1.15;
+      spinPivot.add(redTip);
+
+      // 스핀할 때 반짝이는 황금 잔상 궤적 링 (Torus arc)
+      const trailMat = new THREE.MeshBasicMaterial({
+        color: 0xffdf5d,
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide
+      });
+      const spinTrailRing = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.255, 32, 1, -0.9, 2.4), trailMat);
+      spinPivot.add(spinTrailRing);
+
+      // 킬 달성 시 칼날 전체에 감도는 황금 챔피언스 오라
+      const bladeAuraMat = new THREE.MeshBasicMaterial({
+        color: 0xffe46b,
+        transparent: true,
+        opacity: 0.0,
+        wireframe: true
+      });
+      const bladeAura = new THREE.Mesh(bladeGeo, bladeAuraMat);
+      bladeAura.scale.set(1.04, 1.06, 1.8);
+      bladeAura.position.set(-0.004, 0.002, -0.0045);
+      spinPivot.add(bladeAura);
+
+      // 기본 파지 각도 (화면 우측 하단에서 역수(Reverse Grip)로 쥔 카람빗 각도)
+      rootGroup.rotation.set(0.15, -1.28, 0.22);
+
+      rootGroup.userData = {
+        spinPivot,
+        trailMat,
+        bladeAuraMat,
+        blackCarbonMat,
+        royalGoldMat,
+        spinAngle: 0,
+        whooshAccum: 0
+      };
+      return rootGroup;
+    }
+
     const models = {
       sheriff: buildSheriffModel(),
       phantom: buildPhantomModel(),
       vandal: buildVandalModel(),
       vandal_champions2021: buildChampions2021VandalModel(),
       operator: buildOperatorModel(),
-      melee: buildMeleeModel()
+      melee: buildMeleeModel(),
+      melee_champions2021: buildChampions2021KarambitModel()
     };
 
     function getActiveModelForWeapon(wKey) {
       if (wKey === 'vandal' && equippedSkins.vandal === 'champions2021') {
         return models.vandal_champions2021;
+      }
+      if (wKey === 'melee' && equippedSkins.melee === 'champions2021') {
+        return models.melee_champions2021;
       }
       return models[wKey];
     }
@@ -1158,31 +1360,34 @@
     window.toggleWeaponSkin = function(wKey) {
       if (wKey === 'vandal') {
         equippedSkins.vandal = equippedSkins.vandal === 'champions2021' ? 'standard' : 'champions2021';
-        const isChamp = equippedSkins.vandal === 'champions2021';
-        const badge = document.getElementById('vandalSkinBadge');
-        const btn = document.getElementById('toggleVandalSkinBtn');
-        if (badge) {
-          badge.innerText = isChamp ? '2021 챔피언스' : '기본 스킨';
-          badge.style.background = isChamp ? '#4a3800' : '#333';
-          badge.style.color = isChamp ? '#ffd700' : '#ccc';
-        }
-        if (btn) {
-          btn.innerText = isChamp ? '기본 스킨으로 변경' : '2021 챔피언스 장착';
-        }
-        if (getCurrentWeaponKey() === 'vandal') {
-          updateGunVisual();
-        }
+        updateHUD();
+        if (getCurrentWeaponKey() === 'vandal') updateGunVisual();
+      } else if (wKey === 'melee') {
+        equippedSkins.melee = equippedSkins.melee === 'champions2021' ? 'standard' : 'champions2021';
+        updateHUD();
+        if (getCurrentWeaponKey() === 'melee') updateGunVisual();
       }
     };
 
     function updateGunVisual() {
+      isInspecting = false;
+      inspectTimer = 0;
+      const kModel = models.melee_champions2021;
+      if (kModel && kModel.userData.spinPivot) {
+        kModel.userData.spinPivot.rotation.set(0, 0, 0);
+        kModel.userData.spinAngle = 0;
+        kModel.userData.trailMat.opacity = 0;
+      }
       while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
       gunGroup.add(getActiveModelForWeapon(getCurrentWeaponKey()));
       gunGroup.visible = true;
       gunGroup.position.set(0.26, -0.22, -0.42);
       gunGroup.rotation.set(0, 0, 0);
       setZoom(0);
-      swapAnimTimer = 0.28;
+      swapAnimTimer = 0.34;
+      if (getCurrentWeaponKey() === 'melee' && equippedSkins.melee === 'champions2021') {
+        playKarambitWhooshSound(1.15);
+      }
     }
     updateGunVisual();
     camera.add(gunGroup);
@@ -2326,13 +2531,14 @@
       document.getElementById('regenText').innerText = currentShieldKey === 'regen' ? `재생 보호막 (예비: ${Math.ceil(shieldReserve)})` : `${SHIELDS[currentShieldKey].name}`;
       document.getElementById('creditText').innerText = credits;
       document.getElementById('shopCredits').innerText = credits;
-      document.getElementById('weaponText').innerText = w.name;
+      const isMeleeChamp = equippedSkins.melee === 'champions2021';
+      document.getElementById('weaponText').innerText = (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' : w.name;
       document.getElementById('ammoText').innerText = key === 'melee' ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
       const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3');
       s1.innerText = `[1] ${slotWeapons[1] ? WEAPONS[slotWeapons[1]].name : '없음'}`;
       s2.innerText = `[2] ${WEAPONS[slotWeapons[2]].name}`;
-      s3.innerText = `[3] 근접`;
+      s3.innerText = isMeleeChamp ? `[3] 카람빗` : `[3] 근접`;
       s1.className = activeSlot === 1 ? 'slot-active' : '';
       s2.className = activeSlot === 2 ? 'slot-active' : '';
       s3.className = activeSlot === 3 ? 'slot-active' : '';
@@ -2348,6 +2554,15 @@
         badge.style.color = isChamp ? '#ffd700' : '#ccc';
       }
       if (btn) btn.innerText = isChamp ? '기본 스킨으로 변경' : '2021 챔피언스 장착';
+
+      const mBadge = document.getElementById('meleeSkinBadge');
+      const mBtn = document.getElementById('toggleMeleeSkinBtn');
+      if (mBadge) {
+        mBadge.innerText = isMeleeChamp ? '2021 챔피언스 카람빗' : '기본 전술 나이프';
+        mBadge.style.background = isMeleeChamp ? '#4a3800' : '#333';
+        mBadge.style.color = isMeleeChamp ? '#ffd700' : '#ccc';
+      }
+      if (mBtn) mBtn.innerText = isMeleeChamp ? '기본 칼로 변경' : '챔피언스 카람빗 장착';
     }
     updateHUD();
 
@@ -2463,6 +2678,13 @@
       if (e.code === 'Digit2') switchSlot(2);
       if (e.code === 'Digit3') switchSlot(3);
       if (e.code === 'KeyR') startReload();
+      if (e.code === 'KeyY' && !isReloading && zoomLevel === 0) {
+        isInspecting = !isInspecting;
+        inspectTimer = 0;
+        if (isInspecting && getCurrentWeaponKey() === 'melee') {
+          playKarambitWhooshSound(1.05);
+        }
+      }
 
       if (e.code === 'KeyF') {
         botStrafeMode = !botStrafeMode;
@@ -2542,6 +2764,8 @@
         setZoom(0);
       }
 
+      isInspecting = false;
+      inspectTimer = 0;
       if (key === 'melee') {
         meleeSlashTimer = 0.28;
       } else {
@@ -2948,13 +3172,22 @@
         camera.position.y = currentEyeHeight;
       }
 
+      const karambitModel = models.melee_champions2021;
+      const isKarambitEquipped = (curKey === 'melee' && equippedSkins.melee === 'champions2021');
+
       if (isDead && currentMap === 'brawl') {
         gunGroup.position.set(0.26, -0.22, -0.42);
         gunGroup.rotation.set(0, 0, 0);
       } else if (swapAnimTimer > 0) {
         swapAnimTimer -= dt;
-        const progress = Math.max(0, swapAnimTimer / 0.28);
-        if (curKey === 'melee') {
+        const progress = Math.max(0, swapAnimTimer / 0.34);
+        if (isKarambitEquipped && karambitModel) {
+          // 꺼낼 때 검지 고리를 축으로 한 바퀴 빠르게 돌리며 파지하는 카람빗 전용 스왑 모션
+          gunGroup.position.set(0.24, -0.18 - progress * 0.16, -0.38 + progress * 0.10);
+          gunGroup.rotation.set(0, 0, 0);
+          karambitModel.userData.spinPivot.rotation.z = -progress * Math.PI * 2;
+          karambitModel.userData.trailMat.opacity = Math.sin(progress * Math.PI) * 0.55;
+        } else if (curKey === 'melee') {
           gunGroup.position.set(0.26, -0.22 - progress * 0.25, -0.42 + progress * 0.15);
           gunGroup.rotation.set(-progress * 1.4, progress * 0.8, progress * Math.PI * 2);
         } else {
@@ -2964,32 +3197,88 @@
       } else if (meleeSlashTimer > 0 && curKey === 'melee') {
         meleeSlashTimer -= dt;
         const t = 1.0 - Math.max(0, meleeSlashTimer / 0.28);
-        // 0 -> 0.35: 앞으로 강하게 찌르기 / 0.35 -> 1.0: 원위치 복귀
         const thrust = t < 0.35 ? (t / 0.35) : (1.0 - (t - 0.35) / 0.65);
-        gunGroup.position.set(0.26 - thrust * 0.14, -0.22 + thrust * 0.05, -0.42 - thrust * 0.36);
-        gunGroup.rotation.set(-thrust * 0.62, -thrust * 0.35, thrust * 0.45);
+        if (isKarambitEquipped && karambitModel) {
+          // 카람빗 전용 날카로운 가로 베기 슬래시 & 황금 잔상
+          gunGroup.position.set(0.24 - thrust * 0.26, -0.17 + thrust * 0.08, -0.38 - thrust * 0.24);
+          gunGroup.rotation.set(-thrust * 0.35, thrust * 0.95, thrust * 0.85);
+          karambitModel.userData.spinPivot.rotation.z = -thrust * 0.9;
+          karambitModel.userData.trailMat.opacity = thrust * 0.72;
+        } else {
+          gunGroup.position.set(0.26 - thrust * 0.14, -0.22 + thrust * 0.05, -0.42 - thrust * 0.36);
+          gunGroup.rotation.set(-thrust * 0.62, -thrust * 0.35, thrust * 0.45);
+        }
+      } else if (isInspecting && gunGroup.visible) {
+        inspectTimer += dt;
+        if (isKarambitEquipped && karambitModel) {
+          // 영상 속 2021 챔피언스 카람빗 무한 스핀 자세히 보기(Y) 모션!
+          // 화면 중앙 우측 앞으로 손을 들어올리고 검지 고리를 축으로 연속 고속 회전
+          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.15, 0.18);
+          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.12 + Math.sin(inspectTimer * 4.5) * 0.012, 0.18);
+          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.34, 0.18);
+          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.22, 0.18);
+          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.32, 0.18);
+          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.28, 0.18);
+
+          const spinSpeed = 13.5; // 1초에 약 2.15바퀴 연속 회전
+          karambitModel.userData.spinAngle -= spinSpeed * dt;
+          karambitModel.userData.spinPivot.rotation.z = karambitModel.userData.spinAngle;
+          karambitModel.userData.trailMat.opacity = 0.48 + Math.sin(inspectTimer * 18) * 0.15;
+
+          // 반 바퀴(PI) 돌 때마다 휙- 휙- 바람 소리 자동 재생
+          karambitModel.userData.whooshAccum += spinSpeed * dt;
+          if (karambitModel.userData.whooshAccum >= Math.PI * 1.15) {
+            karambitModel.userData.whooshAccum = 0;
+            playKarambitWhooshSound(0.95 + Math.random() * 0.2);
+          }
+        } else {
+          // 총기/기본 칼 자세히 보기(Y) 옆면 감상 각도
+          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.14, 0.15);
+          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.14, 0.15);
+          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.35, 0.15);
+          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.18, 0.15);
+          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.68, 0.15);
+          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.22, 0.15);
+          if (inspectTimer > 3.2) {
+            isInspecting = false;
+            inspectTimer = 0;
+          }
+        }
       } else if (!isReloading && gunGroup.visible) {
-        const targetGunX = zoomLevel > 0 ? 0.0 : 0.26;
-        const targetGunY = zoomLevel > 0 ? -0.075 : -0.22;
-        const targetGunZ = zoomLevel > 0 ? -0.28 : -0.42;
+        const targetGunX = zoomLevel > 0 ? 0.0 : (isKarambitEquipped ? 0.23 : 0.26);
+        const targetGunY = zoomLevel > 0 ? -0.075 : (isKarambitEquipped ? -0.17 : -0.22);
+        const targetGunZ = zoomLevel > 0 ? -0.28 : (isKarambitEquipped ? -0.37 : -0.42);
         gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, targetGunX, 0.25);
         gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetGunY, 0.25);
         gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetGunZ, 0.25);
         gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
         gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0, 0.2);
         gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, 0, 0.2);
+
+        if (karambitModel && karambitModel.userData.spinPivot) {
+          // 자세히 보기를 끄면 가장 가까운 정배수(2*PI) 각도로 부드럽게 딱 멈춤
+          const currentZ = karambitModel.userData.spinPivot.rotation.z;
+          const nearestFullTurn = Math.round(currentZ / (Math.PI * 2)) * (Math.PI * 2);
+          karambitModel.userData.spinPivot.rotation.z = THREE.MathUtils.lerp(currentZ, nearestFullTurn, 0.25);
+          karambitModel.userData.spinAngle = karambitModel.userData.spinPivot.rotation.z;
+          karambitModel.userData.trailMat.opacity = THREE.MathUtils.lerp(karambitModel.userData.trailMat.opacity, 0, 0.25);
+        }
       }
 
-      // 2021 챔피언스 밴달 오라 및 총기 장식 애니메이션
+      // 2021 챔피언스 밴달 & 카람빗 오라 및 총기 장식 애니메이션
       if (championsAuraTimer > 0) championsAuraTimer -= dt;
+      const isAuraOn = championsAuraTimer > 0;
       const champModel = models.vandal_champions2021;
       if (champModel && champModel.userData.auraMat) {
-        const isAuraOn = championsAuraTimer > 0;
         champModel.userData.auraMat.opacity = isAuraOn ? (0.32 + Math.sin(performance.now() * 0.015) * 0.14) : 0.0;
         champModel.userData.champBodyMat.emissiveIntensity = isAuraOn ? 0.45 : 0.08;
         if (champModel.userData.buddyCore) {
           champModel.userData.buddyCore.rotation.y += dt * 3.0;
         }
+      }
+      if (karambitModel && karambitModel.userData.bladeAuraMat) {
+        karambitModel.userData.bladeAuraMat.opacity = isAuraOn ? (0.38 + Math.sin(performance.now() * 0.015) * 0.16) : 0.0;
+        karambitModel.userData.blackCarbonMat.emissiveIntensity = isAuraOn ? 0.48 : 0.06;
       }
 
       updateBrawlRoundPhase(dt);
