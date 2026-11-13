@@ -129,65 +129,139 @@
     </p>
   </div>
 
-  <div id="shopModal" class="modal">
-    <div class="shop-header">
-      <h1 style="font-size:32px; margin:0;">무기고 (SHOP)</h1>
-      <div style="font-size:20px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">99999</span> ¤ (무제한)</div>
+  <div id="shopModal" class="modal" style="justify-content:flex-start; padding-top:16px;">
+    <div class="shop-header" style="width:1160px; max-width:96vw; margin-bottom:8px;">
+      <h1 style="font-size:28px; margin:0;">발로란트 전 무기 무기고 (SHOP)</h1>
+      <div style="font-size:18px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">99999</span> ¤ (무제한)</div>
     </div>
-    <div class="shop-grid">
-      <div class="shop-col">
-        <h2>무기 (1번 주무기 / 2번 보조무기)</h2>
-        <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')">
-          <div><div class="item-title">[2번] 셰리프 (Sheriff)</div><div class="item-desc">6발 | 0~30m: 159/55/46 | 30m+: 145/50/42</div></div>
-          <div class="item-price">800 ¤</div>
+    <div class="shop-grid" style="grid-template-columns: 1fr 1.15fr 1.15fr 0.95fr; gap:12px; width:1160px; max-width:96vw;">
+      <!-- 1열: 보조무기 (Sidearms) -->
+      <div class="shop-col" style="padding:12px;">
+        <h2 style="font-size:15px;">보조무기 [2번 슬롯]</h2>
+        <div class="shop-item" id="buy-classic" onclick="buyWeapon('classic')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">클래식 (Classic)</div><div class="item-desc" style="font-size:11px;">12발 | 우클릭 3점사 산탄</div></div>
+          <div class="item-price" style="font-size:12px;">무료</div>
         </div>
-        <div class="shop-item" id="buy-phantom" onclick="buyWeapon('phantom')">
-          <div><div class="item-title">[1번] 팬텀 (Phantom)</div><div class="item-desc">30발 | 0~15m: 156/39/33 | 15~30m: 140/35/29</div></div>
-          <div class="item-price">2,900 ¤</div>
+        <div class="shop-item" id="buy-shorty" onclick="buyWeapon('shorty')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">쇼티 (Shorty)</div><div class="item-desc" style="font-size:11px;">2발 | 초근접 12펠릿 산탄총</div></div>
+          <div class="item-price" style="font-size:12px;">300 ¤</div>
         </div>
-        <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')">
-          <div>
-            <div class="item-title">[1번] 밴달 (Vandal) <span id="vandalSkinBadge" style="font-size:11px; background:#333; color:#ccc; padding:2px 6px; border-radius:3px; margin-left:6px;">기본 스킨</span></div>
-            <div class="item-desc">25발 | 전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div>
-          </div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
-            <div class="item-price">2,900 ¤</div>
-            <button id="toggleVandalSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('vandal');" style="background:#2a210c; border:1px solid #ffd700; color:#ffd700; font-size:11px; font-weight:bold; padding:3px 8px; border-radius:3px; cursor:pointer;">2021 챔피언스 장착</button>
-          </div>
+        <div class="shop-item" id="buy-frenzy" onclick="buyWeapon('frenzy')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">프렌지 (Frenzy)</div><div class="item-desc" style="font-size:11px;">13발 | 자동 기관권총 (헤드78)</div></div>
+          <div class="item-price" style="font-size:12px;">450 ¤</div>
         </div>
-        <div class="shop-item" id="buy-operator" onclick="buyWeapon('operator')">
-          <div><div class="item-title">[1번] 오퍼레이터 (Operator)</div><div class="item-desc">5발 | 헤드 255 / 몸 150 / 다리 120 | 고관통·2단줌·사격 후 줌해제</div></div>
-          <div class="item-price">4,700 ¤</div>
+        <div class="shop-item" id="buy-ghost" onclick="buyWeapon('ghost')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">고스트 (Ghost)</div><div class="item-desc" style="font-size:11px;">15발 | 소음기 정밀권총 (헤드105)</div></div>
+          <div class="item-price" style="font-size:12px;">500 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-bandit" onclick="buyWeapon('bandit')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">밴딧 (Bandit)</div><div class="item-desc" style="font-size:11px;">8발 | 속사 대구경 리볼버 (헤드128)</div></div>
+          <div class="item-price" style="font-size:12px;">650 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">셰리프 (Sheriff)</div><div class="item-desc" style="font-size:11px;">6발 | 헤드 159 / 몸 55</div></div>
+          <div class="item-price" style="font-size:12px;">800 ¤</div>
         </div>
       </div>
-      <div class="shop-col">
-        <h2>보호막 (무료 교체)</h2>
-        <div class="shop-item" id="buy-light" onclick="buyShield('light')">
-          <div><div class="item-title">경형 보호막</div><div class="item-desc">보호막 +25 (총 내구도 125)</div></div>
-          <div class="item-price">400 ¤</div>
+
+      <!-- 2열: 기관단총 & 산탄총 [1번 슬롯] -->
+      <div class="shop-col" style="padding:12px;">
+        <h2 style="font-size:15px;">기관단총 & 산탄총 [1번]</h2>
+        <div class="shop-item" id="buy-stinger" onclick="buyWeapon('stinger')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">스팅어 (Stinger)</div><div class="item-desc" style="font-size:11px;">20발 | 초고속 연사 (우클릭 4점사)</div></div>
+          <div class="item-price" style="font-size:12px;">1,100 ¤</div>
         </div>
-        <div class="shop-item" id="buy-regen" onclick="buyShield('regen')">
-          <div><div class="item-title">재생 보호막</div><div class="item-desc">보호막 +25 (피해 후 예비 50까지 재생)</div></div>
-          <div class="item-price">650 ¤</div>
+        <div class="shop-item" id="buy-spectre" onclick="buyWeapon('spectre')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">스펙터 (Spectre)</div><div class="item-desc" style="font-size:11px;">30발 | 소음기 SMG (헤드78)</div></div>
+          <div class="item-price" style="font-size:12px;">1,600 ¤</div>
         </div>
-        <div class="shop-item" id="buy-heavy" onclick="buyShield('heavy')">
-          <div><div class="item-title">중형 보호막</div><div class="item-desc">보호막 +50 (총 내구도 150)</div></div>
-          <div class="item-price">1,000 ¤</div>
+        <div class="shop-item" id="buy-bucky" onclick="buyWeapon('bucky')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">버키 (Bucky)</div><div class="item-desc" style="font-size:11px;">5발 | 펌프 샷건 (우클릭 공중폭발탄)</div></div>
+          <div class="item-price" style="font-size:12px;">850 ¤</div>
         </div>
-        <h2 style="margin-top:16px;">근접무기 스킨 ([3번] 슬롯 · Y 자세히 보기)</h2>
-        <div class="shop-item equipped" id="buy-melee-skin" onclick="switchSlot(3)">
+        <div class="shop-item" id="buy-judge" onclick="buyWeapon('judge')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">저지 (Judge)</div><div class="item-desc" style="font-size:11px;">7발 | 연사 자동 산탄총</div></div>
+          <div class="item-price" style="font-size:12px;">1,850 ¤</div>
+        </div>
+        <h2 style="font-size:15px; margin-top:10px;">기관총 (Heavy) [1번]</h2>
+        <div class="shop-item" id="buy-ares" onclick="buyWeapon('ares')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">아레스 (Ares)</div><div class="item-desc" style="font-size:11px;">50발 | 경기관총 · 높은 관통력</div></div>
+          <div class="item-price" style="font-size:12px;">1,600 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-odin" onclick="buyWeapon('odin')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">오딘 (Odin)</div><div class="item-desc" style="font-size:11px;">100발 | 중기관총 · 헤드95 · 초고속</div></div>
+          <div class="item-price" style="font-size:12px;">3,200 ¤</div>
+        </div>
+      </div>
+
+      <!-- 3열: 소총 & 저격소총 [1번 슬롯] -->
+      <div class="shop-col" style="padding:12px;">
+        <h2 style="font-size:15px;">소총 & 저격소총 [1번]</h2>
+        <div class="shop-item" id="buy-bulldog" onclick="buyWeapon('bulldog')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">불독 (Bulldog)</div><div class="item-desc" style="font-size:11px;">24발 | 헤드115 (우클릭 3점사 줌)</div></div>
+          <div class="item-price" style="font-size:12px;">2,050 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-guardian" onclick="buyWeapon('guardian')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">가디언 (Guardian)</div><div class="item-desc" style="font-size:11px;">12발 | 단발 반자동 (헤드195/몸65)</div></div>
+          <div class="item-price" style="font-size:12px;">2,250 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-phantom" onclick="buyWeapon('phantom')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">팬텀 (Phantom)</div><div class="item-desc" style="font-size:11px;">30발 | 0~15m 헤드156 / 소음기</div></div>
+          <div class="item-price" style="font-size:12px;">2,900 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')" style="padding:7px 10px;">
           <div>
-            <div class="item-title">[3번] 근접무기 <span id="meleeSkinBadge" style="font-size:11px; background:#4a3800; color:#ffd700; padding:2px 6px; border-radius:3px; margin-left:6px;">2021 챔피언스 카람빗</span></div>
-            <div class="item-desc">Y키: 검지 손가락 고리 무한 스핀 자세히 보기 & 황금 궤적</div>
+            <div class="item-title" style="font-size:13px;">밴달 (Vandal) <span id="vandalSkinBadge" style="font-size:10px; background:#333; color:#ccc; padding:1px 5px; border-radius:3px;">기본</span></div>
+            <div class="item-desc" style="font-size:11px;">25발 | 전거리 헤드160 / 몸40</div>
           </div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
-            <div class="item-price">장착됨</div>
-            <button id="toggleMeleeSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('melee');" style="background:#2a210c; border:1px solid #ffd700; color:#ffd700; font-size:11px; font-weight:bold; padding:3px 8px; border-radius:3px; cursor:pointer;">기본 칼로 변경</button>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+            <div class="item-price" style="font-size:12px;">2,900 ¤</div>
+            <button id="toggleVandalSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('vandal');" style="background:#2a210c; border:1px solid #ffd700; color:#ffd700; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">2021 챔피언스</button>
+          </div>
+        </div>
+        <div class="shop-item" id="buy-marshal" onclick="buyWeapon('marshal')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">마샬 (Marshal)</div><div class="item-desc" style="font-size:11px;">5발 | 경량 스나이퍼 (헤드202/몸101)</div></div>
+          <div class="item-price" style="font-size:12px;">950 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-outlaw" onclick="buyWeapon('outlaw')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">아웃로 (Outlaw)</div><div class="item-desc" style="font-size:11px;">2발 | 더블배럴 스나이퍼 (헤드238/몸140)</div></div>
+          <div class="item-price" style="font-size:12px;">2,400 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-operator" onclick="buyWeapon('operator')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">오퍼레이터 (Operator)</div><div class="item-desc" style="font-size:11px;">5발 | 헤드255 / 몸150 / 다리120</div></div>
+          <div class="item-price" style="font-size:12px;">4,700 ¤</div>
+        </div>
+      </div>
+
+      <!-- 4열: 보호막 & 근접무기 -->
+      <div class="shop-col" style="padding:12px;">
+        <h2 style="font-size:15px;">보호막 (무료 교체)</h2>
+        <div class="shop-item" id="buy-light" onclick="buyShield('light')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">경형 보호막</div><div class="item-desc" style="font-size:11px;">보호막 +25 (총 125)</div></div>
+          <div class="item-price" style="font-size:12px;">400 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-regen" onclick="buyShield('regen')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">재생 보호막</div><div class="item-desc" style="font-size:11px;">보호막 +25 (예비 50 재생)</div></div>
+          <div class="item-price" style="font-size:12px;">650 ¤</div>
+        </div>
+        <div class="shop-item" id="buy-heavy" onclick="buyShield('heavy')" style="padding:7px 10px;">
+          <div><div class="item-title" style="font-size:13px;">중형 보호막</div><div class="item-desc" style="font-size:11px;">보호막 +50 (총 150)</div></div>
+          <div class="item-price" style="font-size:12px;">1,000 ¤</div>
+        </div>
+        <h2 style="font-size:15px; margin-top:12px;">근접무기 [3번 슬롯]</h2>
+        <div class="shop-item equipped" id="buy-melee-skin" onclick="switchSlot(3)" style="padding:8px 10px;">
+          <div>
+            <div class="item-title" style="font-size:13px;">근접무기 <span id="meleeSkinBadge" style="font-size:10px; background:#4a3800; color:#ffd700; padding:1px 5px; border-radius:3px;">카람빗</span></div>
+            <div class="item-desc" style="font-size:11px;">좌클릭: 베기 / 우클릭: 회전 찌르기 / Y: 스핀</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+            <div class="item-price" style="font-size:12px;">장착됨</div>
+            <button id="toggleMeleeSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('melee');" style="background:#2a210c; border:1px solid #ffd700; color:#ffd700; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">기본 칼</button>
           </div>
         </div>
       </div>
     </div>
-    <button id="closeShopBtn" class="btn-primary" style="margin-top:18px;">상점 닫기 (게임 복귀)</button>
+    <button id="closeShopBtn" class="btn-primary" style="margin-top:12px; padding:10px 26px;">상점 닫기 (게임 복귀)</button>
   </div>
 
   <div id="topScoreboard" style="flex-direction:column; gap:4px; padding:8px 26px;">
@@ -274,7 +348,6 @@
       if (distGain <= 0.06) return;
 
       if (weaponKey === 'melee') {
-        // 칼 휘두르는 날카로운 휙- 바람 소리
         const noise = audioCtx.createBufferSource();
         noise.buffer = noiseBuffer;
         const filter = audioCtx.createBiquadFilter();
@@ -289,7 +362,6 @@
         noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
         noise.start(now); noise.stop(now + 0.16);
 
-        // 2021 챔피언스 카람빗일 경우 미세한 금속 차임 울림 추가
         if (equippedSkins.melee === 'champions2021') {
           const chime = audioCtx.createOscillator();
           const cGain = audioCtx.createGain();
@@ -304,18 +376,32 @@
         return;
       }
 
-      // 총기별 타격음 파라미터
+      const isSuppressed = (weaponKey === 'phantom' || weaponKey === 'ghost' || weaponKey === 'spectre');
       const cfg = {
-        sheriff:  { punchFreq: 190, endFreq: 42, punchDur: 0.22, noiseFreq: 1400, noiseDur: 0.24, vol: 0.55 },
+        classic:  { punchFreq: 175, endFreq: 55, punchDur: 0.11, noiseFreq: 1850, noiseDur: 0.11, vol: 0.36 },
+        shorty:   { punchFreq: 215, endFreq: 34, punchDur: 0.28, noiseFreq: 950,  noiseDur: 0.32, vol: 0.65 },
+        frenzy:   { punchFreq: 185, endFreq: 58, punchDur: 0.09, noiseFreq: 1950, noiseDur: 0.09, vol: 0.34 },
+        ghost:    { punchFreq: 140, endFreq: 50, punchDur: 0.10, noiseFreq: 2600, noiseDur: 0.10, vol: 0.28 },
+        bandit:   { punchFreq: 185, endFreq: 44, punchDur: 0.19, noiseFreq: 1500, noiseDur: 0.20, vol: 0.50 },
+        sheriff:  { punchFreq: 195, endFreq: 40, punchDur: 0.23, noiseFreq: 1350, noiseDur: 0.25, vol: 0.58 },
+        stinger:  { punchFreq: 195, endFreq: 62, punchDur: 0.08, noiseFreq: 2100, noiseDur: 0.08, vol: 0.33 },
+        spectre:  { punchFreq: 135, endFreq: 48, punchDur: 0.09, noiseFreq: 2500, noiseDur: 0.09, vol: 0.29 },
+        bucky:    { punchFreq: 210, endFreq: 32, punchDur: 0.32, noiseFreq: 880,  noiseDur: 0.36, vol: 0.68 },
+        judge:    { punchFreq: 195, endFreq: 36, punchDur: 0.24, noiseFreq: 980,  noiseDur: 0.26, vol: 0.60 },
+        bulldog:  { punchFreq: 170, endFreq: 44, punchDur: 0.14, noiseFreq: 1350, noiseDur: 0.15, vol: 0.44 },
+        guardian: { punchFreq: 205, endFreq: 38, punchDur: 0.21, noiseFreq: 1200, noiseDur: 0.22, vol: 0.56 },
+        phantom:  { punchFreq: 130, endFreq: 45, punchDur: 0.11, noiseFreq: 2400, noiseDur: 0.11, vol: 0.32 },
         vandal:   { punchFreq: 165, endFreq: 38, punchDur: 0.16, noiseFreq: 1150, noiseDur: 0.18, vol: 0.48 },
-        phantom:  { punchFreq: 130, endFreq: 45, punchDur: 0.11, noiseFreq: 2400, noiseDur: 0.11, vol: 0.32 }, // 소음기 쉭- 소리
-        operator: { punchFreq: 240, endFreq: 28, punchDur: 0.42, noiseFreq: 850,  noiseDur: 0.55, vol: 0.75 }  // 웅장한 대포 소리
+        marshal:  { punchFreq: 225, endFreq: 34, punchDur: 0.30, noiseFreq: 1050, noiseDur: 0.34, vol: 0.64 },
+        outlaw:   { punchFreq: 235, endFreq: 30, punchDur: 0.36, noiseFreq: 920,  noiseDur: 0.42, vol: 0.70 },
+        operator: { punchFreq: 245, endFreq: 26, punchDur: 0.44, noiseFreq: 820,  noiseDur: 0.56, vol: 0.76 },
+        ares:     { punchFreq: 160, endFreq: 42, punchDur: 0.13, noiseFreq: 1250, noiseDur: 0.14, vol: 0.43 },
+        odin:     { punchFreq: 175, endFreq: 36, punchDur: 0.15, noiseFreq: 1080, noiseDur: 0.16, vol: 0.50 }
       }[weaponKey] || { punchFreq: 160, endFreq: 40, punchDur: 0.16, noiseFreq: 1200, noiseDur: 0.18, vol: 0.45 };
 
-      // 1. 저음 타격감 (Oscillator)
       const osc = audioCtx.createOscillator();
       const oscGain = audioCtx.createGain();
-      osc.type = weaponKey === 'phantom' ? 'sine' : 'triangle';
+      osc.type = isSuppressed ? 'sine' : 'triangle';
       osc.frequency.setValueAtTime(cfg.punchFreq, now);
       osc.frequency.exponentialRampToValueAtTime(cfg.endFreq, now + cfg.punchDur);
       oscGain.gain.setValueAtTime(cfg.vol * distGain, now);
@@ -323,13 +409,12 @@
       osc.connect(oscGain); oscGain.connect(audioCtx.destination);
       osc.start(now); osc.stop(now + cfg.punchDur);
 
-      // 2. 화약 폭발음 (Filtered Noise)
       const noise = audioCtx.createBufferSource();
       noise.buffer = noiseBuffer;
       const filter = audioCtx.createBiquadFilter();
-      filter.type = weaponKey === 'phantom' ? 'highpass' : 'lowpass';
+      filter.type = isSuppressed ? 'highpass' : 'lowpass';
       filter.frequency.setValueAtTime(cfg.noiseFreq, now);
-      filter.frequency.exponentialRampToValueAtTime(weaponKey === 'phantom' ? 1200 : 250, now + cfg.noiseDur);
+      filter.frequency.exponentialRampToValueAtTime(isSuppressed ? 1250 : 240, now + cfg.noiseDur);
 
       const nGain = audioCtx.createGain();
       nGain.gain.setValueAtTime(cfg.vol * 0.9 * distGain, now);
@@ -338,21 +423,22 @@
       noise.connect(filter); filter.connect(nGain); nGain.connect(audioCtx.destination);
       noise.start(now); noise.stop(now + cfg.noiseDur);
 
-      // 오퍼레이터 볼트액션 찰칵 소리
-      if (weaponKey === 'operator' && dist < 15) {
+      // 볼트액션 / 펌프액션 / 브레이크액션 기계음
+      if ((weaponKey === 'operator' || weaponKey === 'marshal' || weaponKey === 'bucky') && dist < 15) {
+        const delayMs = weaponKey === 'operator' ? 480 : (weaponKey === 'marshal' ? 360 : 280);
         setTimeout(() => {
           if (!audioCtx) return;
           const t = audioCtx.currentTime;
           const clickOsc = audioCtx.createOscillator();
           const clickGain = audioCtx.createGain();
           clickOsc.type = 'square';
-          clickOsc.frequency.setValueAtTime(950, t);
-          clickOsc.frequency.setValueAtTime(1350, t + 0.06);
-          clickGain.gain.setValueAtTime(0.12 * distGain, t);
+          clickOsc.frequency.setValueAtTime(920, t);
+          clickOsc.frequency.setValueAtTime(1320, t + 0.06);
+          clickGain.gain.setValueAtTime(0.11 * distGain, t);
           clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
           clickOsc.connect(clickGain); clickGain.connect(audioCtx.destination);
           clickOsc.start(t); clickOsc.stop(t + 0.13);
-        }, 480);
+        }, delayMs);
       }
     }
 
@@ -804,11 +890,87 @@
     }
 
     const WEAPONS = {
+      // === 보조무기 (Sidearms - 2번 슬롯) ===
+      classic: {
+        slot: 2, name: '클래식', price: 0, auto: false, fireRate: 0.15, zoomType: 'burst3',
+        magSize: 12, reloadTime: 1.4, penetration: 1, jumpSpread: 0.10, noScopeSpread: 0,
+        recoilPitch: 0.014, recoilYaw: 0.006, moveSpeed: 7.6,
+        getDamage: (dist, part) => dist < 30 ? { head: 78, body: 26, leg: 22 }[part] : { head: 66, body: 22, leg: 18 }[part]
+      },
+      shorty: {
+        slot: 2, name: '쇼티', price: 300, auto: false, fireRate: 0.30, zoomType: 'none',
+        pellets: 12, pelletSpread: 0.11,
+        magSize: 2, reloadTime: 1.5, penetration: 1, jumpSpread: 0.15, noScopeSpread: 0,
+        recoilPitch: 0.042, recoilYaw: 0.014, moveSpeed: 7.6,
+        getDamage: (dist, part) => dist < 7 ? { head: 24, body: 12, leg: 10 }[part] : (dist < 14 ? { head: 12, body: 6, leg: 5 }[part] : { head: 4, body: 2, leg: 2 }[part])
+      },
+      frenzy: {
+        slot: 2, name: '프렌지', price: 450, auto: true, fireRate: 0.10, zoomType: 'none',
+        magSize: 13, reloadTime: 1.4, penetration: 1, jumpSpread: 0.11, noScopeSpread: 0,
+        recoilPitch: 0.013, recoilYaw: 0.010, moveSpeed: 7.5,
+        getDamage: (dist, part) => dist < 20 ? { head: 78, body: 26, leg: 22 }[part] : { head: 63, body: 21, leg: 17 }[part]
+      },
+      ghost: {
+        slot: 2, name: '고스트', price: 500, auto: false, fireRate: 0.16, zoomType: 'none',
+        magSize: 15, reloadTime: 1.4, penetration: 2, jumpSpread: 0.11, noScopeSpread: 0,
+        recoilPitch: 0.016, recoilYaw: 0.006, moveSpeed: 7.5,
+        getDamage: (dist, part) => dist < 30 ? { head: 105, body: 30, leg: 25 }[part] : { head: 87, body: 25, leg: 21 }[part]
+      },
+      bandit: {
+        slot: 2, name: '밴딧', price: 650, auto: false, fireRate: 0.20, zoomType: 'none',
+        magSize: 8, reloadTime: 1.5, penetration: 2, jumpSpread: 0.12, noScopeSpread: 0,
+        recoilPitch: 0.026, recoilYaw: 0.008, moveSpeed: 7.5,
+        getDamage: (dist, part) => dist < 25 ? { head: 128, body: 42, leg: 35 }[part] : { head: 112, body: 37, leg: 31 }[part]
+      },
       sheriff: {
         slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, zoomType: 'none',
         magSize: 6, reloadTime: 1.5, penetration: 2, jumpSpread: 0.14, noScopeSpread: 0,
         recoilPitch: 0.036, recoilYaw: 0.009, moveSpeed: 7.4,
         getDamage: (dist, part) => dist < 30 ? { head: 159, body: 55, leg: 46 }[part] : { head: 145, body: 50, leg: 42 }[part]
+      },
+
+      // === 기관단총 (SMGs - 1번 슬롯) ===
+      stinger: {
+        slot: 1, name: '스팅어', price: 1100, auto: true, fireRate: 0.068, zoomType: 'burst4',
+        magSize: 20, reloadTime: 1.6, penetration: 1, jumpSpread: 0.12, noScopeSpread: 0,
+        recoilPitch: 0.011, recoilYaw: 0.011, moveSpeed: 7.2,
+        getDamage: (dist, part) => dist < 15 ? { head: 67, body: 27, leg: 23 }[part] : { head: 62, body: 25, leg: 21 }[part]
+      },
+      spectre: {
+        slot: 1, name: '스펙터', price: 1600, auto: true, fireRate: 0.078, zoomType: 'holo',
+        magSize: 30, reloadTime: 1.65, penetration: 2, jumpSpread: 0.11, noScopeSpread: 0,
+        recoilPitch: 0.010, recoilYaw: 0.008, moveSpeed: 7.1,
+        getDamage: (dist, part) => dist < 15 ? { head: 78, body: 26, leg: 22 }[part] : { head: 66, body: 22, leg: 18 }[part]
+      },
+
+      // === 산탄총 (Shotguns - 1번 슬롯) ===
+      bucky: {
+        slot: 1, name: '버키', price: 850, auto: false, fireRate: 0.85, zoomType: 'airburst',
+        pellets: 15, pelletSpread: 0.095,
+        magSize: 5, reloadTime: 1.9, penetration: 1, jumpSpread: 0.16, noScopeSpread: 0,
+        recoilPitch: 0.048, recoilYaw: 0.015, moveSpeed: 6.8,
+        getDamage: (dist, part) => dist < 8 ? { head: 40, body: 20, leg: 17 }[part] : (dist < 16 ? { head: 24, body: 12, leg: 10 }[part] : { head: 14, body: 7, leg: 6 }[part])
+      },
+      judge: {
+        slot: 1, name: '저지', price: 1850, auto: true, fireRate: 0.28, zoomType: 'none',
+        pellets: 12, pelletSpread: 0.105,
+        magSize: 7, reloadTime: 1.8, penetration: 1, jumpSpread: 0.18, noScopeSpread: 0,
+        recoilPitch: 0.034, recoilYaw: 0.014, moveSpeed: 6.7,
+        getDamage: (dist, part) => dist < 10 ? { head: 34, body: 17, leg: 14 }[part] : (dist < 18 ? { head: 20, body: 10, leg: 8 }[part] : { head: 12, body: 6, leg: 5 }[part])
+      },
+
+      // === 소총 (Rifles - 1번 슬롯) ===
+      bulldog: {
+        slot: 1, name: '불독', price: 2050, auto: true, fireRate: 0.105, zoomType: 'burst3_holo',
+        magSize: 24, reloadTime: 1.8, penetration: 2, jumpSpread: 0.16, noScopeSpread: 0,
+        recoilPitch: 0.014, recoilYaw: 0.010, moveSpeed: 6.8,
+        getDamage: (dist, part) => ({ head: 115, body: 35, leg: 30 }[part])
+      },
+      guardian: {
+        slot: 1, name: '가디언', price: 2250, auto: false, fireRate: 0.19, zoomType: 'holo',
+        magSize: 12, reloadTime: 1.75, penetration: 4, jumpSpread: 0.18, noScopeSpread: 0,
+        recoilPitch: 0.025, recoilYaw: 0.006, moveSpeed: 6.7,
+        getDamage: (dist, part) => ({ head: 195, body: 65, leg: 49 }[part])
       },
       phantom: {
         slot: 1, name: '팬텀', price: 2900, auto: true, fireRate: 0.095, zoomType: 'holo',
@@ -822,20 +984,50 @@
         recoilPitch: 0.018, recoilYaw: 0.013, moveSpeed: 6.7,
         getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
       },
+
+      // === 저격소총 (Sniper Rifles - 1번 슬롯) ===
+      marshal: {
+        slot: 1, name: '마샬', price: 950, auto: false, fireRate: 0.72, zoomType: 'sniper1',
+        magSize: 5, reloadTime: 1.9, penetration: 3, jumpSpread: 0.22, noScopeSpread: 0.04,
+        recoilPitch: 0.038, recoilYaw: 0.010, moveSpeed: 6.8,
+        getDamage: (dist, part) => ({ head: 202, body: 101, leg: 85 }[part])
+      },
+      outlaw: {
+        slot: 1, name: '아웃로', price: 2400, auto: false, fireRate: 0.48, zoomType: 'sniper1',
+        magSize: 2, reloadTime: 2.0, penetration: 4, jumpSpread: 0.28, noScopeSpread: 0.12,
+        recoilPitch: 0.046, recoilYaw: 0.012, moveSpeed: 6.4,
+        getDamage: (dist, part) => ({ head: 238, body: 140, leg: 119 }[part])
+      },
       operator: {
         slot: 1, name: '오퍼레이터', price: 4700, auto: false, fireRate: 1.15, zoomType: 'sniper',
         magSize: 5, reloadTime: 2.3, penetration: 5, jumpSpread: 0.36, noScopeSpread: 0.22,
         recoilPitch: 0.055, recoilYaw: 0.014, moveSpeed: 5.7,
         getDamage: (dist, part) => ({ head: 255, body: 150, leg: 120 }[part])
       },
+
+      // === 기관총 (Machine Guns - 1번 슬롯) ===
+      ares: {
+        slot: 1, name: '아레스', price: 1600, auto: true, fireRate: 0.085, zoomType: 'holo',
+        magSize: 50, reloadTime: 2.2, penetration: 4, jumpSpread: 0.20, noScopeSpread: 0,
+        recoilPitch: 0.012, recoilYaw: 0.011, moveSpeed: 6.2,
+        getDamage: (dist, part) => dist < 30 ? { head: 72, body: 30, leg: 25 }[part] : { head: 67, body: 28, leg: 23 }[part]
+      },
+      odin: {
+        slot: 1, name: '오딘', price: 3200, auto: true, fireRate: 0.068, zoomType: 'holo',
+        magSize: 100, reloadTime: 2.6, penetration: 5, jumpSpread: 0.24, noScopeSpread: 0,
+        recoilPitch: 0.013, recoilYaw: 0.012, moveSpeed: 5.9,
+        getDamage: (dist, part) => dist < 30 ? { head: 95, body: 38, leg: 32 }[part] : { head: 77, body: 31, leg: 26 }[part]
+      },
+
+      // === 근접무기 [3번 슬롯] ===
       melee: {
         slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, zoomType: 'none',
         magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
         recoilPitch: 0, recoilYaw: 0, moveSpeed: 8.6,
         getDamage: (dist, part, isHeavy = false) => {
-          if (dist > 3.3) return 0;
-          if (isHeavy) return part === 'head' ? 150 : 75; // 우클릭 강공격: 몸통 75(2방), 헤드/백스탭 150(원콤)
-          return part === 'head' ? 100 : 50; // 좌클릭 약공격: 빠른 연속 베기
+          if (dist > 3.5) return 0;
+          if (isHeavy) return part === 'head' ? 150 : 75;
+          return part === 'head' ? 100 : 50;
         }
       }
     };
@@ -850,7 +1042,7 @@
     const credits = 99999;
     let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
     let activeSlot = 2;
-    let ammoState = { sheriff: 6, phantom: 30, vandal: 25, operator: 5, melee: Infinity };
+    let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 7, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
     let isReloading = false, reloadTimer = null;
     let zoomLevel = 0;
     let botStrafeMode = false, currentMap = 'brawl';
@@ -1351,10 +1543,10 @@
 
       // 2. 인체공학적 곡선 손잡이 (고리에서 앞쪽 +X로 뻗어나가는 블랙 & 골드 핸들)
       const handleShape = new THREE.Shape();
-      handleShape.moveTo(0.018, 0.010);
-      handleShape.quadraticCurveTo(0.068, -0.006, 0.118, 0.006);
-      handleShape.lineTo(0.114, -0.022);
-      handleShape.quadraticCurveTo(0.065, -0.032, 0.016, -0.016);
+      handleShape.moveTo(0.018, 0.012);
+      handleShape.quadraticCurveTo(0.068, 0.002, 0.118, -0.010);
+      handleShape.lineTo(0.112, -0.036);
+      handleShape.quadraticCurveTo(0.064, -0.026, 0.016, -0.016);
       handleShape.closePath();
 
       const handleGeo = new THREE.ExtrudeGeometry(handleShape, {
@@ -1367,27 +1559,28 @@
       });
       handleGeo.center();
       const handleMesh = new THREE.Mesh(handleGeo, blackCarbonMat);
-      handleMesh.position.set(0.066, -0.008, 0);
+      handleMesh.position.set(0.066, -0.012, 0);
       spinPivot.add(handleMesh);
 
       // 손잡이 위 황금 & 크림슨 리벳
       const rivet1 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.020, 12), royalGoldMat);
       rivet1.rotation.x = Math.PI / 2;
-      rivet1.position.set(0.048, -0.006, 0);
+      rivet1.position.set(0.048, -0.010, 0);
       const rivet2 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.020, 12), crimsonRedMat);
       rivet2.rotation.x = Math.PI / 2;
-      rivet2.position.set(0.088, -0.006, 0);
+      rivet2.position.set(0.088, -0.014, 0);
       spinPivot.add(rivet1, rivet2);
 
-      // 3. 정방향 초승달 커브드 블레이드: 손잡이 끝에서 앞쪽 위로 휘어 올라가는 발톱형 칼날!
+      // 3. 빨간 가이드선 형태에 맞춘 하단·전방 초승달 커브드 블레이드:
+      // 손잡이 앞끝(0.112)에서 아래쪽으로 호를 그리며 앞쪽(-Y -> +X 전방)으로 날카롭게 휘어지는 발톱 칼날!
       const bladeShape = new THREE.Shape();
-      bladeShape.moveTo(0.110, -0.018);
-      // 바깥쪽 날등 (아래쪽에서 앞쪽 위로 둥글게 휘어 올라가는 황금 날등)
-      bladeShape.bezierCurveTo(0.165, -0.024, 0.225, 0.015, 0.252, 0.088);
-      // 뾰족한 칼끝
-      bladeShape.lineTo(0.244, 0.094);
-      // 안쪽 예리한 커브 날 (위쪽 안으로 오목하게 파인 날)
-      bladeShape.bezierCurveTo(0.205, 0.038, 0.155, 0.012, 0.108, 0.012);
+      bladeShape.moveTo(0.112, -0.004);
+      // 바깥쪽 날등 (위쪽에서 시작해 아래로 깊게 둥글며 앞쪽으로 뻗는 황금 날등)
+      bladeShape.bezierCurveTo(0.168, -0.012, 0.215, -0.065, 0.258, -0.056);
+      // 뾰족한 칼끝 (앞쪽-약간 위를 향하는 호랑이 발톱 끝)
+      bladeShape.lineTo(0.252, -0.046);
+      // 안쪽 예리한 커브 날 (손가락 아래쪽을 따라 오목하게 파인 내측 날)
+      bladeShape.bezierCurveTo(0.205, -0.048, 0.155, -0.036, 0.106, -0.034);
       bladeShape.closePath();
 
       const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, {
@@ -1402,12 +1595,12 @@
       bladeMesh.position.set(0, 0, -0.0025);
       spinPivot.add(bladeMesh);
 
-      // 칼날 바깥 등 황금 장식
+      // 칼날 바깥 등 황금 장식 (빨간 가이드선 외곽 곡선을 따라 빛나는 골드 엣지)
       const goldSpineShape = new THREE.Shape();
-      goldSpineShape.moveTo(0.114, -0.020);
-      goldSpineShape.bezierCurveTo(0.168, -0.026, 0.226, 0.012, 0.253, 0.088);
-      goldSpineShape.lineTo(0.246, 0.084);
-      goldSpineShape.bezierCurveTo(0.218, 0.016, 0.164, -0.016, 0.114, -0.011);
+      goldSpineShape.moveTo(0.114, -0.002);
+      goldSpineShape.bezierCurveTo(0.170, -0.010, 0.216, -0.064, 0.258, -0.056);
+      goldSpineShape.lineTo(0.251, -0.059);
+      goldSpineShape.bezierCurveTo(0.210, -0.068, 0.165, -0.018, 0.114, -0.009);
       goldSpineShape.closePath();
       const goldSpineGeo = new THREE.ExtrudeGeometry(goldSpineShape, { depth: 0.006, bevelEnabled: false });
       const goldSpineMesh = new THREE.Mesh(goldSpineGeo, royalGoldMat);
@@ -1415,9 +1608,9 @@
       spinPivot.add(goldSpineMesh);
 
       // 칼날 끝부분 붉은 챔피언스 하이라이트
-      const redTip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.007, 0.0075), crimsonRedMat);
-      redTip.position.set(0.236, 0.068, 0);
-      redTip.rotation.z = 1.15;
+      const redTip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.006, 0.0075), crimsonRedMat);
+      redTip.position.set(0.238, -0.052, 0);
+      redTip.rotation.z = 0.22;
       spinPivot.add(redTip);
 
       // 스핀 잔상 궤적 링
@@ -1427,7 +1620,7 @@
         opacity: 0.0,
         side: THREE.DoubleSide
       });
-      const spinTrailRing = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.255, 32, 1, -0.9, 2.4), trailMat);
+      const spinTrailRing = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.255, 32, 1, -1.6, 2.4), trailMat);
       spinPivot.add(spinTrailRing);
 
       // 킬 오라 와이어프레임
@@ -1442,10 +1635,6 @@
       bladeAura.position.set(-0.004, 0.002, -0.0045);
       spinPivot.add(bladeAura);
 
-      // 기본 파지 각도:
-      // rotation.y = 2.18 -> 로컬 +X(칼날)는 화면 앞쪽 왼쪽(-X, -Z)으로 뻗고,
-      // 로컬 -X/+Z(오른손목·팔)는 화면 우측 하단(+X, -Y, +Z)에서 자연스럽게 올라오며,
-      // 로컬 -Z(칼의 왼쪽 옆면)가 플레이어 카메라 정면을 향함!
       rootGroup.rotation.set(0.12, 2.18, -0.14);
 
       rootGroup.userData = {
@@ -1461,12 +1650,192 @@
       return rootGroup;
     }
 
+    function buildCompactPistolModel(opts = {}) {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const slideMat = new THREE.MeshStandardMaterial({ color: opts.slideColor || 0x2c3036, metalness: 0.78, roughness: 0.3 });
+      const frameMat = new THREE.MeshStandardMaterial({ color: opts.frameColor || 0x191b1f, metalness: 0.5, roughness: 0.5 });
+      const glowMat = new THREE.MeshBasicMaterial({ color: opts.sightColor || 0x00ffcc });
+
+      const slideLen = opts.slideLen || 0.24;
+      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.048, slideLen), slideMat);
+      slide.position.set(0, 0.032, -slideLen * 0.45);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.024, slideLen * 0.9), frameMat);
+      frame.position.set(0, 0.002, -slideLen * 0.42);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.125, 0.056), frameMat);
+      grip.rotation.x = 0.24;
+      grip.position.set(0, -0.062, 0.045);
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.012, 0.016), glowMat);
+      frontSight.position.set(0, 0.06, -slideLen * 0.85);
+      group.add(slide, frame, grip, frontSight);
+
+      if (opts.suppressor) {
+        const supp = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.18, 14), frameMat);
+        supp.rotation.x = Math.PI / 2;
+        supp.position.set(0, 0.032, -slideLen - 0.05);
+        group.add(supp);
+      }
+      if (opts.extMag) {
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.11, 0.042), slideMat);
+        mag.rotation.x = 0.24;
+        mag.position.set(0, -0.14, 0.065);
+        group.add(mag);
+      }
+      return group;
+    }
+
+    function buildSmgModel(opts = {}) {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const bodyMat = new THREE.MeshStandardMaterial({ color: opts.bodyColor || 0x262a30, metalness: 0.72, roughness: 0.35 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.65, roughness: 0.45 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.068, 0.28), bodyMat);
+      body.position.set(0, 0.015, -0.04);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.16, 0.046), darkMat);
+      mag.rotation.x = opts.angledMag ? -0.25 : -0.05;
+      mag.position.set(0, -0.095, -0.08);
+      const sight = buildHoloSight();
+      sight.position.set(0, 0.052, -0.02);
+      group.add(body, mag, sight);
+      if (opts.suppressor) {
+        const supp = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.20, 14), darkMat);
+        supp.rotation.x = Math.PI / 2;
+        supp.position.set(0, 0.018, -0.27);
+        group.add(supp);
+      } else {
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.12, 12), darkMat);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, 0.018, -0.23);
+        group.add(barrel);
+      }
+      return group;
+    }
+
+    function buildShotgunModel(opts = {}) {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const bodyMat = new THREE.MeshStandardMaterial({ color: opts.bodyColor || 0x2d3138, metalness: 0.7, roughness: 0.38 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x17191d, metalness: 0.8, roughness: 0.3 });
+      const len = opts.short ? 0.24 : 0.44;
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.072, len), bodyMat);
+      receiver.position.set(0, 0.015, -len * 0.35);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, len + 0.14, 14), darkMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.032, -len * 0.55);
+      const underTube = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, len + 0.08, 12), darkMat);
+      underTube.rotation.x = Math.PI / 2;
+      underTube.position.set(0, 0.002, -len * 0.5);
+      group.add(receiver, barrel, underTube);
+      if (opts.drumMag) {
+        const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.065, 16), darkMat);
+        drum.rotation.z = Math.PI / 2;
+        drum.position.set(0, -0.055, -0.10);
+        group.add(drum);
+      }
+      return group;
+    }
+
+    function buildBulldogModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2f353d, metalness: 0.72, roughness: 0.35 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x181a1e, metalness: 0.7, roughness: 0.4 });
+      const bullpupBody = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.084, 0.42), bodyMat);
+      bullpupBody.position.set(0, 0.014, 0.02);
+      const rearMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.13, 0.068), darkMat);
+      rearMag.position.set(0, -0.075, 0.14);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.16, 12), darkMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.022, -0.26);
+      const sight = buildHoloSight();
+      sight.position.set(0, 0.06, -0.06);
+      group.add(bullpupBody, rearMag, barrel, sight);
+      return group;
+    }
+
+    function buildGuardianModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x34383e, metalness: 0.78, roughness: 0.3 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x181a1f, metalness: 0.82, roughness: 0.28 });
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.072, 0.36), bodyMat);
+      receiver.position.set(0, 0.012, -0.02);
+      const longBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.34, 12), darkMat);
+      longBarrel.rotation.x = Math.PI / 2;
+      longBarrel.position.set(0, 0.02, -0.36);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.062), darkMat);
+      mag.position.set(0, -0.065, -0.08);
+      const sight = buildHoloSight();
+      sight.position.set(0, 0.052, -0.02);
+      group.add(receiver, longBarrel, mag, sight);
+      return group;
+    }
+
+    function buildSniperModel(opts = {}) {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const bodyMat = new THREE.MeshStandardMaterial({ color: opts.bodyColor || 0x2d3238, metalness: 0.75, roughness: 0.3 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.85, roughness: 0.25 });
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.082, 0.40), bodyMat);
+      receiver.position.set(0, 0.01, -0.02);
+      const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.020, 0.24, 16), darkMat);
+      scopeTube.rotation.x = Math.PI / 2;
+      scopeTube.position.set(0, 0.072, -0.02);
+      group.add(receiver, scopeTube);
+
+      if (opts.doubleBarrel) {
+        const bLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.014, 0.44, 12), darkMat);
+        bLeft.rotation.x = Math.PI / 2; bLeft.position.set(-0.015, 0.02, -0.42);
+        const bRight = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.014, 0.44, 12), darkMat);
+        bRight.rotation.x = Math.PI / 2; bRight.position.set(0.015, 0.02, -0.42);
+        group.add(bLeft, bRight);
+      } else {
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.015, 0.44, 12), darkMat);
+        barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.02, -0.42);
+        group.add(barrel);
+      }
+      return group;
+    }
+
+    function buildLmgModel(opts = {}) {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const bodyMat = new THREE.MeshStandardMaterial({ color: opts.bodyColor || 0x292d34, metalness: 0.78, roughness: 0.32 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.85, roughness: 0.28 });
+      const heavyBody = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.095, 0.44), bodyMat);
+      heavyBody.position.set(0, 0.015, -0.04);
+      const boxMag = new THREE.Mesh(new THREE.BoxGeometry(0.088, 0.125, 0.14), darkMat);
+      boxMag.position.set(-0.02, -0.085, -0.10);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.020, 0.32, 14), darkMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.022, -0.40);
+      const sight = buildHoloSight();
+      sight.position.set(0, 0.068, -0.02);
+      group.add(heavyBody, boxMag, barrel, sight);
+      return group;
+    }
+
     const models = {
+      classic: buildCompactPistolModel({ slideLen: 0.21, slideColor: 0x353940 }),
+      shorty: buildShotgunModel({ short: true, bodyColor: 0x3a322d }),
+      frenzy: buildCompactPistolModel({ slideLen: 0.23, slideColor: 0x2c343d, extMag: true }),
+      ghost: buildCompactPistolModel({ slideLen: 0.24, slideColor: 0x23262b, suppressor: true }),
+      bandit: buildSheriffModel(),
       sheriff: buildSheriffModel(),
+      stinger: buildSmgModel({ angledMag: true, bodyColor: 0x2b3038 }),
+      spectre: buildSmgModel({ suppressor: true, bodyColor: 0x23272e }),
+      bucky: buildShotgunModel({ short: false, bodyColor: 0x2d3238 }),
+      judge: buildShotgunModel({ short: false, drumMag: true, bodyColor: 0x252930 }),
+      bulldog: buildBulldogModel(),
+      guardian: buildGuardianModel(),
       phantom: buildPhantomModel(),
       vandal: buildVandalModel(),
       vandal_champions2021: buildChampions2021VandalModel(),
+      marshal: buildSniperModel({ bodyColor: 0x323840 }),
+      outlaw: buildSniperModel({ doubleBarrel: true, bodyColor: 0x2c2829 }),
       operator: buildOperatorModel(),
+      ares: buildLmgModel({ bodyColor: 0x2c3138 }),
+      odin: buildLmgModel({ bodyColor: 0x22252b }),
       melee: buildMeleeModel(),
       melee_champions2021: buildChampions2021KarambitModel()
     };
@@ -1519,10 +1888,10 @@
 
     function setZoom(level) {
       const w = WEAPONS[getCurrentWeaponKey()];
-      if (w.zoomType === 'none' || isReloading) level = 0;
+      if (!w || w.zoomType === 'none' || w.zoomType === 'burst3' || w.zoomType === 'airburst' || isReloading) level = 0;
       zoomLevel = level;
-      const isHolo = w.zoomType === 'holo' && zoomLevel > 0;
-      const isSniper = w.zoomType === 'sniper' && zoomLevel > 0;
+      const isHolo = (w.zoomType === 'holo' || w.zoomType === 'burst3_holo' || w.zoomType === 'burst4') && zoomLevel > 0;
+      const isSniper = (w.zoomType === 'sniper' || w.zoomType === 'sniper1') && zoomLevel > 0;
       document.getElementById('crosshair').style.display = zoomLevel > 0 ? 'none' : 'block';
       document.getElementById('adsReticle').style.display = isHolo ? 'block' : 'none';
       document.getElementById('sniperScope').style.display = isSniper ? 'block' : 'none';
@@ -2667,7 +3036,7 @@
       s2.className = activeSlot === 2 ? 'slot-active' : '';
       s3.className = activeSlot === 3 ? 'slot-active' : '';
 
-      ['sheriff', 'phantom', 'vandal', 'operator'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k));
+      ['classic', 'shorty', 'frenzy', 'ghost', 'bandit', 'sheriff', 'stinger', 'spectre', 'bucky', 'judge', 'bulldog', 'guardian', 'phantom', 'vandal', 'marshal', 'outlaw', 'operator', 'ares', 'odin'].forEach(k => { const el = document.getElementById('buy-' + k); if (el) el.classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k); });
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
       const isChamp = equippedSkins.vandal === 'champions2021';
       const badge = document.getElementById('vandalSkinBadge');
@@ -2921,11 +3290,6 @@
         spread = w.jumpSpread * 0.45;
       }
 
-      const spreadX = (Math.random() - 0.5) * spread;
-      const spreadY = (Math.random() - 0.5) * spread;
-
-      raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
-
       if (key === 'melee' && isMeleeHeavySlash) {
         playKarambitWhooshSound(0.75);
         setTimeout(() => playWeaponSound('melee', 0), 55);
@@ -2934,132 +3298,142 @@
       }
 
       const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes];
-      let hits = raycaster.intersectObjects(targets);
+      const isClassicRightClick = (key === 'classic' && isHeavyAttack);
+      const pelletCount = isClassicRightClick ? 3 : (w.pellets || 1);
+      const extraPelletSpread = isClassicRightClick ? 0.065 : (w.pelletSpread || 0);
 
-      // 오퍼레이터 전용 미세 히트박스 보정 (조준선 스침 판정 완화)
-      if (key === 'operator' && hits.length === 0) {
-        const subOffsets = [
-          [0.008, 0], [-0.008, 0], [0, 0.008], [0, -0.008],
-          [0.006, 0.006], [-0.006, 0.006], [0.006, -0.006], [-0.006, -0.006]
-        ];
-        for (const [ox, oy] of subOffsets) {
-          raycaster.setFromCamera(new THREE.Vector2(spreadX + ox, spreadY + oy), camera);
-          const subHits = raycaster.intersectObjects(targets);
-          if (subHits.length > 0) {
-            hits = subHits;
-            break;
-          }
-        }
-        raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
-      }
-
-      if (key !== 'melee') {
-        const muzzleWorld = new THREE.Vector3();
-        if (gunGroup.visible) {
-          gunGroup.getWorldPosition(muzzleWorld);
-          const forwardDir = new THREE.Vector3();
-          camera.getWorldDirection(forwardDir);
-          muzzleWorld.addScaledVector(forwardDir, 0.35);
-        } else {
-          camera.getWorldPosition(muzzleWorld);
-          muzzleWorld.y -= 0.12;
-        }
-
-        let tracerEnd = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 120);
-        const wallHits = raycaster.intersectObjects(wallMeshes);
-        if (wallHits.length > 0 && wallHits[0].distance < 120) {
-          tracerEnd = wallHits[0].point;
-        }
-        if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
-          tracerEnd = hits[0].point;
-        }
-        const isChamp2021 = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
-        spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator' || isChamp2021);
-      }
-
-      const hitTargetsSet = new Set();
       let multiScoreCount = 0;
       let anyHeadshotKill = false;
+      let lastFinisherPos = null;
 
-      for (const hit of hits) {
-        if (hitTargetsSet.size >= w.penetration) break;
-        const hitObj = hit.object;
-        const part = hitObj.userData.part;
-        const distance = hit.distance;
-        const baseDmg = key === 'melee' ? w.getDamage(distance, part, isMeleeHeavySlash) : w.getDamage(distance, part);
-        if (baseDmg <= 0) continue;
+      for (let pIdx = 0; pIdx < pelletCount; pIdx++) {
+        const pSpreadX = (Math.random() - 0.5) * (spread + extraPelletSpread);
+        const pSpreadY = (Math.random() - 0.5) * (spread + extraPelletSpread);
 
-        if (hitObj.userData.targetType === 'bot') {
-          const botRoot = hitObj.userData.botRoot;
-          if (hitTargetsSet.has(botRoot)) continue;
-          hitTargetsSet.add(botRoot);
+        raycaster.setFromCamera(new THREE.Vector2(pSpreadX, pSpreadY), camera);
+        let hits = raycaster.intersectObjects(targets);
 
-          const penIndex = hitTargetsSet.size - 1;
-          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-          const dmg = Math.round(baseDmg * penMult);
-          spawnHitSpark(hit.point, part === 'head');
-
-          const bd = botRoot.userData;
-          let rem = dmg;
-          if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
-          bd.hp -= rem;
-          if (bd.hp <= 0) {
-            multiScoreCount++;
-            if (part === 'head') anyHeadshotKill = true;
-            respawnBot(botRoot);
+        if ((key === 'operator' || key === 'marshal' || key === 'outlaw') && hits.length === 0) {
+          const subOffsets = [
+            [0.008, 0], [-0.008, 0], [0, 0.008], [0, -0.008],
+            [0.006, 0.006], [-0.006, 0.006], [0.006, -0.006], [-0.006, -0.006]
+          ];
+          for (const [ox, oy] of subOffsets) {
+            raycaster.setFromCamera(new THREE.Vector2(pSpreadX + ox, pSpreadY + oy), camera);
+            const subHits = raycaster.intersectObjects(targets);
+            if (subHits.length > 0) {
+              hits = subHits;
+              break;
+            }
           }
-        } else if (hitObj.userData.targetType === 'player') {
-          const targetPeerId = hitObj.userData.peerId;
-          const rp = remotePlayers[targetPeerId];
-          if (!rp || !rp.mesh.visible || rp.team === myTeam) continue;
-          if (hitTargetsSet.has(targetPeerId)) continue;
-          hitTargetsSet.add(targetPeerId);
+          raycaster.setFromCamera(new THREE.Vector2(pSpreadX, pSpreadY), camera);
+        }
 
-          const penIndex = hitTargetsSet.size - 1;
-          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-          const dmg = Math.round(baseDmg * penMult);
-          spawnHitSpark(hit.point, part === 'head');
-
-          const myNick = document.getElementById('nickInput').value || '플레이어';
-          const conn = connections[targetPeerId];
-          if (conn && conn.open) {
-            conn.send({
-              type: 'hit', targetId: targetPeerId, dmg,
-              attackerNick: myNick, attackerTeam: myTeam,
-              weaponName: w.name, isHead: part === 'head'
-            });
+        if (key !== 'melee') {
+          const muzzleWorld = new THREE.Vector3();
+          if (gunGroup.visible) {
+            gunGroup.getWorldPosition(muzzleWorld);
+            const forwardDir = new THREE.Vector3();
+            camera.getWorldDirection(forwardDir);
+            muzzleWorld.addScaledVector(forwardDir, 0.35);
+          } else {
+            camera.getWorldPosition(muzzleWorld);
+            muzzleWorld.y -= 0.12;
           }
-        } else if (hitObj.userData.targetType === 'brawlBot') {
-          const botRoot = hitObj.userData.botRoot;
-          const bd = botRoot.userData;
-          if (bd.dead || bd.team === myTeam) continue;
-          if (hitTargetsSet.has(botRoot)) continue;
-          hitTargetsSet.add(botRoot);
 
-          const penIndex = hitTargetsSet.size - 1;
-          const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-          const dmg = Math.round(baseDmg * penMult);
-          spawnHitSpark(hit.point, part === 'head');
+          let tracerEnd = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 120);
+          const wallHits = raycaster.intersectObjects(wallMeshes);
+          if (wallHits.length > 0 && wallHits[0].distance < 120) {
+            tracerEnd = wallHits[0].point;
+          }
+          if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
+            tracerEnd = hits[0].point;
+          }
+          const isChamp2021 = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
+          spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator' || isChamp2021);
+        }
 
-          let rem = dmg;
-          if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
-          bd.hp -= rem;
-          if (bd.hp <= 0) {
-            bd.dead = true;
-            botRoot.visible = false;
+        const hitTargetsSet = new Set();
+        for (const hit of hits) {
+          if (hitTargetsSet.size >= w.penetration) break;
+          const hitObj = hit.object;
+          const part = hitObj.userData.part;
+          const distance = hit.distance;
+          const baseDmg = key === 'melee' ? w.getDamage(distance, part, isMeleeHeavySlash) : w.getDamage(distance, part);
+          if (baseDmg <= 0) continue;
+
+          if (hitObj.userData.targetType === 'bot') {
+            const botRoot = hitObj.userData.botRoot;
+            if (hitTargetsSet.has(botRoot)) continue;
+            hitTargetsSet.add(botRoot);
+
+            const penIndex = hitTargetsSet.size - 1;
+            const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
+            const dmg = Math.round(baseDmg * penMult);
+            if (pIdx === 0 || pelletCount === 1) spawnHitSpark(hit.point, part === 'head');
+
+            const bd = botRoot.userData;
+            let rem = dmg;
+            if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+            bd.hp -= rem;
+            if (bd.hp <= 0) {
+              multiScoreCount++;
+              if (part === 'head') anyHeadshotKill = true;
+              lastFinisherPos = hit.point.clone();
+              respawnBot(botRoot);
+            }
+          } else if (hitObj.userData.targetType === 'player') {
+            const targetPeerId = hitObj.userData.peerId;
+            const rp = remotePlayers[targetPeerId];
+            if (!rp || !rp.mesh.visible || rp.team === myTeam) continue;
+            if (hitTargetsSet.has(targetPeerId)) continue;
+            hitTargetsSet.add(targetPeerId);
+
+            const penIndex = hitTargetsSet.size - 1;
+            const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
+            const dmg = Math.round(baseDmg * penMult);
+            if (pIdx === 0 || pelletCount === 1) spawnHitSpark(hit.point, part === 'head');
 
             const myNick = document.getElementById('nickInput').value || '플레이어';
-            const isHead = part === 'head';
-            triggerScoreStreak(1, isHead);
-            addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
+            const conn = connections[targetPeerId];
+            if (conn && conn.open) {
+              conn.send({
+                type: 'hit', targetId: targetPeerId, dmg,
+                attackerNick: myNick, attackerTeam: myTeam,
+                weaponName: w.name, isHead: part === 'head'
+              });
+            }
+          } else if (hitObj.userData.targetType === 'brawlBot') {
+            const botRoot = hitObj.userData.botRoot;
+            const bd = botRoot.userData;
+            if (bd.dead || bd.team === myTeam) continue;
+            if (hitTargetsSet.has(botRoot)) continue;
+            hitTargetsSet.add(botRoot);
 
-            // 상대 팀이 전부 죽었는지 확인 -> 마지막 적 처치일 때만 마무리 모션 발동!
-            const { redAlive, blueAlive } = countAliveTeams();
-            const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
-            const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
-            if (remainingEnemies === 0) {
-              const usedChamp = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
-              endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
+            const penIndex = hitTargetsSet.size - 1;
+            const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
+            const dmg = Math.round(baseDmg * penMult);
+            if (pIdx === 0 || pelletCount === 1) spawnHitSpark(hit.point, part === 'head');
+
+            let rem = dmg;
+            if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+            bd.hp -= rem;
+            if (bd.hp <= 0) {
+              bd.dead = true;
+              botRoot.visible = false;
+
+              const myNick = document.getElementById('nickInput').value || '플레이어';
+              const isHead = part === 'head';
+              triggerScoreStreak(1, isHead);
+              addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
+
+              const { redAlive, blueAlive } = countAliveTeams();
+              const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+              const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
+              if (remainingEnemies === 0) {
+                const usedChamp = (key === 'vandal' && equippedSkins.vandal === 'champions2021');
+                endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
+              }
             }
           }
         }
@@ -3183,10 +3557,15 @@
         const curK = getCurrentWeaponKey();
         const w = WEAPONS[curK];
         if (curK === 'melee') {
-          if (fireCooldown <= 0) fireWeapon(true); // 우클릭 강공격!
+          if (fireCooldown <= 0) fireWeapon(true); // 우클릭 회전 찌르기 강공격!
+        } else if (curK === 'classic') {
+          if (fireCooldown <= 0) {
+            fireWeapon(true);
+            fireCooldown = 0.42;
+          }
         } else if (w.zoomType === 'sniper') {
           setZoom((zoomLevel + 1) % 3);
-        } else if (w.zoomType === 'holo') {
+        } else if (w.zoomType === 'sniper1' || w.zoomType === 'holo' || w.zoomType === 'burst3_holo' || w.zoomType === 'burst4') {
           setZoom(zoomLevel === 0 ? 1 : 0);
         }
       }
@@ -3344,11 +3723,28 @@
         const swing = Math.sin(t * Math.PI);
         if (isKarambitEquipped && karambitModel) {
           if (isMeleeHeavySlash) {
-            // 우클릭 강공격: 고리를 한 바퀴 돌리며 대각선으로 강하게 내려찍는 피니셔 슬래시
-            gunGroup.position.set(0.18 - swing * 0.28, -0.06 - swing * 0.14, -0.32 - swing * 0.32);
-            gunGroup.rotation.set(0.25 - swing * 0.85, swing * 0.75, -0.4 + swing * 1.45);
-            karambitModel.userData.spinPivot.rotation.z = -t * Math.PI * 2;
-            karambitModel.userData.trailMat.opacity = swing * 0.88;
+            // 우클릭 찌르기: 1단계(약간 왼쪽으로 회전) -> 2단계(앞으로 날카롭게 찌르기) -> 3단계(한 바퀴 회전하며 원래 자세로 복귀)
+            if (t < 0.25) {
+              const p1 = t / 0.25;
+              gunGroup.position.set(0.21 - p1 * 0.08, -0.14 + p1 * 0.03, -0.34 + p1 * 0.05);
+              gunGroup.rotation.set(p1 * 0.12, p1 * 0.42, p1 * 0.35);
+              karambitModel.userData.spinPivot.rotation.z = -p1 * 0.5;
+              karambitModel.userData.trailMat.opacity = p1 * 0.35;
+            } else if (t < 0.60) {
+              const p2 = (t - 0.25) / 0.35;
+              const thrust = Math.sin(p2 * Math.PI * 0.5);
+              gunGroup.position.set(0.13 - thrust * 0.05, -0.11 + thrust * 0.02, -0.29 - thrust * 0.34);
+              gunGroup.rotation.set(0.12 - thrust * 0.22, 0.42 - thrust * 0.25, 0.35 - thrust * 0.25);
+              karambitModel.userData.spinPivot.rotation.z = -0.5;
+              karambitModel.userData.trailMat.opacity = 0.65;
+            } else {
+              const p3 = (t - 0.60) / 0.40;
+              const easeOut = 1 - Math.pow(1 - p3, 2);
+              gunGroup.position.set(0.08 + easeOut * 0.13, -0.09 - easeOut * 0.05, -0.63 + easeOut * 0.29);
+              gunGroup.rotation.set(-0.10 * (1 - easeOut), 0.17 * (1 - easeOut), 0.10 * (1 - easeOut));
+              karambitModel.userData.spinPivot.rotation.z = -0.5 - easeOut * (Math.PI * 2 - 0.5);
+              karambitModel.userData.trailMat.opacity = (1 - easeOut) * 0.75;
+            }
           } else if (meleeComboStep === 1) {
             // 1타: 왼쪽으로 베기 (우 -> 좌 가로 슬래시)
             const sweep = Math.cos(t * Math.PI);
