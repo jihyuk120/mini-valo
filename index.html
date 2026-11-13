@@ -15,7 +15,6 @@
     #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
     #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
 
-    /* 히트 이펙트 (크로스헤어 대각선 히트마커) */
     #hitX {
       position: fixed; top: 50%; left: 50%; width: 22px; height: 22px;
       transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 11;
@@ -27,6 +26,12 @@
     }
     #hitX::before { top: 10px; left: 0; width: 22px; height: 2px; }
     #hitX::after { top: 0; left: 10px; width: 2px; height: 22px; }
+
+    #reloadMsg {
+      position: fixed; top: 56%; left: 50%; transform: translate(-50%, 0);
+      color: #ffcc00; font-size: 16px; font-weight: bold; letter-spacing: 2px;
+      pointer-events: none; z-index: 10; display: none; text-shadow: 1px 1px 3px black;
+    }
 
     /* 하단 상태창 */
     #hud {
@@ -41,13 +46,16 @@
     .hp-val { font-size: 32px; color: #ece8e1; }
     .shield-val { font-size: 24px; color: #00ffcc; margin-left: 10px; }
     .regen-tag { font-size: 13px; color: #7ef9ff; display: block; margin-top: 2px; }
+    .ammo-val { font-size: 28px; color: #00ffcc; }
+    .slot-bar { font-size: 12px; color: #aaa; margin-top: 4px; }
+    .slot-active { color: #ff4655; font-weight: bold; }
 
     #killfeed {
       position: fixed; top: 20px; right: 25px; color: #00ffcc; font-size: 15px; font-weight: bold;
       text-align: right; pointer-events: none; z-index: 5; line-height: 1.5;
     }
 
-    /* 오버레이 (ESC 설정 & B 상점) */
+    /* 오버레이 */
     .modal {
       position: fixed; inset: 0; background: rgba(15, 25, 35, 0.92); color: white;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -87,14 +95,14 @@
   <!-- ESC / 시작 메뉴 -->
   <div id="overlay" class="modal">
     <h1>MINI-VALO</h1>
-    <p id="menuSubtitle">훈련장 모드 (B: 무기/보호막 상점 | ESC: 설정)</p>
+    <p id="menuSubtitle">훈련장 모드 (1/2/3: 무기 교체 | R: 재장전 | B: 상점 | ESC: 설정)</p>
     <div class="settings-box">
       <label for="sensSlider">마우스 감도: <span id="sensValue" style="color:#00ffcc; font-weight:bold;">1.00</span></label><br><br>
       <input type="range" id="sensSlider" min="0.1" max="3.0" step="0.05" value="1.0">
     </div>
     <button id="startBtn" class="btn-primary">게임 시작 / 계속하기</button>
     <p style="color:#aaa; font-size:13px; margin-top:18px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | SPACE: 점프 | E: 이동방향 대시 | B: 상점
+      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기(반동 감소) | E: 대시 | R: 재장전 | 1·2·3: 무기 슬롯
     </p>
   </div>
 
@@ -106,25 +114,25 @@
     </div>
     <div class="shop-grid">
       <div class="shop-col">
-        <h2>무기 (WEAPONS)</h2>
+        <h2>무기 (1번 주무기 / 2번 보조무기)</h2>
         <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')">
           <div>
-            <div class="item-title">셰리프 (Sheriff)</div>
-            <div class="item-desc">0~30m: 159/55/46 | 30m+: 145/50/42</div>
+            <div class="item-title">[2번] 셰리프 (Sheriff)</div>
+            <div class="item-desc">6발 | 0~30m: 159/55/46 | 30m+: 145/50/42</div>
           </div>
           <div class="item-price">800 ¤</div>
         </div>
         <div class="shop-item" id="buy-phantom" onclick="buyWeapon('phantom')">
           <div>
-            <div class="item-title">팬텀 (Phantom)</div>
-            <div class="item-desc">0~15m: 156/39/33 | 15~30m: 140/35/29 | 30m+: 124/31/26</div>
+            <div class="item-title">[1번] 팬텀 (Phantom)</div>
+            <div class="item-desc">30발 | 0~15m: 156/39/33 | 15~30m: 140/35/29</div>
           </div>
           <div class="item-price">2,900 ¤</div>
         </div>
         <div class="shop-item" id="buy-vandal" onclick="buyWeapon('vandal')">
           <div>
-            <div class="item-title">밴달 (Vandal)</div>
-            <div class="item-desc">전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div>
+            <div class="item-title">[1번] 밴달 (Vandal)</div>
+            <div class="item-desc">25발 | 전 거리 동일: 헤드 160 / 몸 40 / 다리 34</div>
           </div>
           <div class="item-price">2,900 ¤</div>
         </div>
@@ -160,6 +168,7 @@
 
   <div id="crosshair"></div>
   <div id="hitX"></div>
+  <div id="reloadMsg">재장전 중...</div>
   <div id="killfeed"></div>
 
   <div id="hud">
@@ -169,11 +178,15 @@
       <span class="regen-tag" id="regenText">보호막 없음 (B키로 구매)</span>
     </div>
     <div class="hud-box" style="text-align:center;">
-      크레딧: <span id="creditText" style="color:#00ffcc;">3900</span> ¤ | 처치: <span id="score">0</span>
+      크레딧: <span id="creditText" style="color:#00ffcc;">3900</span> ¤ | 처치: <span id="score">0</span><br>
+      <span style="font-size:13px; color:#ccc;">대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span></span>
     </div>
     <div class="hud-box" style="text-align:right;">
-      무기: <span id="weaponText" style="color:#ff4655;">셰리프</span><br>
-      대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span>
+      <span id="weaponText" style="color:#ff4655; font-size:18px;">셰리프</span>
+      <span class="ammo-val" id="ammoText">6 / 6</span>
+      <div class="slot-bar">
+        <span id="slot1">[1] 없음</span> | <span id="slot2" class="slot-active">[2] 셰리프</span> | <span id="slot3">[3] 근접</span>
+      </div>
     </div>
   </div>
 
@@ -183,10 +196,11 @@
   <script type="module">
     import * as THREE from 'three';
 
-    // === 발로란트 실제 거리별 데미지 스탯 ===
+    // === 무기 스탯 (장탄수, 재장전 시간, 밴달 연사속도 조정, 거리별 데미지) ===
     const WEAPONS = {
       sheriff: {
-        name: '셰리프', price: 800, auto: false, fireRate: 0.25,
+        slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25,
+        magSize: 6, reloadTime: 1.5,
         recoilPitch: 0.055, recoilYaw: 0.015,
         getDamage: (dist, part) => {
           if (dist < 30) return { head: 159, body: 55, leg: 46 }[part];
@@ -194,7 +208,8 @@
         }
       },
       phantom: {
-        name: '팬텀', price: 2900, auto: true, fireRate: 0.095,
+        slot: 1, name: '팬텀', price: 2900, auto: true, fireRate: 0.095,
+        magSize: 30, reloadTime: 1.8,
         recoilPitch: 0.018, recoilYaw: 0.012,
         getDamage: (dist, part) => {
           if (dist < 15) return { head: 156, body: 39, leg: 33 }[part];
@@ -203,9 +218,16 @@
         }
       },
       vandal: {
-        name: '밴달', price: 2900, auto: true, fireRate: 0.105,
-        recoilPitch: 0.028, recoilYaw: 0.020,
+        slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135, // 밴달 연사속도 하향 조정
+        magSize: 25, reloadTime: 1.8,
+        recoilPitch: 0.030, recoilYaw: 0.022,
         getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
+      },
+      melee: {
+        slot: 3, name: '전술 단검', price: 0, auto: false, fireRate: 0.4,
+        magSize: Infinity, reloadTime: 0,
+        recoilPitch: 0, recoilYaw: 0,
+        getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0)
       }
     };
 
@@ -218,12 +240,23 @@
 
     let credits = 3900;
     let score = 0;
-    let currentWeaponKey = 'sheriff';
+
+    // 1번(주무기), 2번(보조무기), 3번(근접) 슬롯 상태
+    let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
+    let activeSlot = 2;
+    let ammoState = { sheriff: 6, phantom: 30, vandal: 25, melee: Infinity };
+    let isReloading = false;
+    let reloadTimer = null;
+
     let currentShieldKey = 'none';
     let playerHp = 100;
     let playerShield = 0;
     let shieldReserve = 0;
     let isShopOpen = false;
+
+    function getCurrentWeaponKey() {
+      return slotWeapons[activeSlot] || 'melee';
+    }
 
     // === 3D 씬 & 카메라 ===
     const scene = new THREE.Scene();
@@ -249,7 +282,7 @@
     scene.add(floor);
     scene.add(new THREE.GridHelper(120, 60, 0xff4655, 0x34495e));
 
-    // === 1인칭 무기 그룹 & 디테일한 셰리프 모델 ===
+    // === 1인칭 무기 모델 (셰리프 / 라이플 / 근접 단검) ===
     const gunGroup = new THREE.Group();
 
     function buildSheriffModel() {
@@ -260,44 +293,35 @@
       const gripMat = new THREE.MeshStandardMaterial({ color: 0x18191b, roughness: 0.85 });
       const sightMat = new THREE.MeshBasicMaterial({ color: 0xff9900 });
 
-      // 육중한 상단 총열 슈라우드
       const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.068, 0.28), frameMetal);
       barrel.position.set(0, 0.032, -0.14);
 
-      // 하단 언더배럴 레일
       const underBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.025, 0.22), darkMetal);
       underBarrel.position.set(0, -0.01, -0.16);
 
-      // 주황색 가늠쇠 (앞쪽 조준기)
       const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.022), sightMat);
       frontSight.position.set(0, 0.072, -0.255);
 
-      // 가늠자 (뒤쪽 조준기)
       const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.014, 0.02), darkMetal);
       rearSight.position.set(0, 0.071, 0.03);
 
-      // 은색 회전 리볼버 실린더
       const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.085, 16), chromeMetal);
       cylinder.rotation.x = Math.PI / 2;
       cylinder.position.set(0, 0.018, 0.015);
 
-      // 실린더 감싸는 상부/후방 프레임
       const topStrap = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.016, 0.11), frameMetal);
       topStrap.position.set(0, 0.058, 0.015);
 
       const rearFrame = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.075, 0.065), frameMetal);
       rearFrame.position.set(0, 0.02, 0.085);
 
-      // 해머 (공이치기)
       const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.025, 0.025), darkMetal);
       hammer.rotation.x = -0.5;
       hammer.position.set(0, 0.055, 0.12);
 
-      // 방아쇠 울 & 방아쇠
       const triggerGuard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.065), darkMetal);
       triggerGuard.position.set(0, -0.035, 0.035);
 
-      // 권총 손잡이 (그립)
       const grip = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.145, 0.072), gripMat);
       grip.rotation.x = 0.28;
       grip.position.set(0, -0.075, 0.105);
@@ -322,23 +346,51 @@
       return group;
     }
 
-    const sheriffModel = buildSheriffModel();
-    const phantomModel = buildRifleModel(0x22262e);
-    const vandalModel  = buildRifleModel(0x181818);
+    function buildMeleeModel() {
+      const group = new THREE.Group();
+      const handle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.032, 0.042, 0.14),
+        new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.7 })
+      );
+      handle.position.set(0, -0.02, 0.05);
+
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.055, 0.055, 0.018),
+        new THREE.MeshStandardMaterial({ color: 0xff4655, metalness: 0.6 })
+      );
+      guard.position.set(0, -0.015, -0.025);
+
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 0.036, 0.24),
+        new THREE.MeshStandardMaterial({ color: 0xdbe4ee, metalness: 0.9, roughness: 0.15 })
+      );
+      blade.position.set(0, -0.01, -0.15);
+
+      group.add(handle, guard, blade);
+      group.rotation.set(0.25, 0.35, -0.35);
+      return group;
+    }
+
+    const models = {
+      sheriff: buildSheriffModel(),
+      phantom: buildRifleModel(0x22262e),
+      vandal:  buildRifleModel(0x181818),
+      melee:   buildMeleeModel()
+    };
 
     function updateGunVisual() {
       gunGroup.clear();
-      if (currentWeaponKey === 'sheriff') gunGroup.add(sheriffModel);
-      else if (currentWeaponKey === 'phantom') gunGroup.add(phantomModel);
-      else gunGroup.add(vandalModel);
+      const key = getCurrentWeaponKey();
+      gunGroup.add(models[key]);
+      gunGroup.position.set(0.26, -0.22, -0.42);
+      gunGroup.rotation.set(0, 0, 0);
     }
     updateGunVisual();
 
-    gunGroup.position.set(0.26, -0.22, -0.42);
     camera.add(gunGroup);
     scene.add(camera);
 
-    // === 3D 피격 히트 이펙트 (불꽃 파티클 + 히트마커) ===
+    // === 히트 이펙트 ===
     const hitParticles = [];
     function spawnHitSpark(point, isHead) {
       const color = isHead ? 0xff3344 : 0xffdd55;
@@ -363,13 +415,53 @@
       hitX._timer = setTimeout(() => { hitX.style.opacity = '0'; }, 120);
     }
 
-    // === 상점 구매 & 보호막 교체 환불 로직 ===
+    // === 무기 슬롯 전환 & 재장전 로직 ===
+    function cancelReload() {
+      if (isReloading) {
+        isReloading = false;
+        clearTimeout(reloadTimer);
+        document.getElementById('reloadMsg').style.display = 'none';
+      }
+    }
+
+    function switchSlot(slotNum) {
+      if (slotNum === 1 && !slotWeapons[1]) return;
+      if (activeSlot === slotNum) return;
+      cancelReload();
+      activeSlot = slotNum;
+      updateGunVisual();
+      updateHUD();
+    }
+
+    function startReload() {
+      const key = getCurrentWeaponKey();
+      const w = WEAPONS[key];
+      if (key === 'melee' || isReloading) return;
+      if (ammoState[key] >= w.magSize) return;
+
+      isReloading = true;
+      document.getElementById('reloadMsg').style.display = 'block';
+      gunGroup.rotation.x = -0.45;
+
+      reloadTimer = setTimeout(() => {
+        ammoState[key] = w.magSize;
+        isReloading = false;
+        document.getElementById('reloadMsg').style.display = 'none';
+        gunGroup.rotation.x = 0;
+        updateHUD();
+      }, w.reloadTime * 1000);
+    }
+
+    // === 상점 구매 로직 ===
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
-      if (currentWeaponKey === key) return;
+      if (slotWeapons[w.slot] === key) return;
       if (credits >= w.price) {
         credits -= w.price;
-        currentWeaponKey = key;
+        slotWeapons[w.slot] = key;
+        ammoState[key] = w.magSize;
+        cancelReload();
+        activeSlot = w.slot;
         updateGunVisual();
         updateHUD();
       }
@@ -378,11 +470,8 @@
     window.buyShield = function(key) {
       const newShield = SHIELDS[key];
       const oldShield = SHIELDS[currentShieldKey];
-
-      // 이미 같은 보호막을 최대치로 끼고 있으면 무시
       if (currentShieldKey === key && playerShield === newShield.max) return;
 
-      // 기존에 끼고 있던 보호막이 있으면 판매(환불) 금액 계산
       const refund = currentShieldKey !== 'none' ? oldShield.price : 0;
       const netCost = newShield.price - refund;
 
@@ -396,6 +485,9 @@
     };
 
     function updateHUD() {
+      const key = getCurrentWeaponKey();
+      const w = WEAPONS[key];
+
       document.getElementById('hpText').innerText = playerHp;
       document.getElementById('shieldText').innerText = `🛡️ ${Math.ceil(playerShield)}`;
       const sInfo = SHIELDS[currentShieldKey];
@@ -404,11 +496,28 @@
         : `${sInfo.name}`;
       document.getElementById('creditText').innerText = credits;
       document.getElementById('shopCredits').innerText = credits;
-      document.getElementById('weaponText').innerText = WEAPONS[currentWeaponKey].name;
       document.getElementById('score').innerText = score;
 
+      document.getElementById('weaponText').innerText = w.name;
+      document.getElementById('ammoText').innerText = key === 'melee'
+        ? '∞'
+        : `${ammoState[key]} / ${w.magSize}`;
+
+      // 하단 슬롯 표시 업데이트
+      const s1 = document.getElementById('slot1');
+      const s2 = document.getElementById('slot2');
+      const s3 = document.getElementById('slot3');
+      s1.innerText = `[1] ${slotWeapons[1] ? WEAPONS[slotWeapons[1]].name : '없음'}`;
+      s2.innerText = `[2] ${WEAPONS[slotWeapons[2]].name}`;
+      s3.innerText = `[3] 근접`;
+      s1.className = activeSlot === 1 ? 'slot-active' : '';
+      s2.className = activeSlot === 2 ? 'slot-active' : '';
+      s3.className = activeSlot === 3 ? 'slot-active' : '';
+
+      // 상점 장착 표시
       ['sheriff', 'phantom', 'vandal'].forEach(k => {
-        document.getElementById('buy-' + k).classList.toggle('equipped', currentWeaponKey === k);
+        const slot = WEAPONS[k].slot;
+        document.getElementById('buy-' + k).classList.toggle('equipped', slotWeapons[slot] === k);
       });
       ['light', 'regen', 'heavy'].forEach(k => {
         document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k);
@@ -416,7 +525,7 @@
     }
     updateHUD();
 
-    // === 훈련장 로봇(Bot) 생성 ===
+    // === 고정형 훈련장 로봇(Bot) 생성 — 체력 150 (HP 100 + 보호막 50) 통일 ===
     const botHitboxes = [];
     const bots = [];
 
@@ -451,7 +560,7 @@
       visor.userData = { botRoot: botGroup, part: 'head' };
 
       botGroup.add(legs, torso, leftArm, rightArm, head, visor);
-      botGroup.userData = { hp: 100, shield: 50, shieldType: '중형 보호막' };
+      botGroup.userData = { hp: 100, shield: 50 };
       respawnBot(botGroup);
       scene.add(botGroup);
 
@@ -460,24 +569,17 @@
     }
 
     function respawnBot(bot) {
-      // 10m ~ 45m 거리까지 골고루 배치해서 거리별 딜 차이 체감 가능
       bot.position.set((Math.random() - 0.5) * 44, 0, -Math.random() * 42 + 4);
-      const types = [
-        { name: '경형 보호막', shield: 25, reserve: 0 },
-        { name: '재생 보호막', shield: 25, reserve: 50 },
-        { name: '중형 보호막', shield: 50, reserve: 0 }
-      ];
-      const pick = types[Math.floor(Math.random() * types.length)];
+      // 훈련봇 기본 정면(+Z 방향) 고정
+      bot.rotation.set(0, 0, 0);
+      // 훈련봇 체력 150 (HP 100 + 보호막 50)
       bot.userData.hp = 100;
-      bot.userData.shield = pick.shield;
-      bot.userData.reserve = pick.reserve;
-      bot.userData.shieldType = pick.name;
-      bot.userData.lastHitTime = 0;
+      bot.userData.shield = 50;
     }
 
     for (let i = 0; i < 8; i++) createTrainingBot();
 
-    // === 조작 (앉기 Ctrl, 걷기 Shift, 정확한 8방향 대시 E) ===
+    // === 조작 (1/2/3 슬롯, R 재장전, 앉기 Ctrl 반동 감소, 걷기 Shift, 8방향 대시 E) ===
     const keys = {};
     let yaw = 0, pitch = 0, velY = 0, isGrounded = true;
     let currentEyeHeight = 2.0;
@@ -538,7 +640,6 @@
       pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch - e.movementY * factor));
     });
 
-    // 정확한 정면/우측 수평 방향 벡터 계산 헬퍼
     function getMoveVectors() {
       const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
       const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
@@ -546,7 +647,6 @@
     }
 
     document.addEventListener('keydown', (e) => {
-      // 브라우저 기본 단축키(Ctrl+W 등) 간섭 최소화
       if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
       keys[e.code] = true;
 
@@ -563,12 +663,19 @@
 
       if (document.pointerLockElement !== document.body) return;
 
+      // 1, 2, 3 무기 슬롯 전환
+      if (e.code === 'Digit1') switchSlot(1);
+      if (e.code === 'Digit2') switchSlot(2);
+      if (e.code === 'Digit3') switchSlot(3);
+
+      // R키 수동 재장전
+      if (e.code === 'KeyR') startReload();
+
       if (e.code === 'Space' && isGrounded) {
         velY = 0.22;
         isGrounded = false;
       }
 
-      // E키: 정확한 WASD 방향 대시 (D=동쪽, A=서쪽, W=북쪽, S=남쪽)
       if (e.code === 'KeyE' && dashCooldown <= 0) {
         const { forward, right } = getMoveVectors();
         const dir = new THREE.Vector3(0, 0, 0);
@@ -588,19 +695,40 @@
     });
     document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-    // === 사격 판정 (히트 이펙트 + 거리별 데미지) ===
+    // === 사격 및 근접 공격 판정 ===
     const raycaster = new THREE.Raycaster();
     const killfeed = document.getElementById('killfeed');
 
     function fireWeapon() {
-      const w = WEAPONS[currentWeaponKey];
+      const key = getCurrentWeaponKey();
+      const w = WEAPONS[key];
+      if (isReloading) return;
+
+      // 탄창 확인
+      if (key !== 'melee') {
+        if (ammoState[key] <= 0) {
+          startReload();
+          return;
+        }
+        ammoState[key] -= 1;
+        updateHUD();
+        if (ammoState[key] === 0) {
+          startReload();
+        }
+      }
+
       fireCooldown = w.fireRate;
 
-      // 총기 반동 애니메이션 & 셰리프 실린더 회전
-      gunGroup.position.z = -0.32;
-      gunGroup.rotation.x = 0.14;
-      if (currentWeaponKey === 'sheriff' && sheriffModel.userData.cylinder) {
-        sheriffModel.userData.cylinder.rotation.z += Math.PI / 3;
+      // 모션 연출 (근접 찌르기 vs 총기 반동)
+      if (key === 'melee') {
+        gunGroup.position.z = -0.62;
+        gunGroup.rotation.x = -0.35;
+      } else {
+        gunGroup.position.z = -0.32;
+        gunGroup.rotation.x = 0.14;
+        if (key === 'sheriff' && models.sheriff.userData.cylinder) {
+          models.sheriff.userData.cylinder.rotation.z += Math.PI / 3;
+        }
       }
 
       raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
@@ -608,44 +736,47 @@
 
       if (hits.length > 0) {
         const hit = hits[0];
+        const distance = hit.distance;
         const hitObj = hit.object;
         const part = hitObj.userData.part;
-        const botRoot = hitObj.userData.botRoot;
-        const botData = botRoot.userData;
-
-        // 3D 피격 위치에 스파크 이펙트 생성
-        spawnHitSpark(hit.point, part === 'head');
-
-        // 거리 계산 (유닛 1 = 1m) 및 거리별 데미지 산출
-        const distance = hit.distance;
         const dmg = w.getDamage(distance, part);
-        botData.lastHitTime = performance.now();
 
-        let remaining = dmg;
-        if (botData.shield > 0) {
-          const absorbed = Math.min(botData.shield, remaining);
-          botData.shield -= absorbed;
-          remaining -= absorbed;
-        }
-        botData.hp -= remaining;
+        if (dmg > 0) {
+          const botRoot = hitObj.userData.botRoot;
+          const botData = botRoot.userData;
 
-        if (botData.hp <= 0) {
-          score += 1;
-          credits += 300;
-          updateHUD();
+          spawnHitSpark(hit.point, part === 'head');
 
-          const line = document.createElement('div');
-          line.innerText = `[${w.name}] 봇 처치 (${Math.round(distance)}m) +300¤`;
-          line.style.color = part === 'head' ? '#ff4655' : '#00ffcc';
-          killfeed.prepend(line);
-          if (killfeed.children.length > 4) killfeed.lastChild.remove();
+          let remaining = dmg;
+          if (botData.shield > 0) {
+            const absorbed = Math.min(botData.shield, remaining);
+            botData.shield -= absorbed;
+            remaining -= absorbed;
+          }
+          botData.hp -= remaining;
 
-          respawnBot(botRoot);
+          if (botData.hp <= 0) {
+            score += 1;
+            credits += 300;
+            updateHUD();
+
+            const line = document.createElement('div');
+            line.innerText = `[${w.name}] 봇 처치 (${Math.round(distance)}m) +300¤`;
+            line.style.color = part === 'head' ? '#ff4655' : '#00ffcc';
+            killfeed.prepend(line);
+            if (killfeed.children.length > 4) killfeed.lastChild.remove();
+
+            respawnBot(botRoot);
+          }
         }
       }
 
-      recoilPitchOffset = Math.min(0.28, recoilPitchOffset + w.recoilPitch);
-      recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2;
+      // 앉기(Ctrl) 상태면 반동 35% 감소!
+      const isCrouching = keys['ControlLeft'] || keys['ControlRight'];
+      const recoilMult = isCrouching ? 0.65 : 1.0;
+
+      recoilPitchOffset = Math.min(0.28, recoilPitchOffset + w.recoilPitch * recoilMult);
+      recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2 * recoilMult;
     }
 
     document.addEventListener('mousedown', (e) => {
@@ -664,7 +795,6 @@
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
 
-      // 히트 스파크 파티클 업데이트
       for (let i = hitParticles.length - 1; i >= 0; i--) {
         const p = hitParticles[i];
         p.userData.life -= dt;
@@ -677,7 +807,8 @@
       }
 
       if (fireCooldown > 0) fireCooldown -= dt;
-      if (isMouseDown && WEAPONS[currentWeaponKey].auto && fireCooldown <= 0 && document.pointerLockElement === document.body) {
+      const curWeapon = WEAPONS[getCurrentWeaponKey()];
+      if (isMouseDown && curWeapon.auto && fireCooldown <= 0 && !isReloading && document.pointerLockElement === document.body) {
         fireWeapon();
       }
 
@@ -689,14 +820,12 @@
       camera.rotation.y = yaw + recoilYawOffset;
       camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset));
 
-      // 앉기(Ctrl) & 걷기(Shift) 상태 판별
       const isCrouching = keys['ControlLeft'] || keys['ControlRight'];
       const isWalking = keys['ShiftLeft'] || keys['ShiftRight'];
 
       const targetEyeHeight = isCrouching ? 1.25 : 2.0;
       currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 14 * dt);
 
-      // 대시 쿨타임 & 이동 처리
       if (dashCooldown > 0) dashCooldown -= dt;
       const dashEl = document.getElementById('dashStatus');
       dashEl.innerText = dashCooldown > 0 ? dashCooldown.toFixed(1) + '초' : '준비완료';
@@ -717,8 +846,8 @@
           if (keys['KeyA']) move.sub(right);
           if (move.lengthSq() > 0) move.normalize();
 
-          // 기본 달리기 10 | 걷기(Shift) 5.5 | 앉기(Ctrl) 4.5
-          let moveSpeed = 10;
+          // 근접 무기(3번)를 들면 기본 이동 속도가 빨라짐 (12)
+          let moveSpeed = activeSlot === 3 ? 12 : 10;
           if (isCrouching) moveSpeed = 4.5;
           else if (isWalking) moveSpeed = 5.5;
 
@@ -727,7 +856,6 @@
       }
       camera.updateProjectionMatrix();
 
-      // 점프 & 중력 & 앉기 높이 반영
       if (!isGrounded) {
         velY -= 0.012;
         camera.position.y += velY;
@@ -740,21 +868,10 @@
         camera.position.y = currentEyeHeight;
       }
 
-      // 총기 반동 위치 복귀
-      gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.42, 0.2);
-      gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
-
-      // 적 봇 회전 및 재생 보호막 회복
-      const now = performance.now();
-      bots.forEach(bot => {
-        bot.lookAt(camera.position.x, 0, camera.position.z);
-        const bd = bot.userData;
-        if (bd.reserve > 0 && bd.shield < 25 && (now - bd.lastHitTime) > 3000) {
-          const regenAmt = Math.min(10 * dt, 25 - bd.shield, bd.reserve);
-          bd.shield += regenAmt;
-          bd.reserve -= regenAmt;
-        }
-      });
+      if (!isReloading) {
+        gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.42, 0.2);
+        gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
+      }
 
       renderer.render(scene, camera);
     }
