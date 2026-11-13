@@ -28,6 +28,10 @@
     #reloadMsg { position: fixed; top: 56%; left: 50%; transform: translate(-50%, 0); color: #ffcc00; font-size: 16px; font-weight: bold; letter-spacing: 2px; pointer-events: none; z-index: 14; display: none; text-shadow: 1px 1px 3px black; }
     #deathBanner { position: fixed; inset: 0; background: rgba(180, 20, 35, 0.45); color: white; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 15; pointer-events: none; font-size: 32px; font-weight: bold; text-shadow: 0 2px 10px black; }
 
+    #streakBanner { position: fixed; bottom: 130px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 14; text-align: center; opacity: 0; transition: opacity 0.15s, transform 0.15s; }
+    .streak-circle { width: 54px; height: 54px; border-radius: 50%; background: rgba(255, 70, 85, 0.9); border: 2px solid #00ffcc; color: white; font-size: 24px; font-weight: bold; display: flex; align-items: center; justify-content: center; margin: 0 auto; box-shadow: 0 0 18px rgba(255, 70, 85, 0.85); }
+    .streak-label { color: #00ffcc; font-size: 13px; font-weight: bold; letter-spacing: 2px; margin-top: 4px; text-shadow: 0 1px 4px black; }
+
     #topScoreboard { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 18px; background: rgba(15, 25, 35, 0.88); padding: 8px 24px; border-radius: 6px; border-bottom: 2px solid #00ffcc; color: white; font-weight: bold; z-index: 6; pointer-events: none; }
     .team-red { color: #ff4655; font-size: 22px; }
     .team-blue { color: #38bdf8; font-size: 22px; }
@@ -173,8 +177,12 @@
   <div id="hitX"></div>
   <div id="reloadMsg">재장전 중...</div>
   <div id="deathBanner">
-    <div>처치당했습니다!</div>
-    <div style="font-size:18px; color:#00ffcc; margin-top:8px;">2.5초 후 부활합니다...</div>
+    <div>아레나 이탈!</div>
+    <div style="font-size:18px; color:#00ffcc; margin-top:8px;">2.5초 후 리스폰됩니다...</div>
+  </div>
+  <div id="streakBanner">
+    <div class="streak-circle" id="streakCountText">1</div>
+    <div class="streak-label" id="streakSubText">1 SCORE</div>
   </div>
   <div id="killfeed"></div>
 
@@ -198,6 +206,48 @@
   </div>
 
   <script>
+    const STREAK_SOUNDS = {
+      1: new Audio('multikill-1.mp3'),
+      2: new Audio('valorant-2-kills.mp3'),
+      3: new Audio('valorant-3-kills.mp3'),
+      4: new Audio('valorant-4-kills.mp3'),
+      5: new Audio('valorant-5-kills.mp3')
+    };
+    Object.values(STREAK_SOUNDS).forEach(a => { a.preload = 'auto'; a.volume = 0.85; });
+
+    let currentStreak = 0;
+    let streakBannerTimer = null;
+
+    function triggerScoreStreak(addCount = 1) {
+      currentStreak += addCount;
+      const soundTier = Math.min(5, currentStreak);
+      const audio = STREAK_SOUNDS[soundTier];
+      if (audio) {
+        try {
+          audio.pause();
+          audio.currentTime = 0.32;
+          audio.play().catch(() => {});
+        } catch (e) {}
+      }
+
+      const banner = document.getElementById('streakBanner');
+      document.getElementById('streakCountText').innerText = currentStreak;
+      document.getElementById('streakSubText').innerText = currentStreak >= 5 ? `${currentStreak} STREAK (MAX)` : `${currentStreak} STREAK`;
+      banner.style.opacity = '1';
+      banner.style.transform = 'translateX(-50%) scale(1.12)';
+      setTimeout(() => { banner.style.transform = 'translateX(-50%) scale(1.0)'; }, 120);
+
+      clearTimeout(streakBannerTimer);
+      streakBannerTimer = setTimeout(() => {
+        banner.style.opacity = '0';
+      }, 2200);
+    }
+
+    function resetScoreStreak() {
+      currentStreak = 0;
+      document.getElementById('streakBanner').style.opacity = '0';
+    }
+
     const WEAPONS = {
       sheriff: {
         slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, zoomType: 'none',
@@ -267,6 +317,7 @@
     const mapGroup = new THREE.Group();
     scene.add(mapGroup);
     let wallColliders = [];
+    let wallMeshes = [];
 
     function addBlock(w, h, d, x, y, z, color, addCollider = true) {
       const mesh = new THREE.Mesh(
@@ -275,6 +326,7 @@
       );
       mesh.position.set(x, y, z);
       mapGroup.add(mesh);
+      wallMeshes.push(mesh);
       if (addCollider) {
         wallColliders.push({ minX: x - w / 2 - 0.55, maxX: x + w / 2 + 0.55, minZ: z - d / 2 - 0.55, maxZ: z + d / 2 + 0.55, maxY: y + h / 2 });
       }
@@ -284,6 +336,7 @@
     function buildRangeMap() {
       while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
       wallColliders = [];
+      wallMeshes = [];
       scene.background = new THREE.Color(0x1a242f);
       scene.fog = new THREE.Fog(0x1a242f, 25, 120);
 
@@ -302,6 +355,7 @@
     function buildBrawlMap() {
       while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
       wallColliders = [];
+      wallMeshes = [];
       scene.background = new THREE.Color(0x16202a);
       scene.fog = new THREE.Fog(0x16202a, 30, 130);
 
@@ -438,7 +492,6 @@
       gunGroup.position.set(0.26, -0.22, -0.42);
       gunGroup.rotation.set(0, 0, 0);
       setZoom(0);
-      // 스왑 모션 트리거 (특히 칼 스왑 시 한 바퀴 회전하며 뽑아 올리는 모션)
       swapAnimTimer = 0.28;
     }
     updateGunVisual();
@@ -457,17 +510,64 @@
       gunGroup.visible = !isSniper;
     }
 
+    // 총알 궤적(트레이서) 시스템
+    const tracers = [];
+    function spawnBulletTracer(startPos, endPos, isOperator = false) {
+      const dist = startPos.distanceTo(endPos);
+      if (dist < 0.2) return;
+
+      const thickness = isOperator ? 0.028 : 0.014;
+      const tracerGeo = new THREE.CylinderGeometry(thickness, thickness, dist, 6);
+      tracerGeo.rotateX(Math.PI / 2);
+
+      const tracerMat = new THREE.MeshBasicMaterial({
+        color: isOperator ? 0xffaa33 : 0xffe066,
+        transparent: true,
+        opacity: 0.92
+      });
+
+      const tracerMesh = new THREE.Mesh(tracerGeo, tracerMat);
+      tracerMesh.position.copy(startPos).lerp(endPos, 0.5);
+      tracerMesh.lookAt(endPos);
+      tracerMesh.userData.life = isOperator ? 0.18 : 0.11;
+      tracerMesh.userData.maxLife = tracerMesh.userData.life;
+
+      scene.add(tracerMesh);
+      tracers.push(tracerMesh);
+    }
+
+    // 타격 & 헤드샷 크리티컬 파티클 시스템
     const hitParticles = [];
     function spawnHitSpark(point, isHead) {
-      const mat = new THREE.MeshBasicMaterial({ color: isHead ? 0xff3344 : 0xffdd55 });
-      for (let i = 0; i < (isHead ? 10 : 6); i++) {
-        const spark = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), mat);
-        spark.position.copy(point);
-        spark.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.2) * 6, (Math.random() - 0.5) * 6);
-        spark.userData.life = 0.22;
-        scene.add(spark);
-        hitParticles.push(spark);
+      if (isHead) {
+        // 헤드샷 시 선명한 크림슨 파티클 분출
+        const critMat = new THREE.MeshBasicMaterial({ color: 0xd90429 });
+        const darkCritMat = new THREE.MeshBasicMaterial({ color: 0x8d0801 });
+        for (let i = 0; i < 20; i++) {
+          const size = 0.045 + Math.random() * 0.045;
+          const drop = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), i % 2 === 0 ? critMat : darkCritMat);
+          drop.position.copy(point);
+          drop.userData.vel = new THREE.Vector3(
+            (Math.random() - 0.5) * 7.5,
+            1.5 + Math.random() * 5.0,
+            (Math.random() - 0.5) * 7.5
+          );
+          drop.userData.life = 0.35 + Math.random() * 0.18;
+          scene.add(drop);
+          hitParticles.push(drop);
+        }
+      } else {
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffdd55 });
+        for (let i = 0; i < 6; i++) {
+          const spark = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), mat);
+          spark.position.copy(point);
+          spark.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.2) * 6, (Math.random() - 0.5) * 6);
+          spark.userData.life = 0.22;
+          scene.add(spark);
+          hitParticles.push(spark);
+        }
       }
+
       const hitX = document.getElementById('hitX');
       hitX.style.setProperty('--hit-color', isHead ? '#ff4655' : '#ffffff');
       hitX.style.opacity = '1';
@@ -645,6 +745,8 @@
           blueScore = msg.blueScore;
           updateScoreboard();
           addKillFeed(`${msg.attackerNick} [${msg.weaponName}] ➔ ${msg.victimNick}`);
+        } else if (msg.type === 'scoreAck') {
+          triggerScoreStreak(1);
         }
       });
 
@@ -713,7 +815,7 @@
       document.getElementById('blueScoreText').innerText = blueScore;
     }
 
-    function takeDamage(dmg, attackerNick, attackerTeam, weaponName, isHead) {
+    function takeDamage(dmg, attackerNick, attackerTeam, weaponName, isHead, attackerPeerId) {
       if (isDead) return;
       lastDamageTime = performance.now();
       let remaining = dmg;
@@ -729,6 +831,7 @@
         playerHp = 0;
         isDead = true;
         setZoom(0);
+        resetScoreStreak();
         document.getElementById('deathBanner').style.display = 'flex';
 
         if (attackerTeam === 'red') redScore += 1;
@@ -738,6 +841,10 @@
         const myNick = document.getElementById('nickInput').value || '플레이어';
         addKillFeed(`${attackerNick} [${weaponName}] ➔ ${myNick}`, true);
         broadcastData({ type: 'killNotify', attackerNick, victimNick: myNick, weaponName, redScore, blueScore });
+
+        Object.values(connections).forEach(conn => {
+          if (conn && conn.open) conn.send({ type: 'scoreAck' });
+        });
 
         setTimeout(() => {
           isDead = false;
@@ -1031,7 +1138,6 @@
 
       fireCooldown = wasZoomed ? w.fireRate * 1.15 : w.fireRate;
 
-      // 오퍼레이터는 한 발 쏘면 스코프 줌 자동 해제
       if (key === 'operator' && wasZoomed) {
         setZoom(0);
       }
@@ -1054,7 +1160,6 @@
       if (!isGrounded) {
         spread = w.jumpSpread;
       } else if (key === 'operator' && !wasZoomed) {
-        // 오퍼레이터 노줌(비조준) 시 탄퍼짐 크게 적용
         spread = w.noScopeSpread + (isMoving && !isWalking ? 0.12 : 0);
       } else if (isMoving && !isWalking) {
         spread = w.jumpSpread * 0.45;
@@ -1068,8 +1173,31 @@
       const targets = currentMap === 'range' ? botHitboxes : remoteHitboxes;
       const hits = raycaster.intersectObjects(targets);
 
+      if (key !== 'melee') {
+        const muzzleWorld = new THREE.Vector3();
+        if (gunGroup.visible) {
+          gunGroup.getWorldPosition(muzzleWorld);
+          const forwardDir = new THREE.Vector3();
+          camera.getWorldDirection(forwardDir);
+          muzzleWorld.addScaledVector(forwardDir, 0.35);
+        } else {
+          camera.getWorldPosition(muzzleWorld);
+          muzzleWorld.y -= 0.12;
+        }
+
+        let tracerEnd = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 120);
+        const wallHits = raycaster.intersectObjects(wallMeshes);
+        if (wallHits.length > 0 && wallHits[0].distance < 120) {
+          tracerEnd = wallHits[0].point;
+        }
+        if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
+          tracerEnd = hits[0].point;
+        }
+        spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator');
+      }
+
       const hitTargetsSet = new Set();
-      let multiKillCount = 0;
+      let multiScoreCount = 0;
 
       for (const hit of hits) {
         if (hitTargetsSet.size >= w.penetration) break;
@@ -1094,7 +1222,7 @@
           if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
           bd.hp -= rem;
           if (bd.hp <= 0) {
-            multiKillCount++;
+            multiScoreCount++;
             respawnBot(botRoot);
           }
         } else if (hitObj.userData.targetType === 'player') {
@@ -1121,15 +1249,15 @@
         }
       }
 
-      if (multiKillCount > 0) {
+      if (multiScoreCount > 0) {
         updateHUD();
-        addKillFeed(multiKillCount >= 2 ? `[${w.name}] 관통 ${multiKillCount}명 동시 처치!` : `[${w.name}] 훈련봇 처치`, multiKillCount >= 2);
+        triggerScoreStreak(multiScoreCount);
+        addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!` : `[${w.name}] 훈련봇 타겟 완료`, multiScoreCount >= 2);
       }
 
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       let recoilMult = isCrouching ? 0.65 : 1.0;
       if (wasZoomed) recoilMult *= 0.8;
-      // 오퍼레이터 노줌(비조준) 시 반동 크게 상승
       if (key === 'operator' && !wasZoomed) recoilMult *= 2.4;
       if (!isGrounded) recoilMult *= 1.5;
 
@@ -1159,6 +1287,18 @@
     function animate() {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
+
+      for (let i = tracers.length - 1; i >= 0; i--) {
+        const t = tracers[i];
+        t.userData.life -= dt;
+        t.material.opacity = Math.max(0, t.userData.life / t.userData.maxLife);
+        if (t.userData.life <= 0) {
+          scene.remove(t);
+          t.geometry.dispose();
+          t.material.dispose();
+          tracers.splice(i, 1);
+        }
+      }
 
       for (let i = hitParticles.length - 1; i >= 0; i--) {
         const p = hitParticles[i];
@@ -1245,7 +1385,6 @@
         camera.position.y = currentEyeHeight;
       }
 
-      // 무기 및 칼 스왑 모션 애니메이션
       if (swapAnimTimer > 0) {
         swapAnimTimer -= dt;
         const progress = Math.max(0, swapAnimTimer / 0.28);
