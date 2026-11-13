@@ -510,31 +510,31 @@
       sheriff: {
         slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25, zoomType: 'none',
         magSize: 6, reloadTime: 1.5, penetration: 2, jumpSpread: 0.14, noScopeSpread: 0,
-        recoilPitch: 0.055, recoilYaw: 0.015,
+        recoilPitch: 0.036, recoilYaw: 0.009, moveSpeed: 7.4,
         getDamage: (dist, part) => dist < 30 ? { head: 159, body: 55, leg: 46 }[part] : { head: 145, body: 50, leg: 42 }[part]
       },
       phantom: {
         slot: 1, name: '팬텀', price: 2900, auto: true, fireRate: 0.095, zoomType: 'holo',
         magSize: 30, reloadTime: 1.8, penetration: 2, jumpSpread: 0.16, noScopeSpread: 0,
-        recoilPitch: 0.018, recoilYaw: 0.012,
+        recoilPitch: 0.011, recoilYaw: 0.007, moveSpeed: 6.7,
         getDamage: (dist, part) => dist < 15 ? { head: 156, body: 39, leg: 33 }[part] : (dist < 30 ? { head: 140, body: 35, leg: 29 }[part] : { head: 124, body: 31, leg: 26 }[part])
       },
       vandal: {
         slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135, zoomType: 'holo',
         magSize: 25, reloadTime: 1.8, penetration: 2, jumpSpread: 0.17, noScopeSpread: 0,
-        recoilPitch: 0.030, recoilYaw: 0.022,
+        recoilPitch: 0.018, recoilYaw: 0.013, moveSpeed: 6.7,
         getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
       },
       operator: {
         slot: 1, name: '오퍼레이터', price: 4700, auto: false, fireRate: 1.15, zoomType: 'sniper',
         magSize: 5, reloadTime: 2.3, penetration: 5, jumpSpread: 0.36, noScopeSpread: 0.22,
-        recoilPitch: 0.09, recoilYaw: 0.025,
+        recoilPitch: 0.055, recoilYaw: 0.014, moveSpeed: 5.7,
         getDamage: (dist, part) => ({ head: 255, body: 150, leg: 120 }[part])
       },
       melee: {
         slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, zoomType: 'none',
         magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
-        recoilPitch: 0, recoilYaw: 0,
+        recoilPitch: 0, recoilYaw: 0, moveSpeed: 8.6,
         getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0)
       }
     };
@@ -1693,7 +1693,24 @@
       playWeaponSound(key, 0);
 
       const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes];
-      const hits = raycaster.intersectObjects(targets);
+      let hits = raycaster.intersectObjects(targets);
+
+      // 오퍼레이터 전용 미세 히트박스 보정 (조준선 스침 판정 완화)
+      if (key === 'operator' && hits.length === 0) {
+        const subOffsets = [
+          [0.008, 0], [-0.008, 0], [0, 0.008], [0, -0.008],
+          [0.006, 0.006], [-0.006, 0.006], [0.006, -0.006], [-0.006, -0.006]
+        ];
+        for (const [ox, oy] of subOffsets) {
+          raycaster.setFromCamera(new THREE.Vector2(spreadX + ox, spreadY + oy), camera);
+          const subHits = raycaster.intersectObjects(targets);
+          if (subHits.length > 0) {
+            hits = subHits;
+            break;
+          }
+        }
+        raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
+      }
 
       if (key !== 'melee') {
         const muzzleWorld = new THREE.Vector3();
@@ -1812,10 +1829,10 @@
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       let recoilMult = isCrouching ? 0.65 : 1.0;
       if (wasZoomed) recoilMult *= 0.8;
-      if (key === 'operator' && !wasZoomed) recoilMult *= 2.4;
-      if (!isGrounded) recoilMult *= 1.5;
+      if (key === 'operator' && !wasZoomed) recoilMult *= 1.8;
+      if (!isGrounded) recoilMult *= 1.4;
 
-      recoilPitchOffset = Math.min(0.45, recoilPitchOffset + w.recoilPitch * recoilMult);
+      recoilPitchOffset = Math.min(0.30, recoilPitchOffset + w.recoilPitch * recoilMult);
       recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2 * recoilMult;
     }
 
@@ -1919,9 +1936,9 @@
           if (keys['KeyA']) move.sub(right);
           if (move.lengthSq() > 0) move.normalize();
 
-          let moveSpeed = activeSlot === 3 ? 12 : 10;
-          if (isCrouching) moveSpeed = 4.5;
-          else if (isWalking || zoomLevel > 0) moveSpeed = 5.5;
+          let moveSpeed = curWeapon.moveSpeed || 7.4;
+          if (isCrouching) moveSpeed = Math.min(3.4, moveSpeed * 0.48);
+          else if (isWalking || zoomLevel > 0) moveSpeed = Math.min(4.4, moveSpeed * 0.62);
           moveSpeed *= tagSlowMultiplier;
 
           moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
