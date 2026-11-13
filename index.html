@@ -95,12 +95,11 @@
         <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">레드 팀 (RED)</button>
         <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">블루 팀 (BLUE)</button>
         <span style="color:#555;">|</span>
-        <span style="font-size:14px; color:#bbb;">난투 AI 봇:</span>
-        <select id="brawlBotCountSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
-          <option value="0">0명 (PvP 전용)</option>
-          <option value="2">2명 (1v2 연습)</option>
-          <option value="4" selected>4명 (2v3 난투)</option>
-          <option value="6">6명 (다대다 난전)</option>
+        <span style="font-size:14px; color:#bbb;">난투 인원:</span>
+        <select id="brawlModeSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
+          <option value="1v1" selected>1 vs 1 (단판 승부)</option>
+          <option value="2v2">2 vs 2 (팀전 · 관전 지원)</option>
+          <option value="pvp">친구 PvP 전용 (AI 없음)</option>
         </select>
       </div>
     </div>
@@ -120,7 +119,8 @@
     </div>
 
     <div class="row" style="margin-top:10px;">
-      <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:14px 32px;">난투 맵 입장 (1v1 / 2v2)</button>
+      <button id="btnResumeGame" class="btn-secondary" style="font-size:17px; padding:14px 26px; display:none; border-color:#ffcc00; color:#ffcc00;">↩ 게임으로 돌아가기 (뒤로 가기)</button>
+      <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:14px 32px;">난투 새 게임 시작</button>
       <button id="btnStartRange" class="btn-secondary" style="font-size:17px; padding:14px 28px;">사격장 (훈련봇 연습)</button>
     </div>
 
@@ -594,6 +594,7 @@
     let currentShieldKey = 'heavy', playerHp = 100, playerShield = 50, shieldReserve = 0, isShopOpen = false;
     let isDead = false, lastDamageTime = 0;
     let swapAnimTimer = 0;
+    let meleeSlashTimer = 0;
 
     let myTeam = 'red';
     let redScore = 0, blueScore = 0;
@@ -1264,26 +1265,30 @@
 
     function createPrepBarriers() {
       clearPrepBarriers();
-      // 레드팀 진영 앞 보호막 (Z = 21) & 블루팀 진영 앞 보호막 (Z = -21)
-      const redBarrierMat = new THREE.MeshBasicMaterial({
-        color: 0xff4655,
-        transparent: true,
-        opacity: 0.26,
+      // 준비 시간에는 상대 진영이 전혀 보이지 않도록 완전 불투명(opaque) 에너지 장벽 설치!
+      const redBarrierMat = new THREE.MeshStandardMaterial({
+        color: 0x991b27,
+        emissive: 0x5c0f17,
+        emissiveIntensity: 0.75,
+        roughness: 0.25,
+        metalness: 0.4,
         side: THREE.DoubleSide
       });
-      const blueBarrierMat = new THREE.MeshBasicMaterial({
-        color: 0x38bdf8,
-        transparent: true,
-        opacity: 0.26,
+      const blueBarrierMat = new THREE.MeshStandardMaterial({
+        color: 0x124e78,
+        emissive: 0x0b3554,
+        emissiveIntensity: 0.75,
+        roughness: 0.25,
+        metalness: 0.4,
         side: THREE.DoubleSide
       });
 
-      const redBarrier = new THREE.Mesh(new THREE.PlaneGeometry(68, 8.5), redBarrierMat);
-      redBarrier.position.set(0, 4.25, 21.5);
+      const redBarrier = new THREE.Mesh(new THREE.PlaneGeometry(69, 9.0), redBarrierMat);
+      redBarrier.position.set(0, 4.5, 21.5);
       scene.add(redBarrier);
 
-      const blueBarrier = new THREE.Mesh(new THREE.PlaneGeometry(68, 8.5), blueBarrierMat);
-      blueBarrier.position.set(0, 4.25, -21.5);
+      const blueBarrier = new THREE.Mesh(new THREE.PlaneGeometry(69, 9.0), blueBarrierMat);
+      blueBarrier.position.set(0, 4.5, -21.5);
       scene.add(blueBarrier);
 
       prepBarrierMeshes.push(redBarrier, blueBarrier);
@@ -1304,11 +1309,33 @@
       }
     }
 
+    let spectateTargetIndex = 0;
+
+    function syncBrawlRoster() {
+      const modeEl = document.getElementById('brawlModeSelect');
+      const mode = modeEl ? modeEl.value : '1v1';
+      if (mode === 'pvp') {
+        initBrawlBots(0, 0);
+        return;
+      }
+      const targetPerTeam = mode === '2v2' ? 2 : 1;
+      let redHumans = (myTeam === 'red' ? 1 : 0);
+      let blueHumans = (myTeam === 'blue' ? 1 : 0);
+      Object.values(remotePlayers).forEach(rp => {
+        if (rp.team === 'red') redHumans++;
+        else blueHumans++;
+      });
+      const needRedBots = Math.max(0, targetPerTeam - redHumans);
+      const needBlueBots = Math.max(0, targetPerTeam - blueHumans);
+      initBrawlBots(needRedBots, needBlueBots);
+    }
+
     function startBrawlRound(num) {
       roundNumber = num;
       roundPhase = 'PREP';
       roundPhaseTimer = 8.0;
       clearChampionsFinisher();
+      resetScoreStreak(); // 라운드 시작 시 킬(연속 처치) 카운트 초기화
 
       // 플레이어 부활 및 스폰 위치 초기화
       isDead = false;
@@ -1319,6 +1346,7 @@
       tagSlowMultiplier = 1.0;
       aimPunchPitch = 0;
       setZoom(0);
+      gunGroup.visible = true;
       document.getElementById('deathBanner').style.display = 'none';
 
       // 탄약 가득 채우기
@@ -1328,22 +1356,18 @@
       updateHUD();
       spawnMyPlayer();
 
-      // AI 봇들도 전원 부활 및 진영 스폰
-      const botCnt = parseInt(document.getElementById('brawlBotCountSelect').value, 10) || 0;
-      if (brawlBots.length !== botCnt) {
-        initBrawlBots(botCnt);
-      } else {
-        brawlBots.forEach(b => spawnBrawlBot(b));
-      }
+      // 1v1 / 2v2 인원에 맞춰 아군/적군 AI 봇 동기화 및 스폰
+      syncBrawlRoster();
 
       createPrepBarriers();
-      showRoundBanner(`ROUND ${roundNumber}`, '준비 시간 (8초) - 장벽이 열리기 전까지 상점(B) 이용 가능', '#00ffcc', 2600);
+      showRoundBanner(`ROUND ${roundNumber}`, '준비 시간 (8초) - 장벽 해제 전까지 상점(B) 이용 가능', '#00ffcc', 2600);
     }
 
     function endBrawlRound(winningTeam, killerPos = null, usedChamp2021 = false) {
       if (roundPhase === 'END') return;
       roundPhase = 'END';
       roundPhaseTimer = 5.5;
+      resetScoreStreak(); // 라운드 종료 시 킬 카운트 자동 초기화
 
       if (winningTeam === 'red') redScore += 1;
       else blueScore += 1;
@@ -1356,7 +1380,7 @@
 
       const winLabel = winningTeam === 'red' ? 'RED TEAM 승리!' : 'BLUE TEAM 승리!';
       const winColor = winningTeam === 'red' ? '#ff4655' : '#38bdf8';
-      showRoundBanner(winLabel, '잠시 후 다음 라운드가 시작됩니다', winColor, 4500);
+      showRoundBanner(winLabel, '잠시 후 다음 라운드가 시작됩니다 (킬 카운트 초기화)', winColor, 4500);
     }
 
     function countAliveTeams() {
@@ -1439,8 +1463,7 @@
     }
 
     function spawnBrawlBot(bot) {
-      const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
-      bot.userData.team = enemyTeam;
+      const botTeam = bot.userData.team;
       bot.userData.hp = 100;
       bot.userData.shield = 50;
       bot.userData.dead = false;
@@ -1448,21 +1471,18 @@
       bot.userData.fireCooldown = 0.6 + Math.random() * 0.6;
       bot.userData.stepTimer = 0;
 
-      const teamColor = enemyTeam === 'red' ? 0xff4655 : 0x38bdf8;
+      const teamColor = botTeam === 'red' ? 0xff4655 : 0x38bdf8;
       bot.userData.armorMat.color.setHex(teamColor);
 
-      const spawnZ = enemyTeam === 'red' ? 32 : -32;
-      const spawnX = (Math.random() - 0.5) * 26;
-      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 6);
+      const spawnZ = botTeam === 'red' ? 32 : -32;
+      const spawnX = (Math.random() - 0.5) * 20;
+      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 5);
       bot.visible = true;
     }
 
-    function initBrawlBots(count) {
-      clearBrawlBots();
-      const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
-      for (let i = 0; i < count; i++) {
-        const botGroup = new THREE.Group();
-        const teamColor = enemyTeam === 'red' ? 0xff4655 : 0x38bdf8;
+    function createSingleBrawlBot(index, team) {
+      const botGroup = new THREE.Group();
+      const teamColor = team === 'red' ? 0xff4655 : 0x38bdf8;
         const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
         const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.6, roughness: 0.4 });
         const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
@@ -1494,7 +1514,7 @@
           nick: AI_NAMES[i % AI_NAMES.length],
           weaponKey: wKey,
           armorMat,
-          team: enemyTeam,
+          team: team,
           hp: 100,
           shield: 50,
           dead: false,
@@ -1509,7 +1529,13 @@
         brawlBots.push(botGroup);
         brawlBotHitboxes.push(legs, torso, head, visor);
         spawnBrawlBot(botGroup);
-      }
+    }
+
+    function initBrawlBots(redCount = 0, blueCount = 1) {
+      clearBrawlBots();
+      let idx = 0;
+      for (let i = 0; i < redCount; i++) createSingleBrawlBot(idx++, 'red');
+      for (let i = 0; i < blueCount; i++) createSingleBrawlBot(idx++, 'blue');
     }
 
     const aiRaycaster = new THREE.Raycaster();
@@ -1556,18 +1582,34 @@
       for (const bot of brawlBots) {
         const bd = bot.userData;
         if (bd.dead) {
-          // 라운드제이므로 라운드 도중에는 부활하지 않음!
           continue;
         }
 
         const botEyePos = new THREE.Vector3(bot.position.x, 1.85, bot.position.z);
-        const toPlayer = new THREE.Vector3().subVectors(playerHeadPos, botEyePos);
-        const distToPlayer = toPlayer.length();
-        const canSeePlayer = !isDead && distToPlayer < 65 && hasLineOfSight(botEyePos, playerHeadPos);
+        const distToLocalPlayer = botEyePos.distanceTo(playerHeadPos);
 
-        if (canSeePlayer) {
-          // 플레이어를 바라보며 좌우 스트레이프 무빙
-          const targetYaw = Math.atan2(toPlayer.x, toPlayer.z);
+        // 가장 가까운 적 타겟 찾기 (로컬 플레이어 / 다른 AI 봇 / 원격 플레이어)
+        let bestTarget = null;
+        let bestDist = 65;
+
+        if (!isDead && bd.team !== myTeam && distToLocalPlayer < bestDist && hasLineOfSight(botEyePos, playerHeadPos)) {
+          bestDist = distToLocalPlayer;
+          bestTarget = { type: 'localPlayer', pos: playerHeadPos.clone() };
+        }
+
+        for (const otherBot of brawlBots) {
+          if (otherBot === bot || otherBot.userData.dead || otherBot.userData.team === bd.team) continue;
+          const otherPos = new THREE.Vector3(otherBot.position.x, 1.75, otherBot.position.z);
+          const d = botEyePos.distanceTo(otherPos);
+          if (d < bestDist && hasLineOfSight(botEyePos, otherPos)) {
+            bestDist = d;
+            bestTarget = { type: 'bot', bot: otherBot, pos: otherPos };
+          }
+        }
+
+        if (bestTarget) {
+          const toTarget = new THREE.Vector3().subVectors(bestTarget.pos, botEyePos);
+          const targetYaw = Math.atan2(toTarget.x, toTarget.z);
           bot.rotation.y = targetYaw;
 
           bd.aiChangeTimer -= dt;
@@ -1577,20 +1619,19 @@
             const rightVec = new THREE.Vector3(Math.cos(targetYaw), 0, -Math.sin(targetYaw));
             const forwardVec = new THREE.Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw));
             bd.moveDir.copy(rightVec).multiplyScalar(strafeSign);
-            if (distToPlayer > 22) bd.moveDir.addScaledVector(forwardVec, 0.45);
-            else if (distToPlayer < 8) bd.moveDir.addScaledVector(forwardVec, -0.5);
+            if (bestDist > 22) bd.moveDir.addScaledVector(forwardVec, 0.45);
+            else if (bestDist < 8) bd.moveDir.addScaledVector(forwardVec, -0.5);
             bd.moveDir.normalize();
           }
 
           moveBrawlBotWithCollision(bot, bd.moveDir.x * 5.8 * dt, bd.moveDir.z * 5.8 * dt);
 
-          // AI 사격
           bd.fireCooldown -= dt;
           if (bd.fireCooldown <= 0) {
             const w = WEAPONS[bd.weaponKey];
             bd.fireCooldown = (bd.weaponKey === 'sheriff' ? 0.65 : 0.34) + Math.random() * 0.25;
 
-            playWeaponSound(bd.weaponKey, distToPlayer);
+            playWeaponSound(bd.weaponKey, distToLocalPlayer);
 
             const muzzlePos = botEyePos.clone().add(new THREE.Vector3(0, -0.25, 0));
             const aimSpread = new THREE.Vector3(
@@ -1598,16 +1639,28 @@
               (Math.random() - 0.5) * 1.4,
               (Math.random() - 0.5) * 2.2
             );
-            const endPos = playerHeadPos.clone().add(aimSpread);
+            const endPos = bestTarget.pos.clone().add(aimSpread);
             spawnBulletTracer(muzzlePos, endPos, false);
 
-            // 명중 판정 (거리가 가까울수록 명중률 상승)
-            const hitChance = Math.max(0.14, 0.42 - distToPlayer * 0.005);
+            const hitChance = Math.max(0.14, 0.42 - bestDist * 0.005);
             if (Math.random() < hitChance) {
               const isHeadHit = Math.random() < 0.18;
               const hitPart = isHeadHit ? 'head' : 'body';
-              const dmg = Math.round(w.getDamage(distToPlayer, hitPart) * 0.65);
-              takeDamage(dmg, bd.nick, bd.team, w.name, isHeadHit, null, bot.position);
+              const dmg = Math.round(w.getDamage(bestDist, hitPart) * 0.65);
+
+              if (bestTarget.type === 'localPlayer') {
+                takeDamage(dmg, bd.nick, bd.team, w.name, isHeadHit, null, bot.position);
+              } else if (bestTarget.type === 'bot') {
+                const tbd = bestTarget.bot.userData;
+                let rem = dmg;
+                if (tbd.shield > 0) { const abs = Math.min(tbd.shield, rem); tbd.shield -= abs; rem -= abs; }
+                tbd.hp -= rem;
+                if (tbd.hp <= 0 && !tbd.dead) {
+                  tbd.dead = true;
+                  bestTarget.bot.visible = false;
+                  addKillFeed(`${bd.nick} [${w.name}] ➔ ${tbd.nick}${isHeadHit ? ' [헤드샷]' : ''}`, false);
+                }
+              }
             }
           }
         } else {
@@ -1626,7 +1679,7 @@
         bd.stepTimer += dt;
         if (bd.stepTimer >= 0.42) {
           bd.stepTimer = 0;
-          playFootstepSound(false, distToPlayer);
+          playFootstepSound(false, distToLocalPlayer);
         }
       }
     }
@@ -1710,9 +1763,7 @@
       updatePlayerListUI();
       broadcastData({ type: 'info', nick: document.getElementById('nickInput').value || '플레이어', team: myTeam });
       if (currentMap === 'brawl') {
-        spawnMyPlayer();
-        const cnt = parseInt(document.getElementById('brawlBotCountSelect').value, 10) || 0;
-        initBrawlBots(cnt);
+        startBrawlRound(1);
       }
     };
 
@@ -2058,6 +2109,13 @@
       document.body.requestPointerLock();
     });
 
+    let hasEnteredGame = false;
+    document.getElementById('btnResumeGame').addEventListener('click', () => {
+      isShopOpen = false;
+      shopModal.style.display = 'none';
+      document.body.requestPointerLock();
+    });
+
     document.getElementById('btnFullscreen').addEventListener('click', () => {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
       else document.exitFullscreen().catch(() => {});
@@ -2072,6 +2130,7 @@
     document.addEventListener('pointerlockchange', () => {
       const locked = document.pointerLockElement === document.body;
       if (locked) {
+        hasEnteredGame = true;
         overlay.style.display = 'none';
         shopModal.style.display = 'none';
         isShopOpen = false;
@@ -2083,6 +2142,8 @@
           shopModal.style.display = 'flex';
           overlay.style.display = 'none';
         } else {
+          const resumeBtn = document.getElementById('btnResumeGame');
+          if (resumeBtn) resumeBtn.style.display = hasEnteredGame ? 'inline-block' : 'none';
           overlay.style.display = 'flex';
         }
       }
@@ -2208,8 +2269,7 @@
       }
 
       if (key === 'melee') {
-        gunGroup.position.z = -0.64;
-        gunGroup.rotation.x = -0.35;
+        meleeSlashTimer = 0.28;
       } else {
         gunGroup.position.z = zoomLevel > 0 ? -0.22 : -0.32;
         gunGroup.rotation.x = zoomLevel > 0 ? 0.06 : 0.14;
@@ -2386,8 +2446,60 @@
       recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2 * recoilMult;
     }
 
+
+    function getSpectatableTargets() {
+      const list = [];
+      // 살아있는 아군 우선
+      for (const b of brawlBots) {
+        if (!b.userData.dead && b.userData.team === myTeam) {
+          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y });
+        }
+      }
+      Object.values(remotePlayers).forEach(rp => {
+        if (rp.mesh && rp.mesh.visible && rp.team === myTeam) {
+          list.push({ name: `[아군] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y });
+        }
+      });
+      // 아군이 다 죽었으면 적군이라도 관전
+      if (list.length === 0) {
+        for (const b of brawlBots) {
+          if (!b.userData.dead) {
+            list.push({ name: `[관전] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y });
+          }
+        }
+      }
+      return list;
+    }
+
+    function updateSpectatorCamera() {
+      if (!isDead || currentMap !== 'brawl') return;
+      const targets = getSpectatableTargets();
+      if (targets.length === 0) return;
+
+      spectateTargetIndex = spectateTargetIndex % targets.length;
+      const target = targets[spectateTargetIndex];
+
+      gunGroup.visible = false;
+      document.getElementById('deathBanner').style.background = 'rgba(15, 25, 35, 0.25)';
+      const titleEl = document.querySelector('#deathBanner div:nth-child(1)');
+      const subEl = document.querySelector('#deathBanner div:nth-child(2)');
+      if (titleEl) titleEl.innerText = `관전 중: ${target.name}`;
+      if (subEl) subEl.innerText = '좌클릭: 다음 플레이어 관전 | 라운드 종료 후 부활';
+
+      // 3인칭 어깨 너머 관전 카메라 배치
+      const backDist = 4.2;
+      const camX = target.pos.x - Math.sin(target.yaw) * backDist;
+      const camZ = target.pos.z - Math.cos(target.yaw) * backDist;
+      camera.position.lerp(new THREE.Vector3(camX, 2.8, camZ), 0.18);
+      camera.lookAt(target.pos.x, 1.6, target.pos.z);
+    }
+
     document.addEventListener('mousedown', (e) => {
-      if (document.pointerLockElement !== document.body || isDead) return;
+      if (document.pointerLockElement !== document.body) return;
+      if (isDead) {
+        if (e.button === 0) spectateTargetIndex++;
+        return;
+      }
       if (e.button === 0) {
         isMouseDown = true;
         if (fireCooldown <= 0) fireWeapon();
@@ -2508,7 +2620,9 @@
       camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.22);
       camera.updateProjectionMatrix();
 
-      if (!isGrounded) {
+      if (isDead && currentMap === 'brawl') {
+        updateSpectatorCamera();
+      } else if (!isGrounded) {
         velY -= 0.012;
         camera.position.y += velY;
         if (camera.position.y <= currentEyeHeight) {
@@ -2530,6 +2644,13 @@
           gunGroup.position.set(0.26, -0.22 - progress * 0.18, -0.42);
           gunGroup.rotation.set(-progress * 0.6, 0, 0);
         }
+      } else if (meleeSlashTimer > 0 && curKey === 'melee') {
+        meleeSlashTimer -= dt;
+        const t = 1.0 - Math.max(0, meleeSlashTimer / 0.28);
+        // 0 -> 0.35: 앞으로 강하게 찌르기 / 0.35 -> 1.0: 원위치 복귀
+        const thrust = t < 0.35 ? (t / 0.35) : (1.0 - (t - 0.35) / 0.65);
+        gunGroup.position.set(0.26 - thrust * 0.14, -0.22 + thrust * 0.05, -0.42 - thrust * 0.36);
+        gunGroup.rotation.set(-thrust * 0.62, -thrust * 0.35, thrust * 0.45);
       } else if (!isReloading && gunGroup.visible) {
         const targetGunX = zoomLevel > 0 ? 0.0 : 0.26;
         const targetGunY = zoomLevel > 0 ? -0.075 : -0.22;
