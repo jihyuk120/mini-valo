@@ -33,7 +33,6 @@
       pointer-events: none; z-index: 10; display: none; text-shadow: 1px 1px 3px black;
     }
 
-    /* 하단 상태창 */
     #hud {
       position: fixed; bottom: 25px; left: 25px; right: 25px;
       display: flex; justify-content: space-between; align-items: flex-end;
@@ -46,7 +45,7 @@
     .hp-val { font-size: 32px; color: #ece8e1; }
     .shield-val { font-size: 24px; color: #00ffcc; margin-left: 10px; }
     .regen-tag { font-size: 13px; color: #7ef9ff; display: block; margin-top: 2px; }
-    .ammo-val { font-size: 28px; color: #00ffcc; }
+    .ammo-val { font-size: 28px; color: #00ffcc; margin-left: 10px; }
     .slot-bar { font-size: 12px; color: #aaa; margin-top: 4px; }
     .slot-active { color: #ff4655; font-weight: bold; }
 
@@ -55,7 +54,6 @@
       text-align: right; pointer-events: none; z-index: 5; line-height: 1.5;
     }
 
-    /* 오버레이 */
     .modal {
       position: fixed; inset: 0; background: rgba(15, 25, 35, 0.92); color: white;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -73,7 +71,6 @@
     }
     .btn-primary:hover { background: #ff2a3c; }
 
-    /* 상점 UI */
     #shopModal { display: none; }
     .shop-header { width: 760px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 760px; }
@@ -92,7 +89,6 @@
   </style>
 </head>
 <body>
-  <!-- ESC / 시작 메뉴 -->
   <div id="overlay" class="modal">
     <h1>MINI-VALO</h1>
     <p id="menuSubtitle">훈련장 모드 (1/2/3: 무기 교체 | R: 재장전 | B: 상점 | ESC: 설정)</p>
@@ -106,7 +102,6 @@
     </p>
   </div>
 
-  <!-- B 상점 메뉴 -->
   <div id="shopModal" class="modal">
     <div class="shop-header">
       <h1 style="font-size:34px; margin:0;">무기고 (SHOP)</h1>
@@ -196,7 +191,6 @@
   <script type="module">
     import * as THREE from 'three';
 
-    // === 무기 스탯 (장탄수, 재장전 시간, 밴달 연사속도 조정, 거리별 데미지) ===
     const WEAPONS = {
       sheriff: {
         slot: 2, name: '셰리프', price: 800, auto: false, fireRate: 0.25,
@@ -218,13 +212,13 @@
         }
       },
       vandal: {
-        slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135, // 밴달 연사속도 하향 조정
+        slot: 1, name: '밴달', price: 2900, auto: true, fireRate: 0.135,
         magSize: 25, reloadTime: 1.8,
         recoilPitch: 0.030, recoilYaw: 0.022,
         getDamage: (dist, part) => ({ head: 160, body: 40, leg: 34 }[part])
       },
       melee: {
-        slot: 3, name: '전술 단검', price: 0, auto: false, fireRate: 0.4,
+        slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4,
         magSize: Infinity, reloadTime: 0,
         recoilPitch: 0, recoilYaw: 0,
         getDamage: (dist, part) => (dist <= 3.2 ? (part === 'head' ? 150 : 75) : 0)
@@ -241,7 +235,6 @@
     let credits = 3900;
     let score = 0;
 
-    // 1번(주무기), 2번(보조무기), 3번(근접) 슬롯 상태
     let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
     let activeSlot = 2;
     let ammoState = { sheriff: 6, phantom: 30, vandal: 25, melee: Infinity };
@@ -258,7 +251,6 @@
       return slotWeapons[activeSlot] || 'melee';
     }
 
-    // === 3D 씬 & 카메라 ===
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a242f);
     scene.fog = new THREE.Fog(0x1a242f, 20, 110);
@@ -282,7 +274,6 @@
     scene.add(floor);
     scene.add(new THREE.GridHelper(120, 60, 0xff4655, 0x34495e));
 
-    // === 1인칭 무기 모델 (셰리프 / 라이플 / 근접 단검) ===
     const gunGroup = new THREE.Group();
 
     function buildSheriffModel() {
@@ -346,28 +337,63 @@
       return group;
     }
 
+    // 요청하신 무광 블랙 전술 나이프 3D 모델 (톱니 등날 + 은색 리벳 + 손가락 홈 그립 + 끝단 고리)
     function buildMeleeModel() {
       const group = new THREE.Group();
-      const handle = new THREE.Mesh(
-        new THREE.BoxGeometry(0.032, 0.042, 0.14),
-        new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.7 })
-      );
-      handle.position.set(0, -0.02, 0.05);
+      const matteBlackBlade = new THREE.MeshStandardMaterial({ color: 0x26282c, metalness: 0.75, roughness: 0.32 });
+      const edgeSteel = new THREE.MeshStandardMaterial({ color: 0x454950, metalness: 0.85, roughness: 0.25 });
+      const gripMat = new THREE.MeshStandardMaterial({ color: 0x18191c, roughness: 0.85 });
+      const rivetMat = new THREE.MeshStandardMaterial({ color: 0xd8dee9, metalness: 0.95, roughness: 0.15 });
 
-      const guard = new THREE.Mesh(
-        new THREE.BoxGeometry(0.055, 0.055, 0.018),
-        new THREE.MeshStandardMaterial({ color: 0xff4655, metalness: 0.6 })
-      );
-      guard.position.set(0, -0.015, -0.025);
+      // 인체공학 손잡이 몸체
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.044, 0.145), gripMat);
+      handle.position.set(0, 0, 0.065);
 
-      const blade = new THREE.Mesh(
-        new THREE.BoxGeometry(0.012, 0.036, 0.24),
-        new THREE.MeshStandardMaterial({ color: 0xdbe4ee, metalness: 0.9, roughness: 0.15 })
-      );
-      blade.position.set(0, -0.01, -0.15);
+      // 손잡이 앞쪽 핑거 가드 돌기
+      const frontGuard = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.058, 0.024), gripMat);
+      frontGuard.position.set(0, -0.006, -0.005);
 
-      group.add(handle, guard, blade);
-      group.rotation.set(0.25, 0.35, -0.35);
+      // 손잡이 뒷쪽 삼각 랜야드 홀(끈 고리) 프레임
+      const pommelTop = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.014, 0.035), matteBlackBlade);
+      pommelTop.position.set(0, 0.018, 0.148);
+      const pommelBack = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.045, 0.012), matteBlackBlade);
+      pommelBack.position.set(0, 0.002, 0.162);
+
+      // 은색 원형 리벳 2개 (앞/뒤 양옆 관통)
+      const frontRivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.034, 12), rivetMat);
+      frontRivet.rotation.z = Math.PI / 2;
+      frontRivet.position.set(0, 0.004, 0.005);
+
+      const rearRivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.030, 12), rivetMat);
+      rearRivet.rotation.z = Math.PI / 2;
+      rearRivet.position.set(0, 0.008, 0.125);
+
+      // 메인 칼날 몸통 (무광 다크 그레이/블랙)
+      const bladeBody = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.042, 0.175), matteBlackBlade);
+      bladeBody.position.set(0, 0.002, -0.102);
+
+      // 칼날 하단 날 베벨
+      const bladeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.17), edgeSteel);
+      bladeEdge.position.set(0, -0.021, -0.10);
+
+      // 뾰족한 클립포인트 칼끝
+      const tipCone = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.068, 4), matteBlackBlade);
+      tipCone.rotation.x = -Math.PI / 2;
+      tipCone.rotation.z = Math.PI / 4;
+      tipCone.scale.set(0.32, 1.0, 1.0);
+      tipCone.position.set(0, -0.002, -0.22);
+
+      group.add(handle, frontGuard, pommelTop, pommelBack, frontRivet, rearRivet, bladeBody, bladeEdge, tipCone);
+
+      // 칼등(상단) 톱니 홈 6개 디테일
+      for (let i = 0; i < 6; i++) {
+        const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.008, 0.012), matteBlackBlade);
+        tooth.position.set(0, 0.026, -0.045 - i * 0.02);
+        group.add(tooth);
+      }
+
+      // 1인칭 시점에서 자연스럽게 쥐고 있는 각도로 배치
+      group.rotation.set(0.18, 0.42, -0.45);
       return group;
     }
 
@@ -390,7 +416,6 @@
     camera.add(gunGroup);
     scene.add(camera);
 
-    // === 히트 이펙트 ===
     const hitParticles = [];
     function spawnHitSpark(point, isHead) {
       const color = isHead ? 0xff3344 : 0xffdd55;
@@ -415,7 +440,6 @@
       hitX._timer = setTimeout(() => { hitX.style.opacity = '0'; }, 120);
     }
 
-    // === 무기 슬롯 전환 & 재장전 로직 ===
     function cancelReload() {
       if (isReloading) {
         isReloading = false;
@@ -452,7 +476,6 @@
       }, w.reloadTime * 1000);
     }
 
-    // === 상점 구매 로직 ===
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
       if (slotWeapons[w.slot] === key) return;
@@ -503,7 +526,6 @@
         ? '∞'
         : `${ammoState[key]} / ${w.magSize}`;
 
-      // 하단 슬롯 표시 업데이트
       const s1 = document.getElementById('slot1');
       const s2 = document.getElementById('slot2');
       const s3 = document.getElementById('slot3');
@@ -514,7 +536,6 @@
       s2.className = activeSlot === 2 ? 'slot-active' : '';
       s3.className = activeSlot === 3 ? 'slot-active' : '';
 
-      // 상점 장착 표시
       ['sheriff', 'phantom', 'vandal'].forEach(k => {
         const slot = WEAPONS[k].slot;
         document.getElementById('buy-' + k).classList.toggle('equipped', slotWeapons[slot] === k);
@@ -525,7 +546,6 @@
     }
     updateHUD();
 
-    // === 고정형 훈련장 로봇(Bot) 생성 — 체력 150 (HP 100 + 보호막 50) 통일 ===
     const botHitboxes = [];
     const bots = [];
 
@@ -570,16 +590,13 @@
 
     function respawnBot(bot) {
       bot.position.set((Math.random() - 0.5) * 44, 0, -Math.random() * 42 + 4);
-      // 훈련봇 기본 정면(+Z 방향) 고정
       bot.rotation.set(0, 0, 0);
-      // 훈련봇 체력 150 (HP 100 + 보호막 50)
       bot.userData.hp = 100;
       bot.userData.shield = 50;
     }
 
     for (let i = 0; i < 8; i++) createTrainingBot();
 
-    // === 조작 (1/2/3 슬롯, R 재장전, 앉기 Ctrl 반동 감소, 걷기 Shift, 8방향 대시 E) ===
     const keys = {};
     let yaw = 0, pitch = 0, velY = 0, isGrounded = true;
     let currentEyeHeight = 2.0;
@@ -663,12 +680,9 @@
 
       if (document.pointerLockElement !== document.body) return;
 
-      // 1, 2, 3 무기 슬롯 전환
       if (e.code === 'Digit1') switchSlot(1);
       if (e.code === 'Digit2') switchSlot(2);
       if (e.code === 'Digit3') switchSlot(3);
-
-      // R키 수동 재장전
       if (e.code === 'KeyR') startReload();
 
       if (e.code === 'Space' && isGrounded) {
@@ -695,7 +709,6 @@
     });
     document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-    // === 사격 및 근접 공격 판정 ===
     const raycaster = new THREE.Raycaster();
     const killfeed = document.getElementById('killfeed');
 
@@ -704,7 +717,6 @@
       const w = WEAPONS[key];
       if (isReloading) return;
 
-      // 탄창 확인
       if (key !== 'melee') {
         if (ammoState[key] <= 0) {
           startReload();
@@ -719,9 +731,8 @@
 
       fireCooldown = w.fireRate;
 
-      // 모션 연출 (근접 찌르기 vs 총기 반동)
       if (key === 'melee') {
-        gunGroup.position.z = -0.62;
+        gunGroup.position.z = -0.64;
         gunGroup.rotation.x = -0.35;
       } else {
         gunGroup.position.z = -0.32;
@@ -771,7 +782,6 @@
         }
       }
 
-      // 앉기(Ctrl) 상태면 반동 35% 감소!
       const isCrouching = keys['ControlLeft'] || keys['ControlRight'];
       const recoilMult = isCrouching ? 0.65 : 1.0;
 
@@ -789,7 +799,6 @@
       if (e.button === 0) isMouseDown = false;
     });
 
-    // === 메인 게임 루프 ===
     const clock = new THREE.Clock();
     function animate() {
       requestAnimationFrame(animate);
@@ -812,7 +821,6 @@
         fireWeapon();
       }
 
-      // 반동 복귀
       recoilPitchOffset = THREE.MathUtils.lerp(recoilPitchOffset, 0, 8 * dt);
       recoilYawOffset = THREE.MathUtils.lerp(recoilYawOffset, 0, 8 * dt);
 
@@ -846,7 +854,6 @@
           if (keys['KeyA']) move.sub(right);
           if (move.lengthSq() > 0) move.normalize();
 
-          // 근접 무기(3번)를 들면 기본 이동 속도가 빨라짐 (12)
           let moveSpeed = activeSlot === 3 ? 12 : 10;
           if (isCrouching) moveSpeed = 4.5;
           else if (isWalking) moveSpeed = 5.5;
