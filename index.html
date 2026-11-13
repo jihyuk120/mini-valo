@@ -1324,29 +1324,79 @@
     // ==========================================
     let activeFinisher = null;
 
+    let currentFinisherAudio = null;
+
+    function stopFinisherAudio() {
+      if (currentFinisherAudio) {
+        try {
+          currentFinisherAudio.pause();
+          currentFinisherAudio.currentTime = 0;
+        } catch (e) {}
+        currentFinisherAudio = null;
+      }
+    }
+
     function clearChampionsFinisher() {
+      stopFinisherAudio();
       if (!activeFinisher) return;
       scene.remove(activeFinisher.group);
       if (activeFinisher.skyDome) scene.remove(activeFinisher.skyDome);
-      scene.background = new THREE.Color(0x16202a);
-      if (scene.fog) scene.fog.color.setHex(0x16202a);
-      if (activeFinisher.audio) {
-        activeFinisher.audio.pause();
-        activeFinisher.audio = null;
-      }
+      const bgHex = currentMap === 'range' ? 0x1a242f : 0x16202a;
+      scene.background = new THREE.Color(bgHex);
+      if (scene.fog) scene.fog.color.setHex(bgHex);
       activeFinisher = null;
+    }
+
+    function playSynthChampionsFinisher() {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      // 2021 챔피언스 Die For You 하이라이트 코드 진행 (D minor -> Bb -> F -> C)
+      const chords = [
+        { t: 0.0, freqs: [146.83, 220.00, 293.66, 349.23, 440.00], dur: 1.4 },
+        { t: 1.3, freqs: [116.54, 233.08, 293.66, 349.23, 466.16], dur: 1.4 },
+        { t: 2.6, freqs: [174.61, 220.00, 261.63, 349.23, 523.25], dur: 1.4 },
+        { t: 3.9, freqs: [130.81, 261.63, 329.63, 392.00, 587.33], dur: 1.8 }
+      ];
+      chords.forEach(c => {
+        c.freqs.forEach(freq => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          const filter = audioCtx.createBiquadFilter();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now + c.t);
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(1400, now + c.t);
+          gain.gain.setValueAtTime(0.001, now + c.t);
+          gain.gain.linearRampToValueAtTime(0.085, now + c.t + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + c.t + c.dur);
+          osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(now + c.t);
+          osc.stop(now + c.t + c.dur + 0.05);
+        });
+      });
     }
 
     function triggerChampions2021Finisher(pos) {
       clearChampionsFinisher();
 
-      // 마지막 킬 사운드가 먼저 들리도록 0.65초 뒤에 2021 챔피언스 마무리 사운드(valorant-2021-champions.mp3) 재생
-      let finAudio = null;
-      setTimeout(() => {
-        finAudio = new Audio('valorant-2021-champions.mp3');
-        finAudio.volume = 0.9;
-        finAudio.play().catch(() => {});
-      }, 650);
+      // 이전 사운드가 남아있다면 즉시 정지 후 새 오디오 객체 저장
+      stopFinisherAudio();
+      const finAudio = new Audio('valorant-2021-champions.mp3');
+      finAudio.volume = 0.92;
+      finAudio.currentTime = 0;
+      currentFinisherAudio = finAudio;
+      const playPromise = finAudio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+          playSynthChampionsFinisher();
+        });
+      }
+      finAudio.onerror = () => {
+        if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+        playSynthChampionsFinisher();
+      };
 
       const group = new THREE.Group();
       group.position.set(pos.x, 0, pos.z);
@@ -1429,7 +1479,7 @@
         titanMat,
         beamMat,
         timer: 0,
-        duration: 5.5,
+        duration: 7.5,
         audio: finAudio
       };
     }
@@ -1575,7 +1625,7 @@
     function endBrawlRound(winningTeam, killerPos = null, usedChamp2021 = false) {
       if (roundPhase === 'END') return;
       roundPhase = 'END';
-      roundPhaseTimer = 5.5;
+      roundPhaseTimer = usedChamp2021 ? 7.5 : 5.0;
       currentStreak = 0; // 카운트만 0으로 초기화하고, 방금 뜬 킬 배너는 1.6초 동안 화면에 정상 표시!
 
       if (winningTeam === 'red') redScore += 1;
@@ -2658,6 +2708,9 @@
         triggerScoreStreak(multiScoreCount, anyHeadshotKill);
         const hsTag = anyHeadshotKill ? ' [헤드샷]' : '';
         addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!${hsTag}` : `[${w.name}] 훈련봇 타겟 완료${hsTag}`, multiScoreCount >= 2 || anyHeadshotKill);
+        if (currentMap === 'range' && currentStreak > 0 && currentStreak % 5 === 0 && key === 'vandal' && equippedSkins.vandal === 'champions2021') {
+          triggerChampions2021Finisher(hits[0].point);
+        }
       }
 
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
