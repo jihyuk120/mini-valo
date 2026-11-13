@@ -530,6 +530,129 @@
       </svg>`;
     }
 
+    function buildChampions2021EmblemSVG(count, isHeadshot = false) {
+      const tier = Math.min(6, Math.max(1, count));
+      const r = 56;
+      const cx = 100, cy = 100;
+
+      // 1~6킬까지 상단 아크(슬롯) 개수만 1개씩 늘어나는 구조
+      const arcAngles = {
+        1: [[-105, -75]],
+        2: [[-122, -94], [-86, -58]],
+        3: [[-136, -112], [-102, -78], [-68, -44]],
+        4: [[-148, -128], [-118, -98], [-88, -68], [-58, -38]],
+        5: [[-158, -140], [-131, -113], [-104, -86], [-77, -59], [-50, -32]],
+        6: [[-166, -150], [-141, -125], [-116, -100], [-91, -75], [-66, -50], [-41, -25]]
+      };
+
+      function polarToCartesian(deg) {
+        const rad = (deg * Math.PI) / 180;
+        return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+      }
+
+      const arcsHtml = arcAngles[tier].map(([startDeg, endDeg]) => {
+        const [x1, y1] = polarToCartesian(startDeg);
+        const [x2, y2] = polarToCartesian(endDeg);
+        const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+        return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
+                  fill="none" stroke="#ffd859" stroke-width="7.2" stroke-linecap="butt"
+                  style="filter: drop-shadow(0 0 6px #ffcf40);" />`;
+      }).join('');
+
+      return `
+      <svg viewBox="0 0 200 200" width="150" height="150" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="champBannerBg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(32, 24, 10, 0.85)" />
+            <stop offset="72%" stop-color="rgba(18, 15, 10, 0.45)" />
+            <stop offset="100%" stop-color="rgba(12, 12, 12, 0)" />
+          </radialGradient>
+          <linearGradient id="goldLeaf" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f6e28a" />
+            <stop offset="50%" stop-color="#c9a84c" />
+            <stop offset="100%" stop-color="#8a6d24" />
+          </linearGradient>
+          <linearGradient id="darkGoldLeaf" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#9e8238" />
+            <stop offset="100%" stop-color="#5e4b1c" />
+          </linearGradient>
+        </defs>
+
+        <!-- 배경 다크 골드 오라 -->
+        <circle cx="100" cy="100" r="78" fill="url(#champBannerBg)" />
+
+        <!-- 외곽 미세 링 & 상하단 흰색 아크 -->
+        <circle cx="100" cy="100" r="65" fill="none" stroke="rgba(255,245,210,0.35)" stroke-width="1.2" stroke-dasharray="52 18 14 18" />
+        <path d="M 52 58 A 68 68 0 0 1 148 58" fill="none" stroke="#f5f2e6" stroke-width="2.2" stroke-linecap="round" />
+        <path d="M 56 144 A 66 66 0 0 0 144 144" fill="none" stroke="rgba(255,248,225,0.75)" stroke-width="1.8" stroke-linecap="round" />
+
+        <!-- 메인 링 (흰색/연금색 테두리) -->
+        <circle cx="100" cy="100" r="46" fill="none" stroke="#f5f2e8" stroke-width="3.2" />
+        <circle cx="100" cy="100" r="56" fill="none" stroke="rgba(255,230,150,0.22)" stroke-width="1.4" />
+
+        <!-- 1~6킬 상단 황금 킬 카운트 슬롯 (이미지처럼 상단 아크만 증가) -->
+        ${arcsHtml}
+
+        <!-- 상단 중앙 작은 역삼각형 다이아 -->
+        <polygon points="95,33 105,33 100,40" fill="#fff7d6" style="filter: drop-shadow(0 0 4px #ffd700);" />
+
+        <!-- 4방향 대각선 안테나 라인 -->
+        <polyline points="68,68 48,48 34,48" fill="none" stroke="rgba(255,248,230,0.8)" stroke-width="1.6" />
+        <circle cx="33" cy="48" r="2" fill="#fff8e6" />
+        <polyline points="132,68 152,48 166,48" fill="none" stroke="rgba(255,248,230,0.8)" stroke-width="1.6" />
+        <circle cx="167" cy="48" r="2" fill="#fff8e6" />
+        <polyline points="68,132 48,152 34,152" fill="none" stroke="rgba(255,248,230,0.8)" stroke-width="1.6" />
+        <circle cx="33" cy="152" r="2" fill="#fff8e6" />
+        <polyline points="132,132 152,152 166,152" fill="none" stroke="rgba(255,248,230,0.8)" stroke-width="1.6" />
+        <circle cx="167" cy="152" r="2" fill="#fff8e6" />
+
+        <!-- 좌우 삼중 쉐브론 화살표 (>>> <<<) -->
+        <g stroke="#fff8e6" stroke-width="1.8" fill="none" opacity="0.88">
+          <polyline points="22,94 27,100 22,106" />
+          <polyline points="28,94 33,100 28,106" />
+          <polyline points="34,94 39,100 34,106" />
+          <polyline points="178,94 173,100 178,106" />
+          <polyline points="172,94 167,100 172,106" />
+          <polyline points="166,94 161,100 166,106" />
+        </g>
+
+        <!-- 상단 링 안쪽 미세 쉐브론 -->
+        <g stroke="rgba(255,235,175,0.65)" stroke-width="1.3" fill="none">
+          <polyline points="92,46 95,49 92,52" />
+          <polyline points="92,52 95,55 92,58" />
+          <polyline points="108,46 105,49 108,52" />
+          <polyline points="108,52 105,55 108,58" />
+        </g>
+
+        <!-- 하단 트윈 리본/코드 (X 교차 후 수직 하강) -->
+        <path d="M 95 146 C 95 156, 105 162, 105 178" fill="none" stroke="#f5f2e8" stroke-width="2.0" />
+        <path d="M 105 146 C 105 156, 95 162, 95 178" fill="none" stroke="#f5f2e8" stroke-width="2.0" />
+        <circle cx="95" cy="181" r="2.2" fill="#f5f2e8" />
+        <circle cx="105" cy="181" r="2.2" fill="#f5f2e8" />
+
+        <!-- 중앙 2021 챔피언스 스파크 엠블럼 -->
+        <!-- 1. 상단 빛나는 화이트-골드 V 날개 (발로란트 V 심볼) -->
+        <polygon points="82,66 99,88 99,98 87,98 82,84" fill="#ffffff" style="filter: drop-shadow(0 0 8px #ffe680);" />
+        <polygon points="118,66 118,84 113,98 102,98 109,88" fill="#fff9db" style="filter: drop-shadow(0 0 8px #ffe680);" />
+
+        <!-- 2. 좌우 확장 골드 날개 -->
+        <polygon points="68,86 84,86 95,100 84,100" fill="url(#goldLeaf)" />
+        <polygon points="132,86 116,86 105,100 116,100" fill="url(#goldLeaf)" />
+
+        <!-- 3. 하단 대칭 다크골드 날개 -->
+        <polygon points="84,100 95,100 84,114 68,114" fill="url(#darkGoldLeaf)" />
+        <polygon points="116,100 105,100 116,114 132,114" fill="url(#darkGoldLeaf)" />
+
+        <!-- 4. 최하단 중앙 골드 쉐브론 (^) -->
+        <polygon points="100,106 115,123 115,132 100,116 85,132 85,123" fill="url(#goldLeaf)" />
+
+        ${isHeadshot ? `
+        <!-- 헤드샷 시 상단 황금-크림슨 광채 링 추가 -->
+        <circle cx="100" cy="100" r="46" fill="none" stroke="#ffdf6b" stroke-width="4.5" style="filter: drop-shadow(0 0 8px #ffb700);" />
+        ` : ''}
+      </svg>`;
+    }
+
     function triggerScoreStreak(addCount = 1, isHeadshot = false) {
       currentStreak += addCount;
 
@@ -546,7 +669,9 @@
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = buildStreakEmblemSVG(currentStreak, isHeadshot);
+      svgWrap.innerHTML = isChamp2021Active
+        ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
+        : buildStreakEmblemSVG(currentStreak, isHeadshot);
 
       banner.style.transition = 'opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
       banner.style.opacity = '1';
@@ -2480,46 +2605,69 @@
       // 살아있는 아군 우선
       for (const b of brawlBots) {
         if (!b.userData.dead && b.userData.team === myTeam) {
-          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y });
+          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false });
         }
       }
       Object.values(remotePlayers).forEach(rp => {
         if (rp.mesh && rp.mesh.visible && rp.team === myTeam) {
-          list.push({ name: `[아군] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y });
+          list.push({ name: `[아군] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true });
         }
       });
       // 아군이 다 죽었으면 적군이라도 관전
       if (list.length === 0) {
         for (const b of brawlBots) {
           if (!b.userData.dead) {
-            list.push({ name: `[관전] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y });
+            list.push({ name: `[관전] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false });
           }
         }
+        Object.values(remotePlayers).forEach(rp => {
+          if (rp.mesh && rp.mesh.visible) {
+            list.push({ name: `[관전] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true });
+          }
+        });
       }
       return list;
     }
 
+    let currentSpectatedMesh = null;
+
     function updateSpectatorCamera() {
-      if (!isDead || currentMap !== 'brawl') return;
+      if (!isDead || currentMap !== 'brawl') {
+        if (currentSpectatedMesh) {
+          currentSpectatedMesh.visible = true;
+          currentSpectatedMesh = null;
+        }
+        return;
+      }
       const targets = getSpectatableTargets();
       if (targets.length === 0) return;
 
       spectateTargetIndex = spectateTargetIndex % targets.length;
       const target = targets[spectateTargetIndex];
 
-      gunGroup.visible = false;
-      document.getElementById('deathBanner').style.background = 'rgba(15, 25, 35, 0.25)';
+      // 이전에 관전하던 대상 메쉬 복구 후 현재 대상 메쉬는 1인칭 시야 방해 안 되게 숨김
+      if (currentSpectatedMesh && currentSpectatedMesh !== target.mesh) {
+        currentSpectatedMesh.visible = true;
+      }
+      if (target.mesh) {
+        target.mesh.visible = false;
+        currentSpectatedMesh = target.mesh;
+      }
+
+      gunGroup.visible = true;
+      document.getElementById('deathBanner').style.background = 'rgba(15, 25, 35, 0.08)';
       const titleEl = document.querySelector('#deathBanner div:nth-child(1)');
       const subEl = document.querySelector('#deathBanner div:nth-child(2)');
-      if (titleEl) titleEl.innerText = `관전 중: ${target.name}`;
+      if (titleEl) titleEl.innerText = `1인칭 관전 중: ${target.name}`;
       if (subEl) subEl.innerText = '좌클릭: 다음 플레이어 관전 | 라운드 종료 후 부활';
 
-      // 3인칭 어깨 너머 관전 카메라 배치
-      const backDist = 4.2;
-      const camX = target.pos.x - Math.sin(target.yaw) * backDist;
-      const camZ = target.pos.z - Math.cos(target.yaw) * backDist;
-      camera.position.lerp(new THREE.Vector3(camX, 2.8, camZ), 0.18);
-      camera.lookAt(target.pos.x, 1.6, target.pos.z);
+      // 1인칭 눈 위치 및 정면 시선 방향 동기화
+      camera.position.set(target.pos.x, 1.92, target.pos.z);
+      // 봇/아바타는 +Z가 정면(rotation.y = 0일 때 +Z를 봄), 카메라는 -Z가 정면이므로 + Math.PI 보정
+      const viewYaw = target.isRemote ? target.yaw : (target.yaw + Math.PI);
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = viewYaw;
+      camera.rotation.x = 0;
     }
 
     document.addEventListener('mousedown', (e) => {
