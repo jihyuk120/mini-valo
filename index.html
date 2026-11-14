@@ -6757,8 +6757,8 @@
     function fireWeapon(isHeavyAttack = false) {
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
-      if (isReloading || isDead) return;
-      if (currentMap === 'brawl' && roundPhase === 'PREP') return; // 준비 시간에는 발사/전투 불가
+      if (!w || isReloading || isDead) return;
+      if (currentMap === 'brawl' && roundPhase === 'PREP') return;
 
       const wasZoomed = zoomLevel > 0;
 
@@ -6775,11 +6775,10 @@
         if (ammoState[key] === 0) startReload();
       }
 
-      if (key === 'spike') return;
       if (key === 'melee') {
         isMeleeHeavySlash = isHeavyAttack;
         if (!isHeavyAttack) {
-          meleeComboStep = (meleeComboStep % 3) + 1; // 1: 왼쪽 베기 -> 2: 오른쪽 베기 -> 3: 위로 올려베기
+          meleeComboStep = (meleeComboStep % 3) + 1;
         }
         meleeSlashDuration = isHeavyAttack ? 0.52 : 0.28;
         fireCooldown = isHeavyAttack ? 0.72 : 0.36;
@@ -6799,7 +6798,7 @@
         gunGroup.position.z = zoomLevel > 0 ? -0.22 : -0.32;
         gunGroup.rotation.x = zoomLevel > 0 ? 0.06 : 0.14;
         if (key === 'sheriff') {
-          if (models.sheriff.userData.cylinder) models.sheriff.userData.cylinder.rotation.z += Math.PI / 3;
+          if (models.sheriff && models.sheriff.userData.cylinder) models.sheriff.userData.cylinder.rotation.z += Math.PI / 3;
           if (models.sheriff_neofrontier && models.sheriff_neofrontier.userData.cylinder) {
             models.sheriff_neofrontier.userData.cylinder.rotation.z += Math.PI / 3;
           }
@@ -6816,7 +6815,6 @@
       } else if (key === 'operator' && !wasZoomed) {
         spread = w.noScopeSpread + (isMoving && !isWalking && !isCrouching ? 0.12 : (isCrouching ? -0.06 : 0));
       } else if (isCrouching) {
-        // 앉아 쏴(Ctrl) 상태: 이동 중에도 발로란트 게걸음 사격처럼 정밀하게 탄착군이 모임
         spread = isMoving ? (w.jumpSpread * 0.04) : 0;
       } else if (isMoving && !isWalking) {
         spread = w.jumpSpread * 0.45;
@@ -6833,14 +6831,15 @@
         ? botHitboxes
         : [...remoteHitboxes, ...brawlBotHitboxes, ...destructibleMeshes];
 
-      // 1. 플레이어 자신의 무기(gunGroup) 및 카메라 하위 메쉬 제외
-      const selfMeshes = new Set();
-      camera.traverse((obj) => selfMeshes.add(obj));
-      gunGroup.traverse((obj) => selfMeshes.add(obj));
-
-      const enemyTargets = rawTargets.filter(obj => obj && !selfMeshes.has(obj));
-      const validWalls = wallMeshes.filter(obj => obj && obj.visible && !selfMeshes.has(obj));
-      const combinedTargets = [...enemyTargets, ...validWalls];
+      const targets = rawTargets.filter(obj => {
+        if (!obj) return false;
+        let p = obj;
+        while (p) {
+          if (p === camera || p === gunGroup) return false;
+          p = p.parent;
+        }
+        return true;
+      });
 
       const isClassicRightClick = (key === 'classic' && isHeavyAttack);
       const pelletCount = isClassicRightClick ? classicBurstShots : (w.pellets || 1);
@@ -6855,37 +6854,26 @@
         const pSpreadY = (Math.random() - 0.5) * (spread + extraPelletSpread);
 
         raycaster.setFromCamera(new THREE.Vector2(pSpreadX, pSpreadY), camera);
-        let allHits = raycaster.intersectObjects(combinedTargets, false);
+        const wallHits = raycaster.intersectObjects(wallMeshes, true);
+        const firstWallDist = wallHits.length > 0 ? wallHits[0].distance : Infinity;
 
-        if ((key === 'operator' || key === 'marshal' || key === 'outlaw') && !allHits.some(h => enemyTargets.includes(h.object))) {
+        let hits = raycaster.intersectObjects(targets, true);
+
+        if ((key === 'operator' || key === 'marshal' || key === 'outlaw') && hits.length === 0) {
           const subOffsets = [
             [0.008, 0], [-0.008, 0], [0, 0.008], [0, -0.008],
             [0.006, 0.006], [-0.006, 0.006], [0.006, -0.006], [-0.006, -0.006]
           ];
           for (const [ox, oy] of subOffsets) {
             raycaster.setFromCamera(new THREE.Vector2(pSpreadX + ox, pSpreadY + oy), camera);
-            const subHits = raycaster.intersectObjects(combinedTargets, false);
-            if (subHits.some(h => enemyTargets.includes(h.object))) {
-              allHits = subHits;
+            const subHits = raycaster.intersectObjects(targets, true);
+            if (subHits.length > 0) {
+              hits = subHits;
               break;
             }
           }
           raycaster.setFromCamera(new THREE.Vector2(pSpreadX, pSpreadY), camera);
         }
-
-        // 거리순 정렬
-        allHits.sort((a, b) => a.distance - b.distance);
-
-        // 2. 가장 가까운 벽 거리 판별 (적이 벽보다 앞에 있으면 wallbang = false, 벽이 적보다 앞에 있으면 wallbang = true)
-        let nearestWallDist = Infinity;
-        for (const h of allHits) {
-          if (validWalls.includes(h.object)) {
-            nearestWallDist = h.distance;
-            break;
-          }
-        }
-
-        const hits = allHits.filter(h => enemyTargets.includes(h.object));
 
         if (key !== 'melee') {
           const muzzleWorld = new THREE.Vector3();
@@ -6900,12 +6888,11 @@
           }
 
           let tracerEnd = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 120);
-          if (nearestWallDist < 120) {
-            const wallHitObj = allHits.find(h => validWalls.includes(h.object));
-            if (wallHitObj) tracerEnd = wallHitObj.point;
+          if (firstWallDist < 120) {
+            tracerEnd = wallHits[0].point.clone();
           }
-          if (hits.length > 0 && hits[0].distance < nearestWallDist && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
-            tracerEnd = hits[0].point;
+          if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
+            tracerEnd = hits[0].point.clone();
           }
           const isNeoSheriff = (key === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
           const isAraxysOp = (key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys');
@@ -6917,10 +6904,16 @@
         for (const hit of hits) {
           if (hitTargetsSet.size >= w.penetration) break;
           const hitObj = hit.object;
-          const isWallbang = hit.distance > nearestWallDist;
+          if (!hitObj || !hitObj.userData) continue;
+
+          const behindWall = hit.distance > firstWallDist;
+          if (behindWall && (key === 'melee' || (w.penetration || 1) <= 1)) {
+            continue;
+          }
+          const wallPenMult = behindWall ? 0.5 : 1.0;
 
           if (hitObj.userData.targetType === 'ascentDoor') {
-            if (isWallbang) break;
+            if (behindWall) break;
             const dObj = hitObj.userData.doorObj;
             if (dObj && !dObj.destroyed && !dObj.isOpen) {
               dObj.hp -= w.getDamage(hit.distance, 'body');
@@ -6937,8 +6930,9 @@
             }
             break;
           }
+
           if (hitObj.userData.targetType === 'ascentGlass') {
-            if (isWallbang) continue;
+            if (behindWall) continue;
             const gObj = hitObj.userData.glassObj;
             if (gObj && !gObj.destroyed) {
               gObj.hp -= w.getDamage(hit.distance, 'body');
@@ -6954,20 +6948,22 @@
           }
 
           const part = hitObj.userData.part;
+          if (!part) continue;
           const distance = hit.distance;
           const baseDmg = key === 'melee' ? w.getDamage(distance, part, isMeleeHeavySlash) : w.getDamage(distance, part);
           if (baseDmg <= 0) continue;
 
           if (hitObj.userData.targetType === 'bot') {
             const botRoot = hitObj.userData.botRoot;
-            if (hitTargetsSet.has(botRoot)) continue;
+            if (!botRoot || hitTargetsSet.has(botRoot)) continue;
             hitTargetsSet.add(botRoot);
 
             const penIndex = hitTargetsSet.size - 1;
-            const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-            const wallMult = isWallbang ? 0.5 : 1.0;
-            const dmg = Math.round(baseDmg * penMult * wallMult);
-            if (!isWallbang && (pIdx === 0 || pelletCount === 1)) spawnHitSpark(hit.point, part === 'head');
+            const penMult = (penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65)) * wallPenMult;
+            const dmg = Math.round(baseDmg * penMult);
+            if (!behindWall && (pIdx === 0 || pelletCount === 1)) {
+              spawnHitSpark(hit.point, part === 'head');
+            }
 
             const bd = botRoot.userData;
             let rem = dmg;
@@ -6987,10 +6983,11 @@
             hitTargetsSet.add(targetPeerId);
 
             const penIndex = hitTargetsSet.size - 1;
-            const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-            const wallMult = isWallbang ? 0.5 : 1.0;
-            const dmg = Math.round(baseDmg * penMult * wallMult);
-            if (!isWallbang && (pIdx === 0 || pelletCount === 1)) spawnHitSpark(hit.point, part === 'head');
+            const penMult = (penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65)) * wallPenMult;
+            const dmg = Math.round(baseDmg * penMult);
+            if (!behindWall && (pIdx === 0 || pelletCount === 1)) {
+              spawnHitSpark(hit.point, part === 'head');
+            }
 
             const myNick = document.getElementById('nickInput').value || '플레이어';
             const conn = connections[targetPeerId];
@@ -7009,10 +7006,11 @@
             hitTargetsSet.add(botRoot);
 
             const penIndex = hitTargetsSet.size - 1;
-            const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-            const wallMult = isWallbang ? 0.5 : 1.0;
-            const dmg = Math.round(baseDmg * penMult * wallMult);
-            if (!isWallbang && (pIdx === 0 || pelletCount === 1)) spawnHitSpark(hit.point, part === 'head');
+            const penMult = (penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65)) * wallPenMult;
+            const dmg = Math.round(baseDmg * penMult);
+            if (!behindWall && (pIdx === 0 || pelletCount === 1)) {
+              spawnHitSpark(hit.point, part === 'head');
+            }
 
             let rem = dmg;
             if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
@@ -7034,18 +7032,16 @@
               credits = Math.min(MAX_CREDITS, credits + 200);
               updateHUD();
               triggerScoreStreak(1, isHead);
-              addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}${isWallbang ? ' [월샷]' : ''}`, true);
+              addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
 
-              const { redAlive, blueAlive } = countAliveTeams();
-              const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
-              const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
-              if (remainingEnemies === 0) {
-                const usedChamp = ((key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys'))
-                  ? 'araxys'
-                  : ((key === 'phantom' && equippedSkins.phantom === 'champions2024')
-                    ? '2024'
-                    : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false));
-                endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
+              const aliveNow = countAliveTeams();
+              if (aliveNow.redAlive === 0 || aliveNow.blueAlive === 0) {
+                const winTeam = aliveNow.blueAlive === 0 ? 'red' : 'blue';
+                const isOpAraxys = (key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys');
+                const isP2024 = (key === 'phantom' && equippedSkins.phantom === 'champions2024');
+                const isV2021 = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'melee' && equippedSkins.melee === 'champions2021');
+                const finEd = isOpAraxys ? 'araxys' : (isP2024 ? '2024' : (isV2021 ? '2021' : false));
+                endBrawlRound(winTeam, botRoot.position.clone(), finEd);
               }
             }
           }
@@ -7053,578 +7049,468 @@
       }
 
       if (multiScoreCount > 0) {
-        updateHUD();
         triggerScoreStreak(multiScoreCount, anyHeadshotKill);
-        const hsTag = anyHeadshotKill ? ' [헤드샷]' : '';
-        addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!${hsTag}` : `[${w.name}] 훈련봇 타겟 완료${hsTag}`, multiScoreCount >= 2 || anyHeadshotKill);
-        if (currentMap === 'range' && currentStreak > 0 && currentStreak % 5 === 0) {
-          const finPos = lastFinisherPos || hits[0].point;
-          if ((key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys')) {
-            triggerAraxysFinisher(finPos);
-          } else if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
-            triggerChampions2024Finisher(finPos);
-          } else if (key === 'vandal' && equippedSkins.vandal === 'champions2021') {
-            triggerChampions2021Finisher(finPos);
-          }
+        if (lastFinisherPos) {
+          const isOpAraxys = (key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys');
+          const isP2024 = (key === 'phantom' && equippedSkins.phantom === 'champions2024');
+          const isV2021 = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'melee' && equippedSkins.melee === 'champions2021');
+          if (isOpAraxys) triggerAraxysFinisher(lastFinisherPos);
+          else if (isP2024) triggerChampions2024Finisher(lastFinisherPos);
+          else if (isV2021) triggerChampions2021Finisher(lastFinisherPos);
         }
       }
 
-      let recoilMult = isCrouching ? 0.48 : 1.0;
-      if (wasZoomed) recoilMult *= 0.8;
-      if (key === 'operator' && !wasZoomed) recoilMult *= 1.8;
-      if (!isGrounded) recoilMult *= 1.4;
-
-      recoilPitchOffset = Math.min(0.30, recoilPitchOffset + w.recoilPitch * recoilMult);
-      recoilYawOffset += (Math.random() - 0.5) * w.recoilYaw * 2 * recoilMult;
-    }
-
-
-    function getSpectatableTargets() {
-      const list = [];
-      // 살아있는 아군 우선
-      for (const b of brawlBots) {
-        if (!b.userData.dead && b.userData.team === myTeam) {
-          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false, weaponKey: b.userData.weaponKey || 'vandal' });
-        }
+      if (key !== 'melee') {
+        const isCrouchingRecoil = Boolean(keys['ControlLeft'] || keys['ControlRight']);
+        const crouchRecoilMult = isCrouchingRecoil ? 0.65 : 1.0;
+        const zoomRecoilMult = zoomLevel > 0 ? 0.72 : 1.0;
+        recoilPitchOffset = Math.min(0.42, recoilPitchOffset + w.recoilPitch * crouchRecoilMult * zoomRecoilMult);
+        recoilYawOffset += (Math.random() - 0.5) * 2 * w.recoilYaw * crouchRecoilMult * zoomRecoilMult;
       }
-      Object.values(remotePlayers).forEach(rp => {
-        if (rp.mesh && rp.mesh.visible && rp.team === myTeam) {
-          list.push({ name: `[아군] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true, weaponKey: rp.weaponKey || 'vandal' });
-        }
-      });
-      // 아군이 다 죽었으면 적군이라도 관전
-      if (list.length === 0) {
-        for (const b of brawlBots) {
-          if (!b.userData.dead) {
-            list.push({ name: `[관전] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false, weaponKey: b.userData.weaponKey || 'vandal' });
-          }
-        }
-        Object.values(remotePlayers).forEach(rp => {
-          if (rp.mesh && rp.mesh.visible) {
-            list.push({ name: `[관전] ${rp.nick}`, pos: rp.mesh.position, yaw: rp.mesh.rotation.y, mesh: rp.mesh, isRemote: true, weaponKey: rp.weaponKey || 'vandal' });
-          }
-        });
-      }
-      return list;
-    }
-
-    let currentSpectatedMesh = null;
-    let currentSpectatedWeaponKey = null;
-
-    function updateSpectatorCamera() {
-      if (!isDead || currentMap !== 'brawl') {
-        if (currentSpectatedMesh) {
-          currentSpectatedMesh.visible = true;
-          currentSpectatedMesh = null;
-        }
-        if (currentSpectatedWeaponKey !== null) {
-          currentSpectatedWeaponKey = null;
-          updateGunVisual();
-        }
-        return;
-      }
-      const targets = getSpectatableTargets();
-      if (targets.length === 0) return;
-
-      spectateTargetIndex = spectateTargetIndex % targets.length;
-      const target = targets[spectateTargetIndex];
-
-      // 이전에 관전하던 대상 메쉬 복구 후 현재 대상 메쉬는 1인칭 시야 방해 안 되게 숨김
-      if (currentSpectatedMesh && currentSpectatedMesh !== target.mesh) {
-        currentSpectatedMesh.visible = true;
-      }
-      if (target.mesh) {
-        target.mesh.visible = false;
-        currentSpectatedMesh = target.mesh;
-      }
-
-      // 관전 대상이 들고 있는 총기 모델로 1인칭 뷰모델 교체 (칼 들고 있는 버그 수정)
-      const specWKey = target.weaponKey || 'vandal';
-      if (currentSpectatedWeaponKey !== specWKey) {
-        currentSpectatedWeaponKey = specWKey;
-        while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
-        gunGroup.add(getActiveModelForWeapon(specWKey));
-        gunGroup.position.set(0.26, -0.22, -0.42);
-        gunGroup.rotation.set(0, 0, 0);
-      }
-      gunGroup.visible = true;
-      document.getElementById('deathBanner').style.background = 'rgba(15, 25, 35, 0.08)';
-      const titleEl = document.querySelector('#deathBanner div:nth-child(1)');
-      const subEl = document.querySelector('#deathBanner div:nth-child(2)');
-      if (titleEl) titleEl.innerText = `1인칭 관전 중: ${target.name}`;
-      if (subEl) subEl.innerText = '좌클릭: 다음 플레이어 관전 | 라운드 종료 후 부활';
-
-      // 1인칭 눈 위치 및 정면 시선 방향 동기화
-      camera.position.set(target.pos.x, 1.92, target.pos.z);
-      // 봇/아바타는 +Z가 정면(rotation.y = 0일 때 +Z를 봄), 카메라는 -Z가 정면이므로 + Math.PI 보정
-      const viewYaw = target.isRemote ? target.yaw : (target.yaw + Math.PI);
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = viewYaw;
-      camera.rotation.x = 0;
     }
 
     document.addEventListener('mousedown', (e) => {
-      if (document.pointerLockElement !== document.body) return;
-      if (isDead) {
-        if (e.button === 0) spectateTargetIndex++;
-        return;
-      }
-      const curK = getCurrentWeaponKey();
-      const w = WEAPONS[curK];
-      // 마샬 / 버키 1발씩 장전 중일 때 클릭 시 즉시 장전 캔슬(Reload Cancel)!
-      if (isReloading && w && w.shellReload && ammoState[curK] > 0) {
-        cancelReload();
-        gunGroup.rotation.x = 0;
-      }
+      if (document.pointerLockElement !== document.body || isDead) return;
+      initAudio();
       if (e.button === 0) {
         isMouseDown = true;
-        if (fireCooldown <= 0) {
-          if ((curK === 'bulldog' || curK === 'stinger') && zoomLevel > 0) {
-            fireBurstRounds(3, 0.055);
-          } else {
-            fireWeapon();
-          }
-        }
+        if (fireCooldown <= 0) fireWeapon(false);
       } else if (e.button === 2) {
-        if (curK === 'melee') {
-          if (fireCooldown <= 0) fireWeapon(true); // 우클릭 회전 찌르기 강공격!
-        } else if (curK === 'classic') {
-          if (fireCooldown <= 0) {
-            fireWeapon(true);
-            fireCooldown = 0.42;
-          }
+        const key = getCurrentWeaponKey();
+        const w = WEAPONS[key];
+        if (key === 'melee') {
+          if (fireCooldown <= 0) fireWeapon(true);
+        } else if (w.zoomType === 'burst3') {
+          if (fireCooldown <= 0) fireWeapon(true);
+        } else if (w.zoomType === 'burst3_holo') {
+          if (zoomLevel === 0) setZoom(1);
+          else setZoom(0);
+        } else if (w.zoomType === 'airburst') {
+          if (fireCooldown <= 0) fireWeapon(false);
+        } else if (w.zoomType === 'holo') {
+          setZoom(zoomLevel === 0 ? 1 : 0);
+        } else if (w.zoomType === 'sniper1') {
+          setZoom(zoomLevel === 0 ? 1 : 0);
         } else if (w.zoomType === 'sniper') {
           setZoom((zoomLevel + 1) % 3);
-        } else if (w.zoomType === 'sniper1' || w.zoomType === 'holo' || w.zoomType === 'burst3_holo' || w.zoomType === 'burst4') {
-          setZoom(zoomLevel === 0 ? 1 : 0);
         }
       }
     });
 
-    document.addEventListener('mouseup', (e) => { if (e.button === 0) isMouseDown = false; });
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) isMouseDown = false;
+    });
 
-    loadMap('brawl');
+    document.addEventListener('wheel', (e) => {
+      if (document.pointerLockElement !== document.body || isDead) return;
+      const order = slotWeapons[1] ? [1, 2, 3] : [2, 3];
+      const idx = order.indexOf(activeSlot);
+      if (idx === -1) return;
+      const nextIdx = (idx + (e.deltaY > 0 ? 1 : -1) + order.length) % order.length;
+      switchSlot(order[nextIdx]);
+    });
 
-    const clock = new THREE.Clock();
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    let prevTime = performance.now();
     let netSyncTimer = 0;
+    let playerFootstepTimer = 0;
 
     function animate() {
       requestAnimationFrame(animate);
-      const dt = clock.getDelta();
+      const now = performance.now();
+      const dt = Math.min((now - prevTime) / 1000, 0.1);
+      prevTime = now;
 
-      for (const item of droppedItems) {
-        if (item.mesh && item.mesh.children[0]) {
-          item.mesh.children[0].rotation.y += dt * 2.2;
-        }
+      updateChampionsFinisher(dt);
+      updateBrawlRoundPhase(dt);
+
+      if (currentMap === 'range') {
+        bots.forEach(bot => {
+          bot.position.x += bot.userData.strafeDir * 3.8 * dt;
+          bot.userData.strafeTimer -= dt;
+          if (bot.userData.strafeTimer <= 0 || Math.abs(bot.position.x - bot.userData.baseX) > 4.5) {
+            bot.userData.strafeDir *= -1;
+            bot.userData.strafeTimer = 1.0 + Math.random() * 1.4;
+          }
+        });
       }
 
+      updateBrawlBots(dt);
+
+      // 총알 궤적(트레이서) 페이드아웃 및 제거
       for (let i = tracers.length - 1; i >= 0; i--) {
         const t = tracers[i];
         t.userData.life -= dt;
-        t.material.opacity = Math.max(0, t.userData.life / t.userData.maxLife);
         if (t.userData.life <= 0) {
           scene.remove(t);
-          t.geometry.dispose();
-          t.material.dispose();
           tracers.splice(i, 1);
+        } else {
+          t.material.opacity = Math.max(0, (t.userData.life / t.userData.maxLife) * 0.92);
         }
       }
 
       for (let i = hitParticles.length - 1; i >= 0; i--) {
         const p = hitParticles[i];
-        p.userData.life -= dt;
         p.position.addScaledVector(p.userData.vel, dt);
-        p.userData.vel.y -= 15 * dt;
+        p.userData.vel.y -= 18 * dt;
+        p.userData.life -= dt;
         if (p.userData.life <= 0) { scene.remove(p); hitParticles.splice(i, 1); }
       }
 
-      if (!isDead && currentShieldKey === 'regen' && shieldReserve > 0 && playerShield < 25 && (performance.now() - lastDamageTime) > 3000) {
-        const regen = Math.min(10 * dt, 25 - playerShield, shieldReserve);
-        playerShield += regen;
-        shieldReserve -= regen;
-        updateHUD();
-      }
-
-      if (fireCooldown > 0) fireCooldown -= dt;
-      const curWeapon = WEAPONS[getCurrentWeaponKey()];
-      if (isMouseDown && curWeapon.auto && fireCooldown <= 0 && !isReloading && !isDead && document.pointerLockElement === document.body) {
-        const kNow = getCurrentWeaponKey();
-        if ((kNow === 'bulldog' || kNow === 'stinger') && zoomLevel > 0) {
-          fireBurstRounds(3, 0.055);
-        } else {
-          fireWeapon();
+      if (currentShieldKey === 'regen' && !isDead && playerShield < 25 && shieldReserve > 0) {
+        if (now - lastDamageTime > 3000) {
+          const regenAmt = Math.min(12 * dt, 25 - playerShield, shieldReserve);
+          playerShield += regenAmt;
+          shieldReserve -= regenAmt;
+          updateHUD();
         }
       }
 
-      recoilPitchOffset = THREE.MathUtils.lerp(recoilPitchOffset, 0, 8 * dt);
-      recoilYawOffset = THREE.MathUtils.lerp(recoilYawOffset, 0, 8 * dt);
-      aimPunchPitch = THREE.MathUtils.lerp(aimPunchPitch, 0, 7.5 * dt);
-      tagSlowMultiplier = THREE.MathUtils.lerp(tagSlowMultiplier, 1.0, 2.2 * dt);
+      if (fireCooldown > 0) fireCooldown -= dt;
+      const curW = WEAPONS[getCurrentWeaponKey()];
+      if (isMouseDown && curW && curW.auto && fireCooldown <= 0 && !isDead) {
+        if (zoomLevel > 0 && curW.zoomType === 'burst3_holo') {
+          fireBurstRounds(3, 0.055);
+        } else {
+          fireWeapon(false);
+        }
+      }
 
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = yaw + recoilYawOffset;
-      camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset + aimPunchPitch));
+      recoilPitchOffset = THREE.MathUtils.lerp(recoilPitchOffset, 0, Math.min(1, 10 * dt));
+      recoilYawOffset = THREE.MathUtils.lerp(recoilYawOffset, 0, Math.min(1, 10 * dt));
+      aimPunchPitch = THREE.MathUtils.lerp(aimPunchPitch, 0, Math.min(1, 14 * dt));
+      tagSlowMultiplier = THREE.MathUtils.lerp(tagSlowMultiplier, 1.0, Math.min(1, 3.8 * dt));
 
-      const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
-      const isWalking = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
-      const isMoving = Boolean(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
+      const targetFov = zoomLevel === 2 ? 22 : (zoomLevel === 1 ? 52 : 75);
+      if (Math.abs(camera.fov - targetFov) > 0.1) {
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, 16 * dt));
+        camera.updateProjectionMatrix();
+      }
 
-      const crosshairEl = document.getElementById('crosshair');
-      const curKey = getCurrentWeaponKey();
-      const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isCrouching ? (isMoving ? 0.85 : 0.75) : (isMoving && !isWalking ? 1.5 : 1.0)));
-      crosshairEl.style.transform = `translate(-50%, -50%) scale(${spreadScale})`;
+      if (swapAnimTimer > 0) swapAnimTimer = Math.max(0, swapAnimTimer - dt);
+      if (meleeSlashTimer > 0) meleeSlashTimer = Math.max(0, meleeSlashTimer - dt);
+      if (isInspecting) {
+        inspectTimer += dt;
+        if (getCurrentWeaponKey() !== 'melee' && !(getCurrentWeaponKey() === 'sheriff' && equippedSkins.sheriff === 'neofrontier') && inspectTimer > 3.6) {
+          isInspecting = false;
+          inspectTimer = 0;
+        }
+      }
 
-      const targetEyeHeight = isCrouching ? 1.25 : 2.0;
-      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 16 * dt);
+      // 2021 챔피언스 반달 킬 오라 & 건 버디 애니메이션
+      const champVandal = models.vandal_champions2021;
+      if (champVandal && champVandal.userData) {
+        if (championsAuraTimer > 0) championsAuraTimer = Math.max(0, championsAuraTimer - dt);
+        const auraRatio = Math.min(1, championsAuraTimer / 1.5);
+        if (champVandal.userData.auraMat) {
+          champVandal.userData.auraMat.opacity = auraRatio * (0.28 + Math.sin(now * 0.015) * 0.12);
+        }
+        if (champVandal.userData.champBodyMat) {
+          champVandal.userData.champBodyMat.emissiveIntensity = 0.08 + auraRatio * 0.45;
+        }
+        if (champVandal.userData.buddyCore) {
+          champVandal.userData.buddyCore.rotation.y += dt * (2.5 + auraRatio * 6.0);
+        }
+      }
 
-      if (dashCooldown > 0) dashCooldown -= dt;
-      const dashEl = document.getElementById('dashStatus');
-      dashEl.innerText = dashCooldown > 0 ? dashCooldown.toFixed(1) + '초' : '준비완료';
-      dashEl.style.color = dashCooldown > 0 ? '#ff4655' : '#00ffcc';
+      // 네오 프론티어 셰리프 킬 오라 & 핑거 스핀(Y키) 애니메이션
+      const nfSheriff = models.sheriff_neofrontier;
+      if (nfSheriff && nfSheriff.userData) {
+        if (neoFrontierAuraTimer > 0) neoFrontierAuraTimer = Math.max(0, neoFrontierAuraTimer - dt);
+        const nfAuraRatio = Math.min(1, neoFrontierAuraTimer / 1.5);
+        if (nfSheriff.userData.emeraldGlowMat) {
+          nfSheriff.userData.emeraldGlowMat.emissiveIntensity = 1.45 + nfAuraRatio * 1.4 + Math.sin(now * 0.014) * 0.25;
+        }
+        if (nfSheriff.userData.spinPivot) {
+          if (isInspecting && getCurrentWeaponKey() === 'sheriff' && equippedSkins.sheriff === 'neofrontier') {
+            nfSheriff.userData.spinAngle += dt * 15.5;
+            nfSheriff.userData.spinPivot.rotation.x = nfSheriff.userData.spinAngle;
+            nfSheriff.userData.whooshAccum += dt * 15.5;
+            if (nfSheriff.userData.whooshAccum >= Math.PI * 2) {
+              nfSheriff.userData.whooshAccum -= Math.PI * 2;
+              playKarambitWhooshSound(1.22);
+            }
+          } else {
+            nfSheriff.userData.spinAngle = 0;
+            nfSheriff.userData.whooshAccum = 0;
+            nfSheriff.userData.spinPivot.rotation.x = THREE.MathUtils.lerp(
+              nfSheriff.userData.spinPivot.rotation.x, 0, Math.min(1, 18 * dt)
+            );
+          }
+        }
+      }
 
-      let targetFov = 75;
-      if (dashTime > 0) targetFov = 96;
-      else if (zoomLevel === 1) targetFov = curWeapon.zoomType === 'sniper' ? 35 : 55;
-      else if (zoomLevel === 2) targetFov = 18;
+      // 아락시스 오퍼레이터 & 아락시스 아웃로 외계 금속 비늘 살아 움직이는 애니메이션
+      [models.operator_araxys, models.outlaw_araxys].forEach(araxysModel => {
+        if (!araxysModel || !araxysModel.userData) return;
+        const wKeyTarget = araxysModel === models.operator_araxys ? 'operator' : 'outlaw';
+        if (araxysAuraTimer > 0 && araxysModel === models.operator_araxys) {
+          araxysAuraTimer = Math.max(0, araxysAuraTimer - dt);
+        }
+        const aAuraRatio = Math.min(1, araxysAuraTimer / 1.5);
+        const isActiveAraxys = (getCurrentWeaponKey() === wKeyTarget && equippedSkins[wKeyTarget] === 'araxys');
 
-      if (!isDead) {
+        const targetOpen = isActiveAraxys
+          ? (isInspecting ? 1.0 : (isReloading ? 0.85 : (fireCooldown > 0.35 ? 0.72 : (0.14 + Math.sin(now * 0.004) * 0.08 + aAuraRatio * 0.35))))
+          : 0;
+        araxysModel.userData.scaleOpenAmount = THREE.MathUtils.lerp(
+          araxysModel.userData.scaleOpenAmount || 0,
+          targetOpen,
+          Math.min(1, 10 * dt)
+        );
+
+        const openVal = araxysModel.userData.scaleOpenAmount;
+        if (araxysModel.userData.leftScales && araxysModel.userData.rightScales) {
+          araxysModel.userData.leftScales.forEach((lPivot, idx) => {
+            const wave = Math.sin(now * 0.008 - idx * 0.65) * 0.04 * (0.3 + openVal);
+            lPivot.rotation.y = -(openVal * 0.52 + wave);
+            lPivot.rotation.z = openVal * 0.16;
+          });
+          araxysModel.userData.rightScales.forEach((rPivot, idx) => {
+            const wave = Math.sin(now * 0.008 - idx * 0.65) * 0.04 * (0.3 + openVal);
+            rPivot.rotation.y = (openVal * 0.52 + wave);
+            rPivot.rotation.z = -openVal * 0.16;
+          });
+        }
+
+        if (araxysModel.userData.crimsonCoreMat) {
+          araxysModel.userData.crimsonCoreMat.emissiveIntensity =
+            1.25 + openVal * 1.35 + aAuraRatio * 0.9 + Math.sin(now * 0.012) * 0.22;
+        }
+      });
+
+      // 2024 챔피언스 팬텀 아메시스트 크리스탈 & 건 버디 애니메이션
+      const champPhantom = models.phantom_champions2024;
+      if (champPhantom && champPhantom.userData) {
+        if (champions2024AuraTimer > 0) champions2024AuraTimer = Math.max(0, champions2024AuraTimer - dt);
+        const aura24Ratio = Math.min(1, champions2024AuraTimer / 1.5);
+        if (champPhantom.userData.auraMat) {
+          champPhantom.userData.auraMat.opacity = aura24Ratio * (0.30 + Math.sin(now * 0.016) * 0.14);
+        }
+        if (champPhantom.userData.amethystBodyMat) {
+          champPhantom.userData.amethystBodyMat.emissiveIntensity = 0.25 + aura24Ratio * 0.55;
+        }
+        if (champPhantom.userData.coreCrystalMat) {
+          champPhantom.userData.coreCrystalMat.emissiveIntensity = 0.95 + aura24Ratio * 0.85 + Math.sin(now * 0.01) * 0.2;
+        }
+        if (champPhantom.userData.crystalOrb) {
+          champPhantom.userData.crystalOrb.rotation.y += dt * (2.2 + aura24Ratio * 5.0);
+          champPhantom.userData.crystalOrb.rotation.x += dt * 1.4;
+        }
+        if (champPhantom.userData.buddyCrystal) {
+          champPhantom.userData.buddyCrystal.rotation.y -= dt * (2.8 + aura24Ratio * 5.5);
+        }
+      }
+
+      // 2021 챔피언스 카람빗 핑거 스핀(Y키) & 킬 오라 애니메이션
+      const champKarambit = models.melee_champions2021;
+      if (champKarambit && champKarambit.userData && champKarambit.userData.spinPivot) {
+        const auraRatio = Math.min(1, championsAuraTimer / 1.5);
+        champKarambit.userData.bladeAuraMat.opacity = auraRatio * (0.32 + Math.sin(now * 0.018) * 0.14);
+        champKarambit.userData.royalGoldMat.emissiveIntensity = 0.18 + auraRatio * 0.55;
+
+        const isKarambitInspecting = (isInspecting && getCurrentWeaponKey() === 'melee' && equippedSkins.melee === 'champions2021');
+        const kHand = champKarambit.userData.karambitHand;
+        if (kHand && kHand.userData) {
+          const targetFingerOpen = isKarambitInspecting ? 0.58 : 0;
+          if (kHand.userData.gripFingers) {
+            kHand.userData.gripFingers.forEach((fp, i) => {
+              fp.rotation.x = THREE.MathUtils.lerp(fp.rotation.x, targetFingerOpen + (isKarambitInspecting ? Math.sin(now * 0.02 + i) * 0.06 : 0), Math.min(1, 14 * dt));
+            });
+          }
+          if (kHand.userData.thumbPivot) {
+            kHand.userData.thumbPivot.rotation.z = THREE.MathUtils.lerp(kHand.userData.thumbPivot.rotation.z, isKarambitInspecting ? 0.48 : 0, Math.min(1, 14 * dt));
+          }
+        }
+
+        if (isKarambitInspecting) {
+          champKarambit.userData.spinAngle -= dt * 16.5;
+          champKarambit.userData.spinPivot.rotation.z = champKarambit.userData.spinAngle;
+          champKarambit.userData.trailMat.opacity = 0.36 + Math.sin(now * 0.025) * 0.12;
+          champKarambit.userData.whooshAccum += dt * 16.5;
+          if (champKarambit.userData.whooshAccum >= Math.PI * 2) {
+            champKarambit.userData.whooshAccum -= Math.PI * 2;
+            playKarambitWhooshSound(1.0 + Math.random() * 0.15);
+          }
+        } else {
+          champKarambit.userData.spinAngle = 0;
+          champKarambit.userData.whooshAccum = 0;
+          champKarambit.userData.spinPivot.rotation.z = THREE.MathUtils.lerp(
+            champKarambit.userData.spinPivot.rotation.z, 0, Math.min(1, 18 * dt)
+          );
+          champKarambit.userData.trailMat.opacity = THREE.MathUtils.lerp(
+            champKarambit.userData.trailMat.opacity, 0, Math.min(1, 14 * dt)
+          );
+        }
+      }
+
+      if (!isReloading) {
+        const curKey = getCurrentWeaponKey();
+        const isMelee = curKey === 'melee';
+        const isChampKarambit = isMelee && equippedSkins.melee === 'champions2021';
+
+        let targetX = zoomLevel > 0 ? 0.0 : (isMelee ? 0.25 : 0.26);
+        let targetY = zoomLevel > 0 ? -0.132 : (isMelee ? -0.22 : -0.22);
+        let targetZ = zoomLevel > 0 ? -0.26 : (isMelee ? -0.34 : -0.42);
+        let targetRotX = 0;
+        let targetRotY = 0;
+        let targetRotZ = 0;
+
+        if (swapAnimTimer > 0) {
+          const p = swapAnimTimer / 0.34;
+          if (isChampKarambit) {
+            targetY -= Math.sin(p * Math.PI) * 0.05;
+            targetRotZ += p * Math.PI * 2;
+            targetRotX += Math.sin(p * Math.PI) * 0.32;
+          } else {
+            targetY -= p * 0.16;
+            targetRotX -= p * 0.45;
+          }
+        } else if (meleeSlashTimer > 0 && isMelee) {
+          const progress = 1 - (meleeSlashTimer / meleeSlashDuration);
+          const swing = Math.sin(progress * Math.PI);
+          if (isMeleeHeavySlash) {
+            targetX -= swing * 0.28;
+            targetY += Math.sin(progress * Math.PI * 2) * 0.06;
+            targetZ -= swing * 0.22;
+            targetRotY += swing * 1.15;
+            targetRotX -= swing * 0.55;
+            targetRotZ += progress * Math.PI * 2;
+          } else {
+            if (meleeComboStep === 1) {
+              targetX -= swing * 0.26;
+              targetZ -= swing * 0.16;
+              targetRotY += swing * 1.1;
+              targetRotZ += swing * 0.75;
+            } else if (meleeComboStep === 2) {
+              targetX += swing * 0.14 - 0.10;
+              targetZ -= swing * 0.16;
+              targetRotY -= swing * 0.95;
+              targetRotZ -= swing * 0.85;
+            } else {
+              targetX -= swing * 0.16;
+              targetY += swing * 0.14;
+              targetZ -= swing * 0.18;
+              targetRotX += swing * 0.72;
+              targetRotZ += swing * 0.45;
+            }
+          }
+        } else if (isInspecting && zoomLevel === 0) {
+          if (isChampKarambit) {
+            targetX = 0.05;
+            targetY = -0.14 + Math.sin(inspectTimer * 3.0) * 0.012;
+            targetZ = -0.30;
+            targetRotX = -0.18;
+            targetRotY = -0.52;
+            targetRotZ = 0.12;
+          } else if (curKey === 'sheriff' && equippedSkins.sheriff === 'neofrontier') {
+            targetX = 0.10;
+            targetY = -0.16 + Math.sin(inspectTimer * 3.5) * 0.012;
+            targetZ = -0.34;
+            targetRotY = -0.35;
+            targetRotZ = 0.22;
+          } else {
+            const ease = Math.min(1, inspectTimer * 3.5);
+            targetX = 0.06;
+            targetY = -0.15 + Math.sin(inspectTimer * 2.5) * 0.012;
+            targetZ = -0.33;
+            targetRotY = -0.68 * ease + Math.sin(inspectTimer * 1.8) * 0.18;
+            targetRotZ = 0.35 * ease;
+            targetRotX = 0.12 * ease;
+          }
+        }
+
+        const lerpSpeed = (meleeSlashTimer > 0) ? 28 : 14;
+        gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, targetX, Math.min(1, lerpSpeed * dt));
+        gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetY, Math.min(1, lerpSpeed * dt));
+        gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetZ, Math.min(1, lerpSpeed * dt));
+        gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, targetRotX, Math.min(1, lerpSpeed * dt));
+        gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, targetRotY, Math.min(1, lerpSpeed * dt));
+        gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, targetRotZ, Math.min(1, lerpSpeed * dt));
+      }
+
+      if (document.pointerLockElement === document.body && !isDead) {
+        const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
+        const targetEyeHeight = isCrouching ? 1.25 : 2.0;
+        const prevEyeHeight = currentEyeHeight;
+        currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, Math.min(1, 16 * dt));
+        camera.position.y += (currentEyeHeight - prevEyeHeight);
+
+        let speed = curW ? curW.moveSpeed : 7.0;
+        if (isCrouching) speed *= 0.48;
+        else if (keys['ShiftLeft'] || keys['ShiftRight']) speed *= 0.52;
+        if (zoomLevel > 0) speed *= 0.72;
+        speed *= tagSlowMultiplier;
+
+        if (dashCooldown > 0) {
+          dashCooldown -= dt;
+          document.getElementById('dashStatus').innerText = `${Math.max(0, dashCooldown).toFixed(1)}s`;
+          document.getElementById('dashStatus').style.color = '#ff4655';
+        } else {
+          document.getElementById('dashStatus').innerText = '준비완료';
+          document.getElementById('dashStatus').style.color = '#00ffcc';
+        }
+
         if (dashTime > 0) {
+          moveWithCollision(dashDir.x * 23 * dt, dashDir.z * 23 * dt);
           dashTime -= dt;
-          moveWithCollision(dashDir.x * 50 * dt, dashDir.z * 50 * dt);
-        } else if (document.pointerLockElement === document.body) {
+        } else {
           const { forward, right } = getMoveVectors();
           const move = new THREE.Vector3();
           if (keys['KeyW']) move.add(forward);
           if (keys['KeyS']) move.sub(forward);
           if (keys['KeyD']) move.add(right);
           if (keys['KeyA']) move.sub(right);
-          if (move.lengthSq() > 0) move.normalize();
+          if (move.lengthSq() > 0) {
+            move.normalize();
+            moveWithCollision(move.x * speed * dt, move.z * speed * dt);
 
-          let moveSpeed = curWeapon.moveSpeed || 7.4;
-          if (isCrouching) moveSpeed = Math.min(3.4, moveSpeed * 0.48);
-          else if (isWalking || zoomLevel > 0) moveSpeed = Math.min(4.4, moveSpeed * 0.62);
-          moveSpeed *= tagSlowMultiplier;
-
-          moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
-
-          // 플레이어 발소리 (Shift 걷기 시 발소리 무음, 뛰거나 앉아 걸을 때 발소리 재생)
-          if (move.lengthSq() > 0 && isGrounded && !isWalking) {
-            window._playerStepTimer = (window._playerStepTimer || 0) + dt * (isCrouching ? 0.65 : 1.0);
-            if (window._playerStepTimer >= 0.36) {
-              window._playerStepTimer = 0;
-              playFootstepSound(isCrouching, 0);
+            const isWalkingSilent = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
+            if (isGrounded && !isWalkingSilent) {
+              playerFootstepTimer += dt * (speed / 6.7);
+              if (playerFootstepTimer >= 0.36) {
+                playerFootstepTimer = 0;
+                playFootstepSound(isCrouching, 0);
+              }
             }
-          } else {
-            window._playerStepTimer = 0.25;
           }
         }
-      }
-      camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.22);
-      camera.updateProjectionMatrix();
 
-      if (isDead && currentMap === 'brawl') {
-        updateSpectatorCamera();
-      } else if (!isGrounded) {
-        velY -= 20.5 * dt;
+        velY -= 19.6 * dt;
         camera.position.y += velY * dt;
-        const gFloorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
-        if (camera.position.y <= gFloorY + currentEyeHeight) {
-          camera.position.y = gFloorY + currentEyeHeight;
+        const floorH = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
+        const groundEyeY = floorH + currentEyeHeight;
+        if (camera.position.y <= groundEyeY) {
+          camera.position.y = groundEyeY;
           velY = 0;
           isGrounded = true;
         }
-      } else {
-        const floorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
-        camera.position.y = floorY + currentEyeHeight;
       }
-
-      const karambitModel = models.melee_champions2021;
-      const isKarambitEquipped = (curKey === 'melee' && equippedSkins.melee === 'champions2021');
-      const neoSheriffModel = models.sheriff_neofrontier;
-      const isNeoSheriffEquipped = (curKey === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
 
       if (isDead && currentMap === 'brawl') {
-        gunGroup.position.set(0.26, -0.22, -0.42);
-        gunGroup.rotation.set(0, 0, 0);
-      } else if (swapAnimTimer > 0) {
-        swapAnimTimer -= dt;
-        const progress = Math.max(0, swapAnimTimer / 0.34);
-        if (isNeoSheriffEquipped && neoSheriffModel) {
-          gunGroup.position.set(0.24, -0.19 - progress * 0.10, -0.40 + progress * 0.06);
-          gunGroup.rotation.set(0, 0, 0);
-          neoSheriffModel.userData.spinPivot.rotation.x = progress * Math.PI * 2;
-        } else if (isKarambitEquipped && karambitModel) {
-          // 꺼낼 때 검지 고리를 축으로 한 바퀴 빠르게 돌리며 파지하는 카람빗 전용 스왑 모션
-          gunGroup.position.set(0.24, -0.18 - progress * 0.16, -0.38 + progress * 0.10);
-          gunGroup.rotation.set(0, 0, 0);
-          karambitModel.userData.spinPivot.rotation.z = -progress * Math.PI * 2;
-          karambitModel.userData.trailMat.opacity = Math.sin(progress * Math.PI) * 0.55;
-        } else if (curKey === 'melee') {
-          gunGroup.position.set(0.26, -0.22 - progress * 0.25, -0.42 + progress * 0.15);
-          gunGroup.rotation.set(-progress * 1.4, progress * 0.8, progress * Math.PI * 2);
-        } else {
-          gunGroup.position.set(0.26, -0.22 - progress * 0.18, -0.42);
-          gunGroup.rotation.set(-progress * 0.6, 0, 0);
+        const aliveList = [];
+        brawlBots.forEach(b => { if (!b.userData.dead) aliveList.push({ pos: b.position, rotY: b.rotation.y }); });
+        Object.values(remotePlayers).forEach(rp => { if (rp.mesh && rp.mesh.visible) aliveList.push({ pos: rp.mesh.position, rotY: rp.mesh.rotation.y }); });
+        if (aliveList.length > 0) {
+          const target = aliveList[spectateTargetIndex % aliveList.length];
+          const backX = target.pos.x - Math.sin(target.rotY) * 3.8;
+          const backZ = target.pos.z - Math.cos(target.rotY) * 3.8;
+          camera.position.lerp(new THREE.Vector3(backX, target.pos.y + 2.6, backZ), Math.min(1, 8 * dt));
+          camera.lookAt(target.pos.x, target.pos.y + 1.5, target.pos.z);
         }
-      } else if (meleeSlashTimer > 0 && curKey === 'melee') {
-        meleeSlashTimer -= dt;
-        const t = 1.0 - Math.max(0, meleeSlashTimer / meleeSlashDuration);
-        const swing = Math.sin(t * Math.PI);
-        if (isKarambitEquipped && karambitModel) {
-          if (isMeleeHeavySlash) {
-            // 우클릭 찌르기: 1단계(약간 왼쪽으로 회전) -> 2단계(앞으로 날카롭게 찌르기) -> 3단계(한 바퀴 회전하며 원래 자세로 복귀)
-            if (t < 0.25) {
-              const p1 = t / 0.25;
-              gunGroup.position.set(0.21 - p1 * 0.08, -0.14 + p1 * 0.03, -0.34 + p1 * 0.05);
-              gunGroup.rotation.set(p1 * 0.12, p1 * 0.42, p1 * 0.35);
-              karambitModel.userData.spinPivot.rotation.z = -p1 * 0.5;
-              karambitModel.userData.trailMat.opacity = p1 * 0.35;
-            } else if (t < 0.60) {
-              const p2 = (t - 0.25) / 0.35;
-              const thrust = Math.sin(p2 * Math.PI * 0.5);
-              gunGroup.position.set(0.13 - thrust * 0.05, -0.11 + thrust * 0.02, -0.29 - thrust * 0.34);
-              gunGroup.rotation.set(0.12 - thrust * 0.22, 0.42 - thrust * 0.25, 0.35 - thrust * 0.25);
-              karambitModel.userData.spinPivot.rotation.z = -0.5;
-              karambitModel.userData.trailMat.opacity = 0.65;
-            } else {
-              const p3 = (t - 0.60) / 0.40;
-              const easeOut = 1 - Math.pow(1 - p3, 2);
-              gunGroup.position.set(0.08 + easeOut * 0.13, -0.09 - easeOut * 0.05, -0.63 + easeOut * 0.29);
-              gunGroup.rotation.set(-0.10 * (1 - easeOut), 0.17 * (1 - easeOut), 0.10 * (1 - easeOut));
-              karambitModel.userData.spinPivot.rotation.z = -0.5 - easeOut * (Math.PI * 2 - 0.5);
-              karambitModel.userData.trailMat.opacity = (1 - easeOut) * 0.75;
-            }
-          } else if (meleeComboStep === 1) {
-            // 1타: 왼쪽으로 베기 (우 -> 좌 가로 슬래시)
-            const sweep = Math.cos(t * Math.PI);
-            gunGroup.position.set(0.10 + sweep * 0.22, -0.14, -0.32 - swing * 0.18);
-            gunGroup.rotation.set(-0.12 * swing, 0.65 - sweep * 0.85, 0.55 * swing);
-            karambitModel.userData.spinPivot.rotation.z = -swing * 0.45;
-            karambitModel.userData.trailMat.opacity = swing * 0.78;
-          } else if (meleeComboStep === 2) {
-            // 2타: 오른쪽으로 베기 (좌 -> 우 역방향 가로 슬래시)
-            const sweep = -Math.cos(t * Math.PI);
-            gunGroup.position.set(0.14 + sweep * 0.24, -0.13, -0.32 - swing * 0.18);
-            gunGroup.rotation.set(0.15 * swing, -0.55 - sweep * 0.85, -0.65 * swing);
-            karambitModel.userData.spinPivot.rotation.z = swing * 0.45;
-            karambitModel.userData.trailMat.opacity = swing * 0.78;
-          } else {
-            // 3타: 위로 올려베기 (하 -> 상 어퍼컷 슬래시)
-            const rise = -Math.cos(t * Math.PI);
-            gunGroup.position.set(0.14 - swing * 0.08, -0.14 + rise * 0.18, -0.33 - swing * 0.22);
-            gunGroup.rotation.set(0.35 + rise * 0.75, 0.22 * swing, -0.25 * swing);
-            karambitModel.userData.spinPivot.rotation.z = -swing * 0.65;
-            karambitModel.userData.trailMat.opacity = swing * 0.85;
-          }
-        } else {
-          if (isMeleeHeavySlash) {
-            gunGroup.position.set(0.22 - swing * 0.18, -0.10 - swing * 0.14, -0.38 - swing * 0.38);
-            gunGroup.rotation.set(0.35 - swing * 1.15, -swing * 0.25, swing * 0.35);
-          } else if (meleeComboStep === 1) {
-            const sweep = Math.cos(t * Math.PI);
-            gunGroup.position.set(0.16 + sweep * 0.20, -0.22, -0.40 - swing * 0.22);
-            gunGroup.rotation.set(-0.2 * swing, 0.55 - sweep * 0.75, 0.45 * swing);
-          } else if (meleeComboStep === 2) {
-            const sweep = -Math.cos(t * Math.PI);
-            gunGroup.position.set(0.20 + sweep * 0.22, -0.21, -0.40 - swing * 0.22);
-            gunGroup.rotation.set(0.15 * swing, -0.45 - sweep * 0.75, -0.5 * swing);
-          } else {
-            const rise = -Math.cos(t * Math.PI);
-            gunGroup.position.set(0.22, -0.22 + rise * 0.18, -0.40 - swing * 0.26);
-            gunGroup.rotation.set(0.3 + rise * 0.75, 0, 0);
-          }
-        }
-      } else if (isInspecting && gunGroup.visible) {
-        inspectTimer += dt;
-        if (isKarambitEquipped && karambitModel) {
-          // Y키: 쥐고 있던 중지·약지·소지가 활짝 펴지고 엄지가 튕겨주며 검지 고리 축으로 무한 회전!
-          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.15, 0.18);
-          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.12 + Math.sin(inspectTimer * 4.5) * 0.012, 0.18);
-          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.34, 0.18);
-          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.18, 0.18);
-          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.24, 0.18);
-          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.22, 0.18);
-
-          const handObj = karambitModel.userData.karambitHand;
-          if (handObj && handObj.userData.gripFingers) {
-            handObj.userData.gripFingers.forEach((fp, idx) => {
-              fp.rotation.x = THREE.MathUtils.lerp(fp.rotation.x, -0.85 - idx * 0.08, 0.22);
-            });
-          }
-          if (handObj && handObj.userData.thumbPivot) {
-            // 엄지손가락이 튕기는 리듬 동작
-            const flick = Math.max(0, Math.sin(inspectTimer * 13.5)) * 0.55;
-            handObj.userData.thumbPivot.rotation.z = -0.35 + flick;
-            handObj.userData.thumbPivot.rotation.x = -0.25 + flick * 0.5;
-          }
-
-          const spinSpeed = 13.5;
-          karambitModel.userData.spinAngle -= spinSpeed * dt;
-          karambitModel.userData.spinPivot.rotation.z = karambitModel.userData.spinAngle;
-          karambitModel.userData.trailMat.opacity = 0.48 + Math.sin(inspectTimer * 18) * 0.15;
-
-          karambitModel.userData.whooshAccum += spinSpeed * dt;
-          if (karambitModel.userData.whooshAccum >= Math.PI * 1.15) {
-            karambitModel.userData.whooshAccum = 0;
-            playKarambitWhooshSound(0.95 + Math.random() * 0.2);
-          }
-        } else if (isNeoSheriffEquipped && neoSheriffModel) {
-          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.17, 0.18);
-          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.16 + Math.sin(inspectTimer * 5.0) * 0.012, 0.18);
-          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.37, 0.18);
-          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.06, 0.18);
-          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.22, 0.18);
-          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.16, 0.18);
-
-          const spinSpeed = 12.5;
-          neoSheriffModel.userData.spinAngle -= spinSpeed * dt;
-          neoSheriffModel.userData.spinPivot.rotation.x = neoSheriffModel.userData.spinAngle;
-          neoSheriffModel.userData.cylinder.rotation.z += dt * 8.0;
-
-          neoSheriffModel.userData.whooshAccum += spinSpeed * dt;
-          if (neoSheriffModel.userData.whooshAccum >= Math.PI * 1.3) {
-            neoSheriffModel.userData.whooshAccum = 0;
-            playKarambitWhooshSound(1.15 + Math.random() * 0.15);
-          }
-        } else if ((curKey === 'operator' && equippedSkins.operator === 'araxys') || (curKey === 'outlaw' && equippedSkins.outlaw === 'araxys')) {
-          // 아락시스 오퍼레이터 자세히 보기(Y키): 총신을 위로 들어올리며 측면 비늘 장갑판이 활짝 펴짐!
-          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.12, 0.14);
-          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.10 + Math.sin(inspectTimer * 2.4) * 0.008, 0.14);
-          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.34, 0.14);
-          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.34, 0.14);
-          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.72, 0.14);
-          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.28, 0.14);
-          if (inspectTimer > 4.2) {
-            isInspecting = false;
-            inspectTimer = 0;
-          }
-        } else {
-          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.14, 0.15);
-          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.14, 0.15);
-          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.35, 0.15);
-          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.18, 0.15);
-          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.68, 0.15);
-          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.22, 0.15);
-          if (inspectTimer > 3.2) {
-            isInspecting = false;
-            inspectTimer = 0;
-          }
-        }
-      } else if (!isReloading && gunGroup.visible) {
-        const targetGunX = zoomLevel > 0 ? 0.0 : (isKarambitEquipped ? 0.21 : 0.26);
-        const targetGunY = zoomLevel > 0 ? -0.073 : (isKarambitEquipped ? -0.14 : -0.22);
-        const targetGunZ = zoomLevel > 0 ? -0.42 : (isKarambitEquipped ? -0.34 : -0.42);
-        gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, targetGunX, 0.25);
-        gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, targetGunY, 0.25);
-        gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, targetGunZ, 0.25);
-        gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.2);
-        gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0, 0.2);
-        gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, 0, 0.2);
-
-        if (neoSheriffModel && neoSheriffModel.userData.spinPivot) {
-          const curX = neoSheriffModel.userData.spinPivot.rotation.x;
-          const nearestTurn = Math.round(curX / (Math.PI * 2)) * (Math.PI * 2);
-          neoSheriffModel.userData.spinPivot.rotation.x = THREE.MathUtils.lerp(curX, nearestTurn, 0.25);
-          neoSheriffModel.userData.spinAngle = neoSheriffModel.userData.spinPivot.rotation.x;
-        }
-        if (karambitModel && karambitModel.userData.spinPivot) {
-          const currentZ = karambitModel.userData.spinPivot.rotation.z;
-          const nearestFullTurn = Math.round(currentZ / (Math.PI * 2)) * (Math.PI * 2);
-          karambitModel.userData.spinPivot.rotation.z = THREE.MathUtils.lerp(currentZ, nearestFullTurn, 0.25);
-          karambitModel.userData.spinAngle = karambitModel.userData.spinPivot.rotation.z;
-          karambitModel.userData.trailMat.opacity = THREE.MathUtils.lerp(karambitModel.userData.trailMat.opacity, 0, 0.25);
-
-          // 스핀 종료 시 펼쳐졌던 손가락들이 다시 손잡이를 꽉 감싸쥐도록 복귀
-          const handObj = karambitModel.userData.karambitHand;
-          if (handObj && handObj.userData.gripFingers) {
-            handObj.userData.gripFingers.forEach(fp => {
-              fp.rotation.x = THREE.MathUtils.lerp(fp.rotation.x, 0, 0.25);
-            });
-          }
-          if (handObj && handObj.userData.thumbPivot) {
-            handObj.userData.thumbPivot.rotation.z = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.z, 0, 0.25);
-            handObj.userData.thumbPivot.rotation.x = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.x, 0, 0.25);
-          }
-        }
+      } else {
+        camera.rotation.order = 'YXZ';
+        camera.rotation.y = yaw + recoilYawOffset;
+        camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset + aimPunchPitch));
       }
-
-      if (neoFrontierAuraTimer > 0) neoFrontierAuraTimer -= dt;
-      if (neoSheriffModel && neoSheriffModel.userData.emeraldGlowMat) {
-        const nfPulse = Math.sin(performance.now() * 0.014) * 0.35;
-        neoSheriffModel.userData.emeraldGlowMat.emissiveIntensity = (neoFrontierAuraTimer > 0 || (isInspecting && isNeoSheriffEquipped)) ? (2.1 + nfPulse) : 1.45;
-      }
-
-      // 아락시스 오퍼레이터 & 아락시스 아웃로 비늘(Scales) 개방 & 크림슨 코어 발광 애니메이션
-      if (araxysAuraTimer > 0) araxysAuraTimer -= dt;
-      [
-        { m: models.operator_araxys, wKey: 'operator', sKey: equippedSkins.operator, baseX: 0.030 },
-        { m: models.outlaw_araxys, wKey: 'outlaw', sKey: equippedSkins.outlaw, baseX: 0.032 }
-      ].forEach(({ m: araxysModel, wKey, sKey, baseX }) => {
-        if (araxysModel && araxysModel.userData.leftScales) {
-          const isAraxysInspecting = (isInspecting && curKey === wKey && sKey === 'araxys');
-          const targetOpen = isAraxysInspecting ? 1.0 : (isReloading && curKey === wKey ? 0.55 : (araxysAuraTimer > 0 && curKey === wKey ? 0.35 : 0.0));
-          araxysModel.userData.scaleOpenAmount = THREE.MathUtils.lerp(araxysModel.userData.scaleOpenAmount, targetOpen, 0.16);
-          const openAmt = araxysModel.userData.scaleOpenAmount;
-
-          araxysModel.userData.leftScales.forEach((sc, idx) => {
-            const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
-            sc.rotation.y = -(openAmt * 0.62 + wave);
-            sc.rotation.z = openAmt * 0.24;
-            sc.position.x = -baseX - openAmt * 0.016;
-          });
-          araxysModel.userData.rightScales.forEach((sc, idx) => {
-            const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
-            sc.rotation.y = (openAmt * 0.62 + wave);
-            sc.rotation.z = -openAmt * 0.24;
-            sc.position.x = baseX + openAmt * 0.016;
-          });
-
-          const pulse = Math.sin(performance.now() * 0.012) * 0.25;
-          araxysModel.userData.crimsonCoreMat.emissiveIntensity = (isAraxysInspecting || (araxysAuraTimer > 0 && curKey === wKey)) ? (1.85 + pulse) : 1.15;
-        }
-      });
-
-      // 2024 챔피언스 팬텀 코어 & 오라 애니메이션
-      if (champions2024AuraTimer > 0) champions2024AuraTimer -= dt;
-      const isAura2024On = champions2024AuraTimer > 0;
-      const champ2024Model = models.phantom_champions2024;
-      if (champ2024Model) {
-        if (champ2024Model.userData.crystalOrb) {
-          champ2024Model.userData.crystalOrb.rotation.y += dt * (isAura2024On ? 5.2 : 1.8);
-          champ2024Model.userData.crystalOrb.rotation.x += dt * 1.1;
-        }
-        if (champ2024Model.userData.buddyCrystal) {
-          champ2024Model.userData.buddyCrystal.rotation.y += dt * 3.0;
-        }
-        if (champ2024Model.userData.auraMat) {
-          champ2024Model.userData.auraMat.opacity = isAura2024On ? (0.34 + Math.sin(performance.now() * 0.016) * 0.15) : 0.0;
-          champ2024Model.userData.amethystBodyMat.emissiveIntensity = isAura2024On ? 0.58 : 0.22;
-          champ2024Model.userData.coreCrystalMat.emissiveIntensity = isAura2024On ? 1.45 : 0.85;
-        }
-      }
-
-      // 2021 챔피언스 밴달 & 카람빗 오라 및 총기 장식 애니메이션
-      if (championsAuraTimer > 0) championsAuraTimer -= dt;
-      const isAuraOn = championsAuraTimer > 0;
-      const champModel = models.vandal_champions2021;
-      if (champModel && champModel.userData.auraMat) {
-        champModel.userData.auraMat.opacity = isAuraOn ? (0.32 + Math.sin(performance.now() * 0.015) * 0.14) : 0.0;
-        champModel.userData.champBodyMat.emissiveIntensity = isAuraOn ? 0.45 : 0.08;
-        if (champModel.userData.buddyCore) {
-          champModel.userData.buddyCore.rotation.y += dt * 3.0;
-        }
-      }
-      if (karambitModel && karambitModel.userData.bladeAuraMat) {
-        karambitModel.userData.bladeAuraMat.opacity = isAuraOn ? (0.38 + Math.sin(performance.now() * 0.015) * 0.16) : 0.0;
-        karambitModel.userData.blackCarbonMat.emissiveIntensity = isAuraOn ? 0.48 : 0.06;
-      }
-
-      updateBrawlRoundPhase(dt);
-      updateChampionsFinisher(dt);
-      updateBrawlBots(dt);
 
       netSyncTimer += dt;
-      if (netSyncTimer >= 0.033 && Object.keys(connections).length > 0) {
+      if (netSyncTimer >= 0.04) {
         netSyncTimer = 0;
         broadcastData({
           type: 'move',
@@ -7639,13 +7525,9 @@
 
       renderer.render(scene, camera);
     }
-    animate();
 
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    loadMap('brawl');
+    animate();
   </script>
 </body>
 </html>
