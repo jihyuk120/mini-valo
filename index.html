@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>MINI-VALO 3D - 난투 PvP</title>
+  <title>MINI-VALO 3D - 일반전 (13선승) & 사격장</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
@@ -42,100 +42,14 @@
     .team-red { color: #ff4655; font-size: 22px; }
     .team-blue { color: #38bdf8; font-size: 22px; }
 
-    #hud {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(1160px, 95vw);
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      pointer-events: none;
-      z-index: 5;
-      font-family: 'Segoe UI', sans-serif;
-    }
-    .val-hud-left {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: linear-gradient(90deg, rgba(15, 25, 35, 0.88) 0%, rgba(15, 25, 35, 0.45) 100%);
-      padding: 10px 22px 10px 16px;
-      border-left: 4px solid #00ffcc;
-      clip-path: polygon(0 0, 100% 0, 94% 100%, 0% 100%);
-    }
-    .val-shield-badge {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 255, 204, 0.12);
-      border: 1px solid rgba(0, 255, 204, 0.45);
-      padding: 4px 10px;
-      min-width: 44px;
-    }
-    .val-shield-num { font-size: 22px; font-weight: 900; color: #00ffcc; line-height: 1.1; }
-    .val-shield-label { font-size: 9px; color: #7ef9ff; letter-spacing: 1px; font-weight: bold; }
-    .val-hp-block { display: flex; flex-direction: column; }
-    .val-hp-num { font-size: 46px; font-weight: 900; color: #ece8e1; line-height: 0.95; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.6); }
-    .val-regen-sub { font-size: 11px; color: #9fb3c8; font-weight: bold; margin-top: 3px; letter-spacing: 0.5px; }
-
-    .val-hud-center {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-    }
-    .val-ability-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(15, 25, 35, 0.82);
-      padding: 6px 16px;
-      border-bottom: 2px solid rgba(255, 255, 255, 0.25);
-    }
-    .val-skill-box {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(0, 255, 204, 0.35);
-      font-size: 12px;
-      font-weight: bold;
-      color: #ece8e1;
-    }
-    .val-key-cap {
-      background: #ece8e1;
-      color: #0f1923;
-      font-size: 10px;
-      font-weight: 900;
-      padding: 1px 5px;
-      border-radius: 2px;
-    }
-    .val-meta-bar {
-      font-size: 11px;
-      color: #cbd5e1;
-      background: rgba(15, 25, 35, 0.72);
-      padding: 3px 12px;
-      border-radius: 3px;
-      letter-spacing: 0.5px;
-    }
-
-    .val-hud-right {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      background: linear-gradient(270deg, rgba(15, 25, 35, 0.88) 0%, rgba(15, 25, 35, 0.45) 100%);
-      padding: 10px 16px 10px 24px;
-      border-right: 4px solid #ff4655;
-      clip-path: polygon(6% 0, 100% 0, 100% 100%, 0% 100%);
-    }
-    .val-ammo-row { display: flex; align-items: baseline; gap: 8px; }
-    .val-weapon-name { font-size: 14px; font-weight: 800; color: #ff4655; letter-spacing: 1px; text-transform: uppercase; }
-    .val-ammo-num { font-size: 38px; font-weight: 900; color: #ece8e1; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,0.6); }
-    .val-slot-list { display: flex; gap: 10px; font-size: 11px; color: #8b9bb4; margin-top: 5px; font-weight: bold; }
-    .slot-active { color: #00ffcc; text-shadow: 0 0 6px rgba(0, 255, 204, 0.5); }
+    #hud { position: fixed; bottom: 25px; left: 25px; right: 25px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; z-index: 5; }
+    .hud-box { background: rgba(15, 25, 35, 0.85); color: white; padding: 14px 24px; border-bottom: 3px solid #ff4655; font-weight: bold; letter-spacing: 1px; }
+    .hp-val { font-size: 32px; color: #ece8e1; }
+    .shield-val { font-size: 24px; color: #00ffcc; margin-left: 10px; }
+    .regen-tag { font-size: 13px; color: #7ef9ff; display: block; margin-top: 2px; }
+    .ammo-val { font-size: 28px; color: #00ffcc; margin-left: 10px; }
+    .slot-bar { font-size: 12px; color: #aaa; margin-top: 4px; }
+    .slot-active { color: #ff4655; font-weight: bold; }
     #killfeed { position: fixed; top: 20px; right: 25px; color: #00ffcc; font-size: 14px; font-weight: bold; text-align: right; pointer-events: none; z-index: 5; line-height: 1.5; }
 
     .modal { position: fixed; inset: 0; background: rgba(15, 25, 35, 0.94); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; overflow-y: auto; padding: 20px; }
@@ -169,7 +83,7 @@
 <body>
   <div id="overlay" class="modal">
     <h1>MINI-VALO</h1>
-    <p id="menuSubtitle" style="color:#ccc; margin:0 0 10px 0;">난투 PvP (1v1 · 2v2) & 사격장</p>
+    <p id="menuSubtitle" style="color:#ccc; margin:0 0 10px 0;">일반전 (13선승 · 전반 12라운드 공수교대 · 크레드 규칙) & 사격장</p>
 
     <div class="panel-box">
       <div class="row" style="justify-content:space-between;">
@@ -187,7 +101,7 @@
         <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">레드 팀 (RED)</button>
         <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">블루 팀 (BLUE)</button>
         <span style="color:#555;">|</span>
-        <span style="font-size:14px; color:#bbb;">난투 인원:</span>
+        <span style="font-size:14px; color:#bbb;">인원 구성:</span>
         <select id="brawlModeSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
           <option value="1v1" selected>1 vs 1 (단판 승부)</option>
           <option value="2v2">2 vs 2 (팀전 · 관전 지원)</option>
@@ -197,7 +111,7 @@
     </div>
 
     <div class="panel-box">
-      <div style="font-weight:bold; color:#00ffcc; margin-bottom:10px; text-align:center;">친구와 1v1 / 2v2 난투 방 연결 (최대 4인)</div>
+      <div style="font-weight:bold; color:#00ffcc; margin-bottom:10px; text-align:center;">친구와 1v1 / 2v2 일반전 방 연결 (최대 4인)</div>
       <div class="row">
         <button id="btnCreateRoom" class="btn-primary">방 만들기 (호스트)</button>
         <span style="color:#666;">|</span>
@@ -212,7 +126,7 @@
 
     <div class="row" style="margin-top:10px;">
       <button id="btnResumeGame" class="btn-secondary" style="font-size:17px; padding:14px 26px; display:none; border-color:#ffcc00; color:#ffcc00;">↩ 게임으로 돌아가기 (뒤로 가기)</button>
-      <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:14px 32px;">난투 새 게임 시작</button>
+      <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:14px 32px;">일반전 새 게임 시작 (13선승)</button>
       <button id="btnStartRange" class="btn-secondary" style="font-size:17px; padding:14px 28px;">사격장 (훈련봇 연습)</button>
     </div>
 
@@ -224,7 +138,7 @@
   <div id="shopModal" class="modal" style="justify-content:flex-start; padding-top:16px;">
     <div class="shop-header" style="width:1160px; max-width:96vw; margin-bottom:8px;">
       <h1 style="font-size:28px; margin:0;">발로란트 전 무기 무기고 (SHOP)</h1>
-      <div style="font-size:18px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">99999</span> ¤ (무제한)</div>
+      <div style="font-size:18px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">800</span> ¤ <span id="shopCreditHint" style="font-size:12px; color:#ffcc00;">(일반전 크레드 규칙)</span></div>
     </div>
     <div class="shop-grid" style="grid-template-columns: 1fr 1.15fr 1.15fr 0.95fr; gap:12px; width:1160px; max-width:96vw;">
       <!-- 1열: 보조무기 (Sidearms) -->
@@ -351,7 +265,7 @@
 
       <!-- 4열: 보호막 & 근접무기 -->
       <div class="shop-col" style="padding:12px;">
-        <h2 style="font-size:15px;">보호막 (무료 교체)</h2>
+        <h2 style="font-size:15px;">보호막 (Shields)</h2>
         <div class="shop-item" id="buy-light" onclick="buyShield('light')" style="padding:7px 10px;">
           <div><div class="item-title" style="font-size:13px;">경형 보호막</div><div class="item-desc" style="font-size:11px;">보호막 +25 (총 125)</div></div>
           <div class="item-price" style="font-size:12px;">400 ¤</div>
@@ -427,42 +341,20 @@
   <div id="killfeed"></div>
 
   <div id="hud">
-    <div class="val-hud-left">
-      <div class="val-shield-badge">
-        <span class="val-shield-num" id="shieldText">50</span>
-        <span class="val-shield-label">ARMOR</span>
-      </div>
-      <div class="val-hp-block">
-        <span class="val-hp-num" id="hpText">100</span>
-        <span class="val-regen-sub" id="regenText">중형 보호막</span>
-      </div>
+    <div class="hud-box">
+      <span class="hp-val" id="hpText">100</span>
+      <span class="shield-val" id="shieldText">🛡️ 50</span>
+      <span class="regen-tag" id="regenText">중형 보호막</span>
     </div>
-
-    <div class="val-hud-center">
-      <div class="val-ability-row">
-        <div class="val-skill-box">
-          <span class="val-key-cap">E</span>
-          <span>순풍 대시: <span id="dashStatus" style="color:#00ffcc;">준비완료</span></span>
-        </div>
-        <div class="val-skill-box">
-          <span class="val-key-cap">B</span>
-          <span>무기고 (<span id="creditText" style="color:#00ffcc;">99999</span>¤)</span>
-        </div>
-      </div>
-      <div class="val-meta-bar">
-        모드: <span id="mapNameText" style="color:#ffcc00; font-weight:bold;">난투 아레나</span> · 훈련봇(F): <span id="botModeText" style="color:#ffcc00; font-weight:bold;">고정</span>
-      </div>
+    <div class="hud-box" style="text-align:center;">
+      모드: <span id="mapNameText" style="color:#ffcc00;">일반전 (13선승)</span> | 크레딧: <span id="creditText" style="color:#00ffcc;">800</span> ¤<br>
+      <span style="font-size:13px; color:#ccc;">대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span> | 봇(F): <span id="botModeText" style="color:#ffcc00;">고정</span></span>
     </div>
-
-    <div class="val-hud-right">
-      <div class="val-ammo-row">
-        <span class="val-weapon-name" id="weaponText">네오 프론티어 셰리프</span>
-        <span class="val-ammo-num" id="ammoText">6 / 6</span>
-      </div>
-      <div class="val-slot-list">
-        <span id="slot1">[1] 없음</span>
-        <span id="slot2" class="slot-active">[2] 셰리프</span>
-        <span id="slot3">[3] 카람빗</span>
+    <div class="hud-box" style="text-align:right;">
+      <span id="weaponText" style="color:#ff4655; font-size:18px;">셰리프</span>
+      <span class="ammo-val" id="ammoText">6 / 6</span>
+      <div class="slot-bar">
+        <span id="slot1">[1] 없음</span> | <span id="slot2" class="slot-active">[2] 셰리프</span> | <span id="slot3">[3] 근접</span>
       </div>
     </div>
   </div>
@@ -988,7 +880,8 @@
       function tryNextFile() {
         if (idx >= candidates.length) {
           if (isNeoFrontier) {
-            playSynthNeoFrontierKillSound(soundTier, isHeadshot);
+            // 네오 프론티어 셰리프는 합성음(땅땅 소리) 없이 제공된 킬사운드 파일만 재생
+            return;
           } else if (isAraxys) {
             playSynthAraxysKillSound(soundTier, isHeadshot);
           } else {
@@ -999,15 +892,17 @@
         const src = candidates[idx++];
         const audio = new Audio(src);
         audio.volume = 0.92;
-        const p = audio.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch(() => {
-            tryNextFile();
-          });
-        }
-        audio.onerror = () => {
+        let failed = false;
+        const onFail = () => {
+          if (failed) return;
+          failed = true;
           tryNextFile();
         };
+        audio.onerror = onFail;
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(onFail);
+        }
       }
       tryNextFile();
     }
@@ -1583,7 +1478,13 @@
         championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
       }
       const champEdition = isNeoFrontierActive ? 'neofrontier' : (isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null)));
-      playKillStreakAudio(soundTier, champEdition, isHeadshot);
+      if (isNeoFrontierActive) {
+        setTimeout(() => {
+          playKillStreakAudio(soundTier, champEdition, isHeadshot);
+        }, 240);
+      } else {
+        playKillStreakAudio(soundTier, champEdition, isHeadshot);
+      }
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
@@ -1768,8 +1669,13 @@
       heavy: { name: '중형 보호막', price: 1000, max: 50, reserve: 0 }
     };
 
-    const credits = 99999;
-    let slotWeapons = { 1: null, 2: 'sheriff', 3: 'melee' };
+    let credits = 800;
+    const MAX_CREDITS = 9000;
+    let roundPurchasedWeapons = { 1: null, 2: null }; // 이번 라운드에 새로 구매한 무기 (재구매/환불 가능)
+    let roundPurchasedShield = false;
+    let lossStreak = { red: 0, blue: 0 };
+    let isMatchOver = false;
+    let slotWeapons = { 1: null, 2: 'classic', 3: 'melee' };
     let activeSlot = 2;
     let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 5, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
     let isReloading = false, reloadTimer = null;
@@ -4184,24 +4090,80 @@
       initBrawlBots(needRedBots, needBlueBots);
     }
 
+    function resetLoadoutToPistolRound() {
+      credits = 800;
+      slotWeapons = { 1: null, 2: 'classic', 3: 'melee' };
+      activeSlot = 2;
+      currentShieldKey = 'none';
+      playerShield = 0;
+      shieldReserve = 0;
+      roundPurchasedWeapons = { 1: null, 2: null };
+      roundPurchasedShield = false;
+      lossStreak = { red: 0, blue: 0 };
+      updateGunVisual();
+    }
+
+    function swapTeamsForHalftime() {
+      myTeam = myTeam === 'red' ? 'blue' : 'red';
+      document.getElementById('teamRedBtn').classList.toggle('active', myTeam === 'red');
+      document.getElementById('teamBlueBtn').classList.toggle('active', myTeam === 'blue');
+      Object.values(remotePlayers).forEach(rp => {
+        rp.team = rp.team === 'red' ? 'blue' : 'red';
+      });
+      // 전반전/후반전 점수도 팀 진영에 맞춰 교체
+      const prevRed = redScore;
+      redScore = blueScore;
+      blueScore = prevRed;
+      updateScoreboard();
+      updatePlayerListUI();
+      // 공수교대 시 발로란트 규칙에 따라 크레드 800 & 클래식으로 초기화
+      resetLoadoutToPistolRound();
+    }
+
     function startBrawlRound(num) {
       roundNumber = num;
+      isMatchOver = false;
+
+      // 1라운드 시작 또는 13라운드(전반 12라운드 종료 후 공수교대) 처리
+      let halftimeNotice = '';
+      if (num === 1) {
+        resetLoadoutToPistolRound();
+      } else if (num === 13) {
+        swapTeamsForHalftime();
+        halftimeNotice = ' [전반 12라운드 종료 · 공수 교대! 크레드 800 초기화]';
+      }
+
+      // 이전 라운드에서 살아남았으면 총기와 남은 보호막 유지, 죽었으면 기본 권총(클래식)으로 리셋
+      if (isDead && num !== 1 && num !== 13) {
+        slotWeapons[1] = null;
+        if (!slotWeapons[2]) slotWeapons[2] = 'classic';
+        if (activeSlot === 1) activeSlot = 2;
+        currentShieldKey = 'none';
+        playerShield = 0;
+        shieldReserve = 0;
+        updateGunVisual();
+      } else if (currentShieldKey === 'regen') {
+        playerShield = 25;
+        shieldReserve = 50;
+      }
+
+      roundPurchasedWeapons = { 1: null, 2: null };
+      roundPurchasedShield = false;
+
       roundPhase = 'PREP';
-      roundPhaseTimer = 8.0;
+      roundPhaseTimer = 10.0;
       clearChampionsFinisher();
-      resetScoreStreak(); // 라운드 시작 시 킬(연속 처치) 카운트 초기화
+      resetScoreStreak();
 
       // 플레이어 부활 및 스폰 위치 초기화
       isDead = false;
       playerHp = 100;
-      const s = SHIELDS[currentShieldKey];
-      playerShield = s.max;
-      shieldReserve = s.reserve;
       tagSlowMultiplier = 1.0;
       aimPunchPitch = 0;
       setZoom(0);
       gunGroup.visible = true;
       document.getElementById('deathBanner').style.display = 'none';
+      document.getElementById('deathBanner').style.background = 'rgba(180, 20, 35, 0.45)';
 
       // 탄약 가득 채우기
       Object.keys(ammoState).forEach(k => {
@@ -4214,18 +4176,39 @@
       syncBrawlRoster();
 
       createPrepBarriers();
-      showRoundBanner(`ROUND ${roundNumber}`, '준비 시간 (8초) - 장벽 해제 전까지 상점(B) 이용 가능', '#00ffcc', 2600);
+      const halfTag = roundNumber <= 12 ? `전반전 (${roundNumber}/12)` : `후반전 (${roundNumber - 12}/12)`;
+      const sideLabel = myTeam === 'red' ? '공격(RED)' : '수비(BLUE)';
+      showRoundBanner(
+        `ROUND ${roundNumber} · ${halfTag}`,
+        `진영: ${sideLabel} | 보유 크레드: ${credits} ¤ (상점: B)${halftimeNotice}`,
+        num === 13 ? '#ffcc00' : '#00ffcc',
+        3200
+      );
     }
 
     function endBrawlRound(winningTeam, killerPos = null, usedChampEdition = false) {
-      if (roundPhase === 'END') return;
+      if (roundPhase === 'END' || isMatchOver) return;
       roundPhase = 'END';
       roundPhaseTimer = usedChampEdition ? 7.5 : 5.0;
-      currentStreak = 0; // 카운트만 0으로 초기화하고, 방금 뜬 킬 배너는 1.6초 동안 화면에 정상 표시!
+      currentStreak = 0;
 
       if (winningTeam === 'red') redScore += 1;
       else blueScore += 1;
       updateScoreboard();
+
+      // 발로란트 일반전 크레드 정산 규칙 적용
+      // 승리 팀: +3,000 크레드 / 패배 팀: 1연패 1,900 -> 2연패 2,400 -> 3연패 이상 2,900 크레드
+      const didMyTeamWin = (winningTeam === myTeam);
+      let roundReward = 0;
+      if (didMyTeamWin) {
+        lossStreak[myTeam] = 0;
+        roundReward = 3000;
+      } else {
+        lossStreak[myTeam] = Math.min(3, (lossStreak[myTeam] || 0) + 1);
+        roundReward = lossStreak[myTeam] === 1 ? 1900 : (lossStreak[myTeam] === 2 ? 2400 : 2900);
+      }
+      credits = Math.min(MAX_CREDITS, credits + roundReward);
+      updateHUD();
 
       // 마지막 적 처치 시 전용 마무리 모션 발동!
       if (usedChampEdition === 'araxys' && killerPos) {
@@ -4236,9 +4219,26 @@
         triggerChampions2021Finisher(killerPos);
       }
 
-      const winLabel = winningTeam === 'red' ? 'RED TEAM 승리!' : 'BLUE TEAM 승리!';
+      // 13선승 매치 승리 판정 (전반 12라운드 + 후반 12라운드, 12:12 시 25라운드 서든데스)
+      if (redScore >= 13 || blueScore >= 13) {
+        isMatchOver = true;
+        const champTeam = redScore >= 13 ? 'RED TEAM' : 'BLUE TEAM';
+        const champColor = redScore >= 13 ? '#ff4655' : '#38bdf8';
+        showRoundBanner(
+          `MATCH VICTORY! ${champTeam}`,
+          `최종 스코어 ${redScore} : ${blueScore} (13선승 달성!) — ESC를 눌러 새 게임 시작`,
+          champColor,
+          0
+        );
+        return;
+      }
+
+      const winLabel = winningTeam === 'red' ? 'RED TEAM 라운드 승리!' : 'BLUE TEAM 라운드 승리!';
       const winColor = winningTeam === 'red' ? '#ff4655' : '#38bdf8';
-      showRoundBanner(winLabel, '잠시 후 다음 라운드가 시작됩니다 (킬 카운트 초기화)', winColor, 4500);
+      const nextHint = roundNumber === 12
+        ? '다음 라운드(R13) 공수 교대가 진행됩니다!'
+        : `라운드 보상 +${roundReward.toLocaleString()} ¤ (보유: ${credits.toLocaleString()} ¤)`;
+      showRoundBanner(winLabel, nextHint, winColor, 4500);
     }
 
     function countAliveTeams() {
@@ -4278,7 +4278,8 @@
         roundPhaseTimer -= dt;
         const sec = Math.max(0, Math.ceil(roundPhaseTimer));
         if (timerEl) timerEl.innerText = `준비 ${sec}s`;
-        if (subEl) subEl.innerText = `ROUND ${roundNumber} · 준비 시간 (상점 B / 보호막 활성)`;
+        const halfStr = roundNumber <= 12 ? '전반전' : '후반전';
+        if (subEl) subEl.innerText = `R${roundNumber} (${halfStr} · 13선승) | 준비 시간 · 상점(B) 구매 가능`;
 
         if (roundPhaseTimer <= 0) {
           roundPhase = 'COMBAT';
@@ -4287,7 +4288,8 @@
         }
       } else if (roundPhase === 'COMBAT') {
         if (timerEl) timerEl.innerText = `R${roundNumber} 전투`;
-        if (subEl) subEl.innerText = `생존 인원 — RED ${redAlive}명 vs BLUE ${blueAlive}명`;
+        const halfStrC = roundNumber <= 12 ? '전반' : '후반';
+        if (subEl) subEl.innerText = `R${roundNumber}(${halfStrC}) · 13선승 | 생존 RED ${redAlive} vs BLUE ${blueAlive}`;
 
         // 전멸 체크 (상대 팀이 0명이 되면 즉시 라운드 종료)
         if (blueAlive === 0 && redAlive > 0) {
@@ -4303,7 +4305,7 @@
         if (timerEl) timerEl.innerText = `다음 라운드 ${sec}s`;
         if (subEl) subEl.innerText = `ROUND ${roundNumber} 종료`;
 
-        if (roundPhaseTimer <= 0) {
+        if (!isMatchOver && roundPhaseTimer <= 0) {
           startBrawlRound(roundNumber + 1);
         }
       }
@@ -4668,6 +4670,8 @@
           updateScoreboard();
           addKillFeed(`${msg.attackerNick} [${msg.weaponName}] ➔ ${msg.victimNick}${msg.isHead ? ' [헤드샷]' : ''}`);
         } else if (msg.type === 'scoreAck') {
+          credits = Math.min(MAX_CREDITS, credits + 200);
+          updateHUD();
           triggerScoreStreak(1, Boolean(msg.isHead));
         }
       });
@@ -4842,10 +4846,12 @@
 
     function loadMap(mapType) {
       currentMap = mapType;
-      document.getElementById('mapNameText').innerText = mapType === 'range' ? '사격장' : '난투 아레나';
+      document.getElementById('mapNameText').innerText = mapType === 'range' ? '사격장' : '일반전 (13선승)';
       document.getElementById('topScoreboard').style.display = mapType === 'brawl' ? 'flex' : 'none';
 
       if (mapType === 'range') {
+        credits = 99999;
+        updateHUD();
         clearPrepBarriers();
         clearChampionsFinisher();
         const banner = document.getElementById('roundCenterBanner');
@@ -4916,8 +4922,73 @@
       }
     }
 
+    function canBuyInCurrentState() {
+      if (currentMap === 'range') return true;
+      if (isDead || isMatchOver) return false;
+      return roundPhase === 'PREP';
+    }
+
+    function showShopNotice(msg) {
+      const hint = document.getElementById('shopCreditHint');
+      if (!hint) return;
+      hint.innerText = msg;
+      hint.style.color = '#ff4655';
+      clearTimeout(hint._t);
+      hint._t = setTimeout(() => {
+        hint._t = null;
+        hint.innerText = currentMap === 'range' ? '(사격장 무제한)' : (roundPhase === 'PREP' ? '(준비 시간: 클릭 구매 / 재클릭 환불)' : '(전투 중 구매 불가)');
+        hint.style.color = '#ffcc00';
+      }, 1500);
+    }
+
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
+      if (!w) return;
+      if (currentMap === 'range') {
+        slotWeapons[w.slot] = key;
+        ammoState[key] = w.magSize;
+        cancelReload();
+        activeSlot = w.slot;
+        updateGunVisual();
+        updateHUD();
+        return;
+      }
+      if (!canBuyInCurrentState()) {
+        showShopNotice('구매 시간(준비 시간)이 종료되었습니다!');
+        return;
+      }
+      const curSlotKey = slotWeapons[w.slot];
+      // 같은 무기 다시 클릭 시 이번 라운드에 구매한 무기라면 환불(판매)
+      if (curSlotKey === key) {
+        if (roundPurchasedWeapons[w.slot] === key && w.price > 0) {
+          credits = Math.min(MAX_CREDITS, credits + w.price);
+          roundPurchasedWeapons[w.slot] = null;
+          if (w.slot === 2) {
+            slotWeapons[2] = 'classic';
+            ammoState['classic'] = WEAPONS.classic.magSize;
+          } else {
+            slotWeapons[1] = null;
+            if (activeSlot === 1) activeSlot = 2;
+          }
+          cancelReload();
+          updateGunVisual();
+          updateHUD();
+        }
+        return;
+      }
+
+      // 기존에 이번 라운드 산 무기가 있으면 차액 환불 후 새 무기 구매
+      let refund = 0;
+      if (roundPurchasedWeapons[w.slot]) {
+        refund = WEAPONS[roundPurchasedWeapons[w.slot]].price;
+      }
+      if (credits + refund < w.price) {
+        showShopNotice(`크레드 부족! (필요: ${w.price} ¤)`);
+        return;
+      }
+
+      credits = Math.min(MAX_CREDITS, credits + refund - w.price);
+      roundPurchasedWeapons[w.slot] = w.price > 0 ? key : null;
       slotWeapons[w.slot] = key;
       ammoState[key] = w.magSize;
       cancelReload();
@@ -4928,6 +4999,38 @@
 
     window.buyShield = function(key) {
       const newShield = SHIELDS[key];
+      if (!newShield) return;
+      if (currentMap === 'range') {
+        currentShieldKey = key;
+        playerShield = newShield.max;
+        shieldReserve = newShield.reserve;
+        updateHUD();
+        return;
+      }
+      if (!canBuyInCurrentState()) {
+        showShopNotice('구매 시간(준비 시간)이 종료되었습니다!');
+        return;
+      }
+      // 같은 보호막 재클릭 시 이번 라운드 구매분 환불
+      if (currentShieldKey === key) {
+        if (roundPurchasedShield && newShield.price > 0) {
+          credits = Math.min(MAX_CREDITS, credits + newShield.price);
+          roundPurchasedShield = false;
+          currentShieldKey = 'none';
+          playerShield = 0;
+          shieldReserve = 0;
+          updateHUD();
+        }
+        return;
+      }
+
+      const prevRefund = roundPurchasedShield ? SHIELDS[currentShieldKey].price : 0;
+      if (credits + prevRefund < newShield.price) {
+        showShopNotice(`크레드 부족! (필요: ${newShield.price} ¤)`);
+        return;
+      }
+      credits = Math.min(MAX_CREDITS, credits + prevRefund - newShield.price);
+      roundPurchasedShield = newShield.price > 0;
       currentShieldKey = key;
       playerShield = newShield.max;
       shieldReserve = newShield.reserve;
@@ -4938,10 +5041,14 @@
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
       document.getElementById('hpText').innerText = Math.max(0, Math.ceil(playerHp));
-      document.getElementById('shieldText').innerText = `${Math.ceil(playerShield)}`;
+      document.getElementById('shieldText').innerText = `🛡️ ${Math.ceil(playerShield)}`;
       document.getElementById('regenText').innerText = currentShieldKey === 'regen' ? `재생 보호막 (예비: ${Math.ceil(shieldReserve)})` : `${SHIELDS[currentShieldKey].name}`;
-      document.getElementById('creditText').innerText = credits;
-      document.getElementById('shopCredits').innerText = credits;
+      document.getElementById('creditText').innerText = credits.toLocaleString();
+      document.getElementById('shopCredits').innerText = credits.toLocaleString();
+      const sHint = document.getElementById('shopCreditHint');
+      if (sHint && !sHint._t) {
+        sHint.innerText = currentMap === 'range' ? '(사격장 무제한)' : (roundPhase === 'PREP' ? '(준비 시간: 클릭 구매 / 재클릭 환불)' : '(전투 중 구매 불가)');
+      }
       const isMeleeChamp = equippedSkins.melee === 'champions2021';
       const isPhantom2024 = equippedSkins.phantom === 'champions2024';
       const isOperatorAraxys = equippedSkins.operator === 'araxys';
@@ -5417,6 +5524,8 @@
 
               const myNick = document.getElementById('nickInput').value || '플레이어';
               const isHead = part === 'head';
+              credits = Math.min(MAX_CREDITS, credits + 200);
+              updateHUD();
               triggerScoreStreak(1, isHead);
               addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
 
