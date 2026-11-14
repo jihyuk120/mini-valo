@@ -165,7 +165,11 @@
           <div class="item-price" style="font-size:12px;">650 ¤</div>
         </div>
         <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">셰리프 (Sheriff)</div><div class="item-desc" style="font-size:11px;">6발 | 헤드 159 / 몸 55</div></div>
+          <div>
+            <div class="item-title" style="font-size:13px;">셰리프 (Sheriff)</div>
+            <div class="item-desc" style="font-size:11px;">6발 | 헤드 159 / 몸 55</div>
+            <button onclick="event.stopPropagation(); toggleWeaponSkin('sheriff')" style="margin-top:4px; background:#14362d; color:#3dffb2; border:1px solid #3dffb2; border-radius:4px; font-size:10px; padding:2px 6px; cursor:pointer;">네오 프런티어 스킨 전환</button>
+          </div>
           <div class="item-price" style="font-size:12px;">800 ¤</div>
         </div>
       </div>
@@ -647,6 +651,33 @@
       5: ['araxys-kill-sound-5.mp3', './araxys-kill-sound-5.mp3', 'Araxys Kill 5.mp3']
     };
 
+    const NEO_FRONTIER_STREAK_FILES = {
+      1: ['Neo Frontier Kill Successive.wav', './Neo Frontier Kill Successive.wav', 'neo-frontier-kill-1.wav'],
+      2: ['Neo Frontier Kill Successive (1).wav', './Neo Frontier Kill Successive (1).wav', 'neo-frontier-kill-2.wav'],
+      3: ['Neo Frontier Kill Successive (2).wav', './Neo Frontier Kill Successive (2).wav', 'neo-frontier-kill-3.wav'],
+      4: ['Neo Frontier Kill Successive (3).wav', './Neo Frontier Kill Successive (3).wav', 'neo-frontier-kill-4.wav'],
+      5: ['Neo Frontier Kill Successive (4).wav', './Neo Frontier Kill Successive (4).wav', 'neo-frontier-kill-5.wav']
+    };
+
+    function playNeoFrontierSpinSound(pitch = 1.0) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(340 * pitch, now);
+      osc.frequency.exponentialRampToValueAtTime(880 * pitch, now + 0.14);
+      osc.frequency.exponentialRampToValueAtTime(420 * pitch, now + 0.28);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.16, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.31);
+    }
+
     function playSynthAraxysKillSound(tier = 1, isHeadshot = false) {
       initAudio();
       if (!audioCtx) return;
@@ -768,10 +799,12 @@
 
     function playKillStreakAudio(tier, champEdition, isHeadshot) {
       const soundTier = Math.min(5, Math.max(1, tier));
+      const isNeoFrontier = champEdition === 'neoFrontier';
       const isAraxys = champEdition === 'araxys';
       const isChamp2024 = champEdition === '2024';
       const isChamp2021 = champEdition === '2021' || champEdition === true;
       const candidates = (
+        isNeoFrontier ? NEO_FRONTIER_STREAK_FILES[soundTier] :
         isAraxys ? ARAXYS_STREAK_FILES[soundTier] :
         isChamp2024 ? CHAMPIONS_2024_STREAK_FILES[soundTier] :
         isChamp2021 ? CHAMPIONS_2021_STREAK_FILES[soundTier] :
@@ -808,7 +841,7 @@
     const equippedSkins = {
       vandal: 'champions2021',
       phantom: 'champions2024',
-      sheriff: 'standard',
+      sheriff: 'neoFrontier',
       outlaw: 'araxys', // 아락시스 아웃로 (블랙/레드 크로마) 기본 장착
       operator: 'araxys', // 아락시스 오퍼레이터 (블랙/레드 크로마) 기본 장착
       melee: 'champions2021'
@@ -816,6 +849,7 @@
     let championsAuraTimer = 0;
     let champions2024AuraTimer = 0;
     let araxysAuraTimer = 0; // 아락시스 킬 달성 시 비늘 맥박 & 크림슨 코어 발광 타이머
+    let neoFrontierAuraTimer = 0; // 네오 프런티어 셰리프 킬 달성 시 에메랄드 코어 맥박 타이머
 
     let currentStreak = 0;
     let streakBannerTimer = null;
@@ -911,6 +945,50 @@
         <polygon points="100,102 97,109 103,109" fill="#10181c" />
         <line x1="87" y1="113" x2="94" y2="108" stroke="#10181c" stroke-width="2.4" stroke-linecap="round" />
         <line x1="113" y1="113" x2="106" y2="108" stroke="#10181c" stroke-width="2.4" stroke-linecap="round" />
+      </svg>`;
+    }
+
+    function buildNeoFrontierEmblemSVG(count, isHeadshot = false) {
+      const tier = Math.min(5, Math.max(1, count));
+      const r = 56, cx = 100, cy = 100;
+      const arcAngles = {
+        1: [[-108, -72]],
+        2: [[-132, -96], [-84, -48]],
+        3: [[-152, -120], [-106, -74], [-60, -28]],
+        4: [[-172, -142], [-128, -98], [-82, -52], [-38, -8]],
+        5: [[-195, -162], [-148, -116], [-102, -70], [-56, -24], [-10, 22]]
+      };
+      const polar = (deg) => {
+        const rad = (deg * Math.PI) / 180;
+        return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+      };
+      const arcsHtml = arcAngles[tier].map(([s, e]) => {
+        const [x1, y1] = polar(s);
+        const [x2, y2] = polar(e);
+        return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
+                  fill="none" stroke="#3dffb2" stroke-width="6.8" stroke-linecap="round"
+                  style="filter: drop-shadow(0 0 7px #1ef59b);" />`;
+      }).join('');
+
+      return `
+      <svg viewBox="0 0 200 200" width="154" height="154" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="78" fill="rgba(10, 24, 22, 0.78)" />
+        <circle cx="100" cy="100" r="64" fill="none" stroke="rgba(220,255,242,0.35)" stroke-width="1.2" stroke-dasharray="48 16 12 16" />
+        <circle cx="100" cy="100" r="45" fill="none" stroke="#eef7f4" stroke-width="3.2" />
+        ${arcsHtml}
+        <polygon points="100,13 107,21 100,29 93,21" fill="none" stroke="#ffffff" stroke-width="1.6" />
+        <line x1="100" y1="29" x2="100" y2="41" stroke="#ffffff" stroke-width="1.6" />
+        <g stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.88">
+          <polyline points="22,94 27,100 22,106" /><polyline points="28,94 33,100 28,106" /><polyline points="34,94 39,100 34,106" />
+          <polyline points="178,94 173,100 178,106" /><polyline points="172,94 167,100 172,106" /><polyline points="166,94 161,100 166,106" />
+        </g>
+        <polygon points="100,66 82,82 81,104 94,116 100,124 106,116 119,104 118,82" fill="#e6ecea" />
+        <polygon points="100,66 118,82 119,104 106,116 100,124" fill="#b4c2be" />
+        <polygon points="85,93 97,98 95,104 86,101" fill="#0d1a17" />
+        <polygon points="115,93 103,98 105,104 114,101" fill="#0d1a17" />
+        <polygon points="87,95 95,99 94,102 87,100" fill="#2dffc4" />
+        <polygon points="113,95 105,99 106,102 113,100" fill="#2dffc4" />
+        ${isHeadshot ? `<g stroke="#ff2a3c" stroke-width="2.6" stroke-linecap="round"><line x1="92" y1="73" x2="108" y2="89"/><line x1="108" y1="73" x2="92" y2="89"/></g>` : ''}
       </svg>`;
     }
 
@@ -1248,9 +1326,13 @@
 
       const soundTier = Math.min(5, currentStreak);
       const curW = getCurrentWeaponKey();
+      const isNeoFrontierActive = (curW === 'sheriff' && equippedSkins.sheriff === 'neoFrontier');
       const isAraxysActive = (curW === 'operator' && equippedSkins.operator === 'araxys') || (curW === 'outlaw' && equippedSkins.outlaw === 'araxys');
       const isChamp2024Active = (curW === 'phantom' && equippedSkins.phantom === 'champions2024');
       const isChamp2021Active = (curW === 'vandal' && equippedSkins.vandal === 'champions2021') || (curW === 'melee' && equippedSkins.melee === 'champions2021');
+      if (isNeoFrontierActive) {
+        neoFrontierAuraTimer = 4.5;
+      }
       if (isAraxysActive) {
         araxysAuraTimer = 4.5; // 4.5초간 아락시스 크림슨 코어 및 비늘 맥박 발광
       }
@@ -1260,18 +1342,20 @@
       if (isChamp2021Active) {
         championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
       }
-      const champEdition = isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null));
+      const champEdition = isNeoFrontierActive ? 'neoFrontier' : (isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null)));
       playKillStreakAudio(soundTier, champEdition, isHeadshot);
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = isAraxysActive
-        ? buildAraxysEmblemSVG(currentStreak, isHeadshot)
-        : (isChamp2024Active
-          ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
-          : (isChamp2021Active
-            ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
-            : buildStreakEmblemSVG(currentStreak, isHeadshot)));
+      svgWrap.innerHTML = isNeoFrontierActive
+        ? buildNeoFrontierEmblemSVG(currentStreak, isHeadshot)
+        : (isAraxysActive
+          ? buildAraxysEmblemSVG(currentStreak, isHeadshot)
+          : (isChamp2024Active
+            ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
+            : (isChamp2021Active
+              ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
+              : buildStreakEmblemSVG(currentStreak, isHeadshot))));
 
       banner.style.transition = 'opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
       banner.style.opacity = '1';
@@ -1572,6 +1656,45 @@
 
       group.add(barrel, underBarrel, frontSight, cylinder, rearFrame, grip);
       group.userData.cylinder = cylinder;
+      return group;
+    }
+
+    function buildNeoFrontierSheriffModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+      const spinPivot = new THREE.Group();
+      group.add(spinPivot);
+
+      const silverMat = new THREE.MeshStandardMaterial({ color: 0xd0d8e0, metalness: 0.92, roughness: 0.16 });
+      const darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x1e2228, metalness: 0.85, roughness: 0.28 });
+      const emeraldMat = new THREE.MeshStandardMaterial({
+        color: 0x2dffc4, emissive: new THREE.Color(0x14e89e), emissiveIntensity: 1.5, roughness: 0.15
+      });
+
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.066, 0.295), silverMat);
+      barrel.position.set(0, 0.032, -0.142);
+      const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.012, 0.275), darkSteelMat);
+      topRail.position.set(0, 0.069, -0.132);
+      const plasmaCore = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.018, 0.235), emeraldMat);
+      plasmaCore.position.set(0, 0.032, -0.142);
+      const holoFrame = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.022, 0.038), darkSteelMat);
+      holoFrame.position.set(0, 0.084, -0.02);
+      const holoReticle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.004), emeraldMat);
+      holoReticle.position.set(0, 0.085, -0.02);
+      const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.088, 16), darkSteelMat);
+      cylinder.rotation.x = Math.PI / 2;
+      cylinder.position.set(0, 0.018, 0.015);
+      const cylGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.0385, 0.0385, 0.024, 16), emeraldMat);
+      cylGlow.rotation.x = Math.PI / 2;
+      cylGlow.position.set(0, 0.018, 0.015);
+      const rearFrame = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.075, 0.065), silverMat);
+      rearFrame.position.set(0, 0.02, 0.085);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.145, 0.072), darkSteelMat);
+      grip.rotation.x = 0.28;
+      grip.position.set(0, -0.075, 0.105);
+
+      spinPivot.add(barrel, topRail, plasmaCore, holoFrame, holoReticle, cylinder, cylGlow, rearFrame, grip);
+      group.userData = { spinPivot, cylinder, emeraldMat };
       return group;
     }
 
@@ -2761,6 +2884,7 @@
       ghost: buildCompactPistolModel({ slideLen: 0.24, slideColor: 0x23262b, suppressor: true }),
       bandit: buildSheriffModel(),
       sheriff: buildSheriffModel(),
+      sheriff_neoFrontier: buildNeoFrontierSheriffModel(),
       stinger: buildSmgModel({ angledMag: true, bodyColor: 0x2b3038 }),
       spectre: buildSmgModel({ suppressor: true, bodyColor: 0x23272e }),
       bucky: buildShotgunModel({ short: false, bodyColor: 0x2d3238 }),
@@ -2783,6 +2907,9 @@
     };
 
     function getActiveModelForWeapon(wKey) {
+      if (wKey === 'sheriff' && equippedSkins.sheriff === 'neoFrontier') {
+        return models.sheriff_neoFrontier;
+      }
       if (wKey === 'outlaw' && equippedSkins.outlaw === 'araxys') {
         return models.outlaw_araxys;
       }
@@ -2802,7 +2929,11 @@
     }
 
     window.toggleWeaponSkin = function(wKey) {
-      if (wKey === 'outlaw') {
+      if (wKey === 'sheriff') {
+        equippedSkins.sheriff = equippedSkins.sheriff === 'neoFrontier' ? 'standard' : 'neoFrontier';
+        updateHUD();
+        if (getCurrentWeaponKey() === 'sheriff') updateGunVisual();
+      } else if (wKey === 'outlaw') {
         equippedSkins.outlaw = equippedSkins.outlaw === 'araxys' ? 'standard' : 'araxys';
         updateHUD();
         if (getCurrentWeaponKey() === 'outlaw') updateGunVisual();
@@ -2843,6 +2974,9 @@
       swapAnimTimer = 0.34;
       if (getCurrentWeaponKey() === 'melee' && equippedSkins.melee === 'champions2021') {
         playKarambitWhooshSound(1.15);
+      }
+      if (getCurrentWeaponKey() === 'sheriff' && equippedSkins.sheriff === 'neoFrontier') {
+        playNeoFrontierSpinSound(1.12);
       }
     }
     updateGunVisual();
@@ -4505,6 +4639,7 @@
       const isOperatorAraxys = equippedSkins.operator === 'araxys';
       const isOutlawAraxys = equippedSkins.outlaw === 'araxys';
       document.getElementById('weaponText').innerText =
+        (key === 'sheriff' && equippedSkins.sheriff === 'neoFrontier') ? '네오 프런티어 셰리프' :
         (key === 'outlaw' && isOutlawAraxys) ? '아락시스 아웃로' :
         (key === 'operator' && isOperatorAraxys) ? '아락시스 오퍼레이터' :
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
@@ -4688,6 +4823,9 @@
         if (isInspecting && getCurrentWeaponKey() === 'melee') {
           playKarambitWhooshSound(1.05);
         }
+        if (isInspecting && getCurrentWeaponKey() === 'sheriff' && equippedSkins.sheriff === 'neoFrontier') {
+          playNeoFrontierSpinSound(1.0);
+        }
       }
 
       if (e.code === 'KeyF') {
@@ -4804,8 +4942,13 @@
       } else {
         gunGroup.position.z = zoomLevel > 0 ? -0.22 : -0.32;
         gunGroup.rotation.x = zoomLevel > 0 ? 0.06 : 0.14;
-        if (key === 'sheriff' && models.sheriff.userData.cylinder) {
-          models.sheriff.userData.cylinder.rotation.z += Math.PI / 3;
+        if (key === 'sheriff') {
+          if (models.sheriff && models.sheriff.userData.cylinder) {
+            models.sheriff.userData.cylinder.rotation.z += Math.PI / 3;
+          }
+          if (models.sheriff_neoFrontier && models.sheriff_neoFrontier.userData.cylinder) {
+            models.sheriff_neoFrontier.userData.cylinder.rotation.z += Math.PI / 3;
+          }
         }
       }
 
@@ -5259,6 +5402,8 @@
 
       const karambitModel = models.melee_champions2021;
       const isKarambitEquipped = (curKey === 'melee' && equippedSkins.melee === 'champions2021');
+      const isNeoSheriffEquipped = (curKey === 'sheriff' && equippedSkins.sheriff === 'neoFrontier');
+      const neoSheriffModel = models.sheriff_neoFrontier;
 
       if (isDead && currentMap === 'brawl') {
         gunGroup.position.set(0.26, -0.22, -0.42);
@@ -5272,6 +5417,10 @@
           gunGroup.rotation.set(0, 0, 0);
           karambitModel.userData.spinPivot.rotation.z = -progress * Math.PI * 2;
           karambitModel.userData.trailMat.opacity = Math.sin(progress * Math.PI) * 0.55;
+        } else if (isNeoSheriffEquipped && neoSheriffModel) {
+          gunGroup.position.set(0.24, -0.18 - progress * 0.12, -0.38);
+          gunGroup.rotation.set(0, 0, 0);
+          neoSheriffModel.userData.spinPivot.rotation.x = -progress * Math.PI * 2;
         } else if (curKey === 'melee') {
           gunGroup.position.set(0.26, -0.22 - progress * 0.25, -0.42 + progress * 0.15);
           gunGroup.rotation.set(-progress * 1.4, progress * 0.8, progress * Math.PI * 2);
@@ -5381,6 +5530,17 @@
             karambitModel.userData.whooshAccum = 0;
             playKarambitWhooshSound(0.95 + Math.random() * 0.2);
           }
+        } else if (isInspecting && isNeoSheriffEquipped && neoSheriffModel) {
+          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.14, 0.16);
+          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.12 + Math.abs(Math.sin(inspectTimer * 5.2)) * 0.055, 0.16);
+          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.34, 0.16);
+          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.45, 0.14);
+          neoSheriffModel.userData.spinPivot.rotation.x -= 11.5 * dt;
+          if (inspectTimer > 3.6) {
+            isInspecting = false;
+            inspectTimer = 0;
+            neoSheriffModel.userData.spinPivot.rotation.x = 0;
+          }
         } else if ((curKey === 'operator' && equippedSkins.operator === 'araxys') || (curKey === 'outlaw' && equippedSkins.outlaw === 'araxys')) {
           // 아락시스 오퍼레이터 자세히 보기(Y키): 총신을 위로 들어올리며 측면 비늘 장갑판이 활짝 펴짐!
           gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.12, 0.14);
@@ -5435,6 +5595,17 @@
             handObj.userData.thumbPivot.rotation.x = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.x, 0, 0.25);
           }
         }
+      }
+
+      if (neoFrontierAuraTimer > 0) neoFrontierAuraTimer -= dt;
+      if (neoSheriffModel && neoSheriffModel.userData.spinPivot && !isInspecting && swapAnimTimer <= 0) {
+        const curX = neoSheriffModel.userData.spinPivot.rotation.x;
+        const nearestTurn = Math.round(curX / (Math.PI * 2)) * (Math.PI * 2);
+        neoSheriffModel.userData.spinPivot.rotation.x = THREE.MathUtils.lerp(curX, nearestTurn, 0.25);
+      }
+      if (neoSheriffModel && neoSheriffModel.userData.emeraldMat) {
+        const pulse = neoFrontierAuraTimer > 0 ? (2.2 + Math.sin(performance.now() * 0.015) * 0.8) : 1.5;
+        neoSheriffModel.userData.emeraldMat.emissiveIntensity = pulse;
       }
 
       // 아락시스 오퍼레이터 & 아락시스 아웃로 비늘(Scales) 개방 & 크림슨 코어 발광 애니메이션
