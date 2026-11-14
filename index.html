@@ -19,6 +19,12 @@
     #sniperScope::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(255, 70, 85, 0.85); }
     #sniperScope::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255, 70, 85, 0.85); }
     #scopeDot { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: #ff4655; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 8px #ff4655; }
+    #sniperScope.araxys-scope { background: radial-gradient(circle, transparent 26%, rgba(16, 4, 8, 0.93) 29%, rgba(5, 2, 4, 0.99) 34%); }
+    #sniperScope.araxys-scope::before { height: 1.5px; background: linear-gradient(90deg, transparent 10%, rgba(255, 42, 60, 0.92) 45%, transparent 49.4%, transparent 50.6%, rgba(255, 42, 60, 0.92) 55%, transparent 90%); }
+    #sniperScope.araxys-scope::after { width: 1.5px; background: linear-gradient(180deg, transparent 10%, rgba(255, 42, 60, 0.92) 45%, transparent 49.4%, transparent 50.6%, rgba(255, 42, 60, 0.92) 55%, transparent 90%); }
+    #sniperScope.araxys-scope #scopeDot { width: 7px; height: 7px; background: #ff2a3c; box-shadow: 0 0 12px #ff2a3c, 0 0 22px #ff0019; border: 1px solid #ffd6da; }
+    #araxysScopeSvg { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+    #sniperScope.araxys-scope #araxysScopeSvg { display: block; }
 
     #hitX { position: fixed; top: 50%; left: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; z-index: 14; opacity: 0; transition: opacity 0.08s; }
     #hitX::before, #hitX::after { content: ''; position: absolute; background: var(--hit-color, #ffffff); box-shadow: 0 0 6px var(--hit-color, #ffffff); }
@@ -234,8 +240,14 @@
           <div class="item-price" style="font-size:12px;">2,400 ¤</div>
         </div>
         <div class="shop-item" id="buy-operator" onclick="buyWeapon('operator')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">오퍼레이터 (Operator)</div><div class="item-desc" style="font-size:11px;">5발 | 헤드255 / 몸150 / 다리120</div></div>
-          <div class="item-price" style="font-size:12px;">4,700 ¤</div>
+          <div>
+            <div class="item-title" style="font-size:13px;">오퍼레이터 (Operator) <span id="operatorSkinBadge" style="font-size:10px; background:#3b0a12; color:#ff4d5e; padding:1px 5px; border-radius:3px;">아락시스 (블랙)</span></div>
+            <div class="item-desc" style="font-size:11px;">5발 | 헤드255 / 몸150 / 다리120</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+            <div class="item-price" style="font-size:12px;">4,700 ¤</div>
+            <button id="toggleOperatorSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('operator');" style="background:#2b090e; border:1px solid #ff3b4e; color:#ff808c; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">기본 스킨으로 변경</button>
+          </div>
         </div>
       </div>
 
@@ -287,7 +299,19 @@
 
   <div id="crosshair"></div>
   <div id="adsReticle"></div>
-  <div id="sniperScope"><div id="scopeDot"></div></div>
+  <div id="sniperScope">
+    <svg id="araxysScopeSvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
+      <polygon points="500,220 742,360 742,640 500,780 258,640 258,360" fill="none" stroke="rgba(255,42,60,0.55)" stroke-width="2" />
+      <polygon points="500,248 718,374 718,626 500,752 282,626 282,374" fill="none" stroke="rgba(255,90,105,0.28)" stroke-width="1" stroke-dasharray="18 10" />
+      <polyline points="468,468 455,480 455,520 468,532" fill="none" stroke="#ff2a3c" stroke-width="2" opacity="0.85" />
+      <polyline points="532,468 545,480 545,520 532,532" fill="none" stroke="#ff2a3c" stroke-width="2" opacity="0.85" />
+      <line x1="380" y1="500" x2="430" y2="500" stroke="#ff2a3c" stroke-width="2.5" />
+      <line x1="570" y1="500" x2="620" y2="500" stroke="#ff2a3c" stroke-width="2.5" />
+      <line x1="500" y1="380" x2="500" y2="430" stroke="#ff2a3c" stroke-width="2.5" />
+      <line x1="500" y1="570" x2="500" y2="620" stroke="#ff2a3c" stroke-width="2.5" />
+    </svg>
+    <div id="scopeDot"></div>
+  </div>
   <div id="hitX"></div>
   <div id="reloadMsg">재장전 중...</div>
   <div id="deathBanner">
@@ -378,6 +402,69 @@
           cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
           chime.connect(cGain); cGain.connect(audioCtx.destination);
           chime.start(now); chime.stop(now + 0.16);
+        }
+        return;
+      }
+
+      // 아락시스 오퍼레이터 전용 외계 생체금속 플라즈마 저격 총성
+      if (weaponKey === 'operator' && equippedSkins.operator === 'araxys') {
+        const sub = audioCtx.createOscillator();
+        const subGain = audioCtx.createGain();
+        sub.type = 'sawtooth';
+        sub.frequency.setValueAtTime(165, now);
+        sub.frequency.exponentialRampToValueAtTime(24, now + 0.52);
+        const subFilter = audioCtx.createBiquadFilter();
+        subFilter.type = 'lowpass';
+        subFilter.frequency.setValueAtTime(680, now);
+        subFilter.frequency.exponentialRampToValueAtTime(95, now + 0.52);
+        subGain.gain.setValueAtTime(0.82 * distGain, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.56);
+        sub.connect(subFilter); subFilter.connect(subGain); subGain.connect(audioCtx.destination);
+        sub.start(now); sub.stop(now + 0.58);
+
+        // 외계 금속 고주파 레이저 찢어지는 공명음
+        const alienOsc = audioCtx.createOscillator();
+        const alienGain = audioCtx.createGain();
+        alienOsc.type = 'square';
+        alienOsc.frequency.setValueAtTime(1480, now);
+        alienOsc.frequency.exponentialRampToValueAtTime(220, now + 0.34);
+        const alienFilter = audioCtx.createBiquadFilter();
+        alienFilter.type = 'bandpass';
+        alienFilter.frequency.setValueAtTime(1150, now);
+        alienFilter.Q.value = 3.5;
+        alienGain.gain.setValueAtTime(0.28 * distGain, now);
+        alienGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+        alienOsc.connect(alienFilter); alienFilter.connect(alienGain); alienGain.connect(audioCtx.destination);
+        alienOsc.start(now); alienOsc.stop(now + 0.38);
+
+        // 플라즈마 충격파 노이즈
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const nFilter = audioCtx.createBiquadFilter();
+        nFilter.type = 'lowpass';
+        nFilter.frequency.setValueAtTime(1950, now);
+        nFilter.frequency.exponentialRampToValueAtTime(180, now + 0.58);
+        const nGain = audioCtx.createGain();
+        nGain.gain.setValueAtTime(0.68 * distGain, now);
+        nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.60);
+        noise.connect(nFilter); nFilter.connect(nGain); nGain.connect(audioCtx.destination);
+        noise.start(now); noise.stop(now + 0.62);
+
+        // 비늘 장갑판이 재장전/볼트 작동하며 딸깍 닫히는 외계 기계음
+        if (dist < 15) {
+          setTimeout(() => {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            const plateOsc = audioCtx.createOscillator();
+            const plateGain = audioCtx.createGain();
+            plateOsc.type = 'triangle';
+            plateOsc.frequency.setValueAtTime(640, t);
+            plateOsc.frequency.exponentialRampToValueAtTime(1380, t + 0.08);
+            plateGain.gain.setValueAtTime(0.16 * distGain, t);
+            plateGain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+            plateOsc.connect(plateGain); plateGain.connect(audioCtx.destination);
+            plateOsc.start(t); plateOsc.stop(t + 0.17);
+          }, 460);
         }
         return;
       }
@@ -546,6 +633,72 @@
       5: ['valorant-champions-2024-kill-5.mp3', './valorant-champions-2024-kill-5.mp3', 'champions-2024-kill-5.mp3']
     };
 
+    const ARAXYS_STREAK_FILES = {
+      1: ['Araxys Kill 1.mp3', './Araxys Kill 1.mp3', 'araxys-kill-sound-1.mp3'],
+      2: ['Araxys Kill 2.mp3', './Araxys Kill 2.mp3', 'araxys-kill-sound-2.mp3'],
+      3: ['araxys-kill-sound-3.mp3', './araxys-kill-sound-3.mp3', 'Araxys Kill 3.mp3'],
+      4: ['araxys-kill-sound-4.mp3', './araxys-kill-sound-4.mp3', 'Araxys Kill 4.mp3'],
+      5: ['araxys-kill-sound-5.mp3', './araxys-kill-sound-5.mp3', 'Araxys Kill 5.mp3']
+    };
+
+    function playSynthAraxysKillSound(tier = 1, isHeadshot = false) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const clampedTier = Math.min(5, Math.max(1, tier));
+      // 아락시스 특유의 묵직한 외계 신디사이저 상승 음계 (1~5킬)
+      const rootNotes = [220.00, 261.63, 311.13, 369.99, 440.00];
+      const root = rootNotes[clampedTier - 1];
+
+      // 초저음 외계 공명 베이스
+      const subOsc = audioCtx.createOscillator();
+      const subGain = audioCtx.createGain();
+      subOsc.type = 'sawtooth';
+      subOsc.frequency.setValueAtTime(110, now);
+      subOsc.frequency.exponentialRampToValueAtTime(38, now + 0.55);
+      const subLP = audioCtx.createBiquadFilter();
+      subLP.type = 'lowpass';
+      subLP.frequency.setValueAtTime(420, now);
+      subGain.gain.setValueAtTime(0.45, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.58);
+      subOsc.connect(subLP); subLP.connect(subGain); subGain.connect(audioCtx.destination);
+      subOsc.start(now); subOsc.stop(now + 0.6);
+
+      // 금속성 외계 하모닉 신스 화음
+      const ratios = clampedTier === 5 ? [0.5, 1.0, 1.498, 2.0, 2.5] : [1.0, 1.498, 2.0];
+      ratios.forEach((r, idx) => {
+        const st = now + (clampedTier === 5 ? idx * 0.045 : 0);
+        const dur = clampedTier === 5 ? 1.45 : 0.72;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(root * r * 1.4, st);
+        bp.Q.value = 2.4;
+
+        osc.frequency.setValueAtTime(root * r * 0.96, st);
+        osc.frequency.linearRampToValueAtTime(root * r, st + 0.04);
+        gain.gain.setValueAtTime(0.001, st);
+        gain.gain.linearRampToValueAtTime(clampedTier === 5 ? 0.24 : 0.22, st + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, st + dur);
+        osc.connect(bp); bp.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(st); osc.stop(st + dur + 0.03);
+      });
+
+      if (isHeadshot) {
+        const hsOsc = audioCtx.createOscillator();
+        const hsGain = audioCtx.createGain();
+        hsOsc.type = 'sine';
+        hsOsc.frequency.setValueAtTime(1680, now);
+        hsOsc.frequency.exponentialRampToValueAtTime(2480, now + 0.14);
+        hsGain.gain.setValueAtTime(0.28, now);
+        hsGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        hsOsc.connect(hsGain); hsGain.connect(audioCtx.destination);
+        hsOsc.start(now); hsOsc.stop(now + 0.32);
+      }
+    }
+
     // Web Audio API 발로란트 스타일 킬/에이스(5킬) 사운드 합성기 (mp3 파일이 없거나 막혀도 즉시 소리 재생!)
     function playSynthKillSound(tier = 1, isChamp2021 = false, isHeadshot = false) {
       initAudio();
@@ -609,9 +762,11 @@
 
     function playKillStreakAudio(tier, champEdition, isHeadshot) {
       const soundTier = Math.min(5, Math.max(1, tier));
+      const isAraxys = champEdition === 'araxys';
       const isChamp2024 = champEdition === '2024';
       const isChamp2021 = champEdition === '2021' || champEdition === true;
       const candidates = (
+        isAraxys ? ARAXYS_STREAK_FILES[soundTier] :
         isChamp2024 ? CHAMPIONS_2024_STREAK_FILES[soundTier] :
         isChamp2021 ? CHAMPIONS_2021_STREAK_FILES[soundTier] :
         STREAK_FILES[soundTier]
@@ -620,8 +775,11 @@
       let idx = 0;
       function tryNextFile() {
         if (idx >= candidates.length) {
-          // 모든 mp3 후보가 없거나 로드 실패하면 내장 합성 킬사운드 즉시 재생!
-          playSynthKillSound(soundTier, isChamp2021 || isChamp2024, isHeadshot);
+          if (isAraxys) {
+            playSynthAraxysKillSound(soundTier, isHeadshot);
+          } else {
+            playSynthKillSound(soundTier, isChamp2021 || isChamp2024, isHeadshot);
+          }
           return;
         }
         const src = candidates[idx++];
@@ -642,14 +800,15 @@
 
     // 무기별 장착 스킨 상태
     const equippedSkins = {
-      vandal: 'champions2021', // 기본으로 2021 챔피언스 장착 상태 (상점에서 언제든 전환 가능)
-      phantom: 'champions2024', // 기본으로 2024 챔피언스 장착 상태 (상점에서 언제든 전환 가능)
+      vandal: 'champions2021',
+      phantom: 'champions2024',
       sheriff: 'standard',
-      operator: 'standard',
+      operator: 'araxys', // 아락시스 오퍼레이터 (블랙/레드 크로마) 기본 장착
       melee: 'champions2021'
     };
-    let championsAuraTimer = 0; // 2021 킬 달성 시 총신 황금 오라 지속시간
-    let champions2024AuraTimer = 0; // 2024 킬 달성 시 보라·황금 오라 지속시간
+    let championsAuraTimer = 0;
+    let champions2024AuraTimer = 0;
+    let araxysAuraTimer = 0; // 아락시스 킬 달성 시 비늘 맥박 & 크림슨 코어 발광 타이머
 
     let currentStreak = 0;
     let streakBannerTimer = null;
@@ -989,29 +1148,123 @@
       </svg>`;
     }
 
+    function buildAraxysEmblemSVG(count, isHeadshot = false) {
+      const tier = Math.min(5, Math.max(1, count));
+      // 보내주신 아락시스 킬배너 디자인 그대로:
+      // 오각형 테두리 + 원형 링 + 중앙 외계 전사 금속 투구(붉은 눈) + 1~5킬 붉은 셰브론(쐐기) 진화
+      const chevrons = [
+        // 1킬: 상단 꼭짓점 붉은 셰브론
+        `<polygon points="100,40 116,52 100,48 84,52" fill="#ff2a3c" style="filter: drop-shadow(0 0 7px #ff1e32);" />`,
+        // 2킬: 우상단 변 붉은 셰브론
+        `<polygon points="154,79 149,98 146,84 134,76" fill="#ff2a3c" style="filter: drop-shadow(0 0 7px #ff1e32);" />`,
+        // 3킬: 좌상단 변 붉은 셰브론
+        `<polygon points="46,79 66,76 54,84 51,98" fill="#ff2a3c" style="filter: drop-shadow(0 0 7px #ff1e32);" />`,
+        // 4킬: 우하단 변 붉은 셰브론
+        `<polygon points="135,147 117,150 129,141 133,127" fill="#ff2a3c" style="filter: drop-shadow(0 0 7px #ff1e32);" />`,
+        // 5킬(에이스): 좌하단 변 붉은 셰브론 + 전체 오각형 진홍빛 글로우
+        `<polygon points="65,147 67,127 71,141 83,150" fill="#ff2a3c" style="filter: drop-shadow(0 0 7px #ff1e32);" />`
+      ];
+
+      const activeChevronsHtml = chevrons.slice(0, tier).join('');
+      const pentagonStroke = tier >= 5 ? '#ff3b4e' : 'rgba(225, 232, 240, 0.55)';
+      const pentagonGlow = tier >= 5 ? 'style="filter: drop-shadow(0 0 8px #ff2a3c);"' : '';
+
+      return `
+      <svg viewBox="0 0 200 200" width="154" height="154" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="araxysBannerBg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(26, 6, 10, 0.90)" />
+            <stop offset="70%" stop-color="rgba(14, 5, 8, 0.52)" />
+            <stop offset="100%" stop-color="rgba(10, 4, 6, 0)" />
+          </radialGradient>
+          <linearGradient id="araxysHelmetL" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f2f4f7" />
+            <stop offset="100%" stop-color="#a8b0ba" />
+          </linearGradient>
+          <linearGradient id="araxysHelmetR" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#c4ccd6" />
+            <stop offset="100%" stop-color="#6c737d" />
+          </linearGradient>
+        </defs>
+
+        <!-- 다크 크림슨 배경 오라 -->
+        <circle cx="100" cy="100" r="80" fill="url(#araxysBannerBg)" />
+
+        <!-- 외곽 기하학적 오각형 프레임 -->
+        <polygon points="100,32 162,76 138,154 62,154 38,76" fill="none" stroke="${pentagonStroke}" stroke-width="${tier >= 5 ? 2.4 : 1.5}" ${pentagonGlow} />
+
+        <!-- 상단 다이아몬드 안테나 -->
+        <polygon points="100,15 107,22 100,29 93,22" fill="none" stroke="#e2e8f0" stroke-width="1.4" />
+        <line x1="100" y1="29" x2="100" y2="40" stroke="#e2e8f0" stroke-width="1.4" />
+
+        <!-- 4방향 대각선 외계 핀 -->
+        <line x1="65" y1="65" x2="52" y2="52" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" />
+        <line x1="135" y1="65" x2="148" y2="52" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" />
+        <line x1="65" y1="135" x2="52" y2="148" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" />
+        <line x1="135" y1="135" x2="148" y2="148" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" />
+
+        <!-- 중앙 메인 원형 링 -->
+        <circle cx="100" cy="100" r="44" fill="none" stroke="#eef2f6" stroke-width="3.2" />
+
+        <!-- 1~5킬 진화형 붉은 셰브론 마커 -->
+        ${activeChevronsHtml}
+
+        <!-- 중앙 아락시스 외계 전사 금속 투구 엠블럼 -->
+        <!-- 좌우 장갑 뿔 -->
+        <polygon points="81,77 75,87 79,98 85,84" fill="#d8dee9" />
+        <polygon points="119,77 125,87 121,98 115,84" fill="#8c949e" />
+
+        <!-- 투구 좌측/우측/중앙 콧등 능선 -->
+        <polygon points="100,66 83,84 82,102 95,112 100,115" fill="url(#araxysHelmetL)" />
+        <polygon points="100,66 117,84 118,102 105,112 100,115" fill="url(#araxysHelmetR)" />
+        <polygon points="100,66 95,94 100,115 105,94" fill="#ffffff" opacity="0.55" />
+
+        <!-- 하단 턱 장갑판 (3분할 외계 마스크) -->
+        <polygon points="84,106 94,113 96,131 87,122" fill="#7c848e" />
+        <polygon points="116,106 106,113 104,131 113,122" fill="#525861" />
+        <polygon points="97,115 103,115 102,133 98,133" fill="#9aa2ad" />
+
+        <!-- 날카롭게 빛나는 진홍빛 눈매 -->
+        <polygon points="85,99 96,104 94,110 86,106" fill="#ff1e32" style="filter: drop-shadow(0 0 5px #ff0019);" />
+        <polygon points="115,99 104,104 106,110 114,106" fill="#ff1e32" style="filter: drop-shadow(0 0 5px #ff0019);" />
+
+        ${isHeadshot ? `
+        <g stroke="#ff2a3c" stroke-width="2.6" stroke-linecap="round" style="filter: drop-shadow(0 0 5px #ff0019);">
+          <line x1="92" y1="74" x2="108" y2="90" />
+          <line x1="108" y1="74" x2="92" y2="90" />
+        </g>` : ''}
+      </svg>`;
+    }
+
     function triggerScoreStreak(addCount = 1, isHeadshot = false) {
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
       const curW = getCurrentWeaponKey();
+      const isAraxysActive = (curW === 'operator' && equippedSkins.operator === 'araxys');
       const isChamp2024Active = (curW === 'phantom' && equippedSkins.phantom === 'champions2024');
       const isChamp2021Active = (curW === 'vandal' && equippedSkins.vandal === 'champions2021') || (curW === 'melee' && equippedSkins.melee === 'champions2021');
+      if (isAraxysActive) {
+        araxysAuraTimer = 4.5; // 4.5초간 아락시스 크림슨 코어 및 비늘 맥박 발광
+      }
       if (isChamp2024Active) {
         champions2024AuraTimer = 5.0; // 5초간 2024 챔피언스 보라·골드 오라 발광
       }
       if (isChamp2021Active) {
         championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
       }
-      const champEdition = isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null);
+      const champEdition = isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null));
       playKillStreakAudio(soundTier, champEdition, isHeadshot);
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = isChamp2024Active
-        ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
-        : (isChamp2021Active
-          ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
-          : buildStreakEmblemSVG(currentStreak, isHeadshot));
+      svgWrap.innerHTML = isAraxysActive
+        ? buildAraxysEmblemSVG(currentStreak, isHeadshot)
+        : (isChamp2024Active
+          ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
+          : (isChamp2021Active
+            ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
+            : buildStreakEmblemSVG(currentStreak, isHeadshot)));
 
       banner.style.transition = 'opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
       banner.style.opacity = '1';
@@ -1367,6 +1620,143 @@
       const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.022, 0.26, 16), darkMat); scopeTube.rotation.x = Math.PI / 2; scopeTube.position.set(0, 0.078, -0.02);
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.018, 0.22), accentMat); stripe.position.set(0, 0.02, -0.04);
       group.add(receiver, longBarrel, scopeTube, stripe);
+      return group;
+    }
+
+    function buildAraxysOperatorModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+
+      // 매트 블랙 외계 장갑 재질 + 진홍색(크림슨 레드) 발광 코어
+      const matteArmorMat = new THREE.MeshStandardMaterial({
+        color: 0x141518,
+        metalness: 0.82,
+        roughness: 0.28
+      });
+      const darkObsidianMat = new THREE.MeshStandardMaterial({
+        color: 0x0b0c0e,
+        metalness: 0.88,
+        roughness: 0.22
+      });
+      const edgeTrimMat = new THREE.MeshStandardMaterial({
+        color: 0x2d3038,
+        metalness: 0.90,
+        roughness: 0.20
+      });
+      const crimsonCoreMat = new THREE.MeshStandardMaterial({
+        color: 0xff2a3c,
+        emissive: new THREE.Color(0xff1428),
+        emissiveIntensity: 1.25,
+        roughness: 0.15,
+        metalness: 0.2
+      });
+
+      // 1. 내부 발광 코어 섀시 (비늘이 열릴 때 속살처럼 붉은 에너지 혈관/코어가 드러남)
+      const innerCore = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.068, 0.48), crimsonCoreMat);
+      innerCore.position.set(0, 0.012, -0.04);
+
+      // 내부 붉은 번개 맥박 스트립 (좌/우 측면)
+      const veinL = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.022, 0.44), crimsonCoreMat);
+      veinL.position.set(-0.025, 0.012, -0.04);
+      veinL.rotation.z = 0.25;
+      const veinR = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.022, 0.44), crimsonCoreMat);
+      veinR.position.set(0.025, 0.012, -0.04);
+      veinR.rotation.z = -0.25;
+
+      // 2. 다면체 리시버 외곽 프레임 & 하단 쐐기 장갑
+      const topSpine = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.026, 0.46), matteArmorMat);
+      topSpine.position.set(0, 0.044, -0.03);
+
+      const bottomKeel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.032, 0.44), darkObsidianMat);
+      bottomKeel.position.set(0, -0.026, -0.03);
+
+      // 후방 각진 개머리판(Stock) & 내부 붉은 틈새
+      const stockRear = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.088, 0.18), matteArmorMat);
+      stockRear.position.set(0, 0.002, 0.24);
+      const stockGlow = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.010, 0.14), crimsonCoreMat);
+      stockGlow.position.set(0, 0.008, 0.24);
+
+      // 3. 길게 뻗은 총열 + 다면체 폴리곤 소염기(Muzzle)
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.017, 0.50, 8), darkObsidianMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.022, -0.48);
+
+      const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.016, 0.095, 6), matteArmorMat);
+      muzzleBrake.rotation.x = Math.PI / 2;
+      muzzleBrake.position.set(0, 0.022, -0.74);
+
+      const muzzleCore = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.020, 6), crimsonCoreMat);
+      muzzleCore.rotation.x = Math.PI / 2;
+      muzzleCore.position.set(0, 0.022, -0.785);
+
+      // 4. 아락시스 시그니처 쐐기형 대형 스코프 (위아래 날카로운 다면체 후드 + 붉은 렌즈 테두리)
+      const scopeGroup = new THREE.Group();
+      scopeGroup.position.set(0, 0.086, -0.03);
+
+      const scopeUpperHood = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.026, 0.30), matteArmorMat);
+      scopeUpperHood.position.set(0, 0.018, -0.01);
+      const scopeLowerHood = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.26), darkObsidianMat);
+      scopeLowerHood.position.set(0, -0.018, -0.01);
+      const scopeSideL = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.044, 0.28), edgeTrimMat);
+      scopeSideL.position.set(-0.030, 0, -0.01);
+      scopeSideL.rotation.z = -0.22;
+      const scopeSideR = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.044, 0.28), edgeTrimMat);
+      scopeSideR.position.set(0.030, 0, -0.01);
+      scopeSideR.rotation.z = 0.22;
+
+      const scopeLensRim = new THREE.Mesh(new THREE.RingGeometry(0.016, 0.022, 6), crimsonCoreMat);
+      scopeLensRim.position.set(0, 0.002, 0.141);
+      const scopeGlass = new THREE.Mesh(
+        new THREE.CircleGeometry(0.016, 12),
+        new THREE.MeshBasicMaterial({ color: 0x1a0508 })
+      );
+      scopeGlass.position.set(0, 0.002, 0.140);
+      scopeGroup.add(scopeUpperHood, scopeLowerHood, scopeSideL, scopeSideR, scopeLensRim, scopeGlass);
+
+      // 5. 살아 움직이는 측면 외계 금속 비늘(Scales) — 자세히 보기(Y키) 및 사격/재장전 시 날개처럼 펴짐!
+      const leftScales = [];
+      const rightScales = [];
+      const scaleCount = 5;
+      for (let i = 0; i < scaleCount; i++) {
+        const zPos = 0.12 - i * 0.085;
+        const scaleHeight = 0.062 - i * 0.004;
+
+        // 왼쪽 비늘 피벗
+        const lPivot = new THREE.Group();
+        lPivot.position.set(-0.030, 0.012, zPos);
+        const lPlate = new THREE.Mesh(new THREE.BoxGeometry(0.009, scaleHeight, 0.072), matteArmorMat);
+        lPlate.position.set(-0.003, 0, 0);
+        lPlate.rotation.y = 0.14;
+        const lGlowEdge = new THREE.Mesh(new THREE.BoxGeometry(0.004, scaleHeight * 0.72, 0.014), crimsonCoreMat);
+        lGlowEdge.position.set(0.002, 0, -0.032);
+        lPivot.add(lPlate, lGlowEdge);
+        group.add(lPivot);
+        leftScales.push(lPivot);
+
+        // 오른쪽 비늘 피벗
+        const rPivot = new THREE.Group();
+        rPivot.position.set(0.030, 0.012, zPos);
+        const rPlate = new THREE.Mesh(new THREE.BoxGeometry(0.009, scaleHeight, 0.072), matteArmorMat);
+        rPlate.position.set(0.003, 0, 0);
+        rPlate.rotation.y = -0.14;
+        const rGlowEdge = new THREE.Mesh(new THREE.BoxGeometry(0.004, scaleHeight * 0.72, 0.014), crimsonCoreMat);
+        rGlowEdge.position.set(-0.002, 0, -0.032);
+        rPivot.add(rPlate, rGlowEdge);
+        group.add(rPivot);
+        rightScales.push(rPivot);
+      }
+
+      group.add(
+        innerCore, veinL, veinR, topSpine, bottomKeel, stockRear, stockGlow,
+        barrel, muzzleBrake, muzzleCore, scopeGroup
+      );
+
+      group.userData = {
+        leftScales,
+        rightScales,
+        crimsonCoreMat,
+        scaleOpenAmount: 0
+      };
       return group;
     }
 
@@ -2243,6 +2633,7 @@
       marshal: buildSniperModel({ bodyColor: 0x323840 }),
       outlaw: buildSniperModel({ doubleBarrel: true, bodyColor: 0x2c2829 }),
       operator: buildOperatorModel(),
+      operator_araxys: buildAraxysOperatorModel(),
       ares: buildLmgModel({ bodyColor: 0x2c3138 }),
       odin: buildLmgModel({ bodyColor: 0x22252b }),
       melee: buildMeleeModel(),
@@ -2250,6 +2641,9 @@
     };
 
     function getActiveModelForWeapon(wKey) {
+      if (wKey === 'operator' && equippedSkins.operator === 'araxys') {
+        return models.operator_araxys;
+      }
       if (wKey === 'phantom' && equippedSkins.phantom === 'champions2024') {
         return models.phantom_champions2024;
       }
@@ -2263,7 +2657,11 @@
     }
 
     window.toggleWeaponSkin = function(wKey) {
-      if (wKey === 'phantom') {
+      if (wKey === 'operator') {
+        equippedSkins.operator = equippedSkins.operator === 'araxys' ? 'standard' : 'araxys';
+        updateHUD();
+        if (getCurrentWeaponKey() === 'operator') updateGunVisual();
+      } else if (wKey === 'phantom') {
         equippedSkins.phantom = equippedSkins.phantom === 'champions2024' ? 'standard' : 'champions2024';
         updateHUD();
         if (getCurrentWeaponKey() === 'phantom') updateGunVisual();
@@ -2308,9 +2706,11 @@
       zoomLevel = level;
       const isHolo = (w.zoomType === 'holo' || w.zoomType === 'burst3_holo' || w.zoomType === 'burst4') && zoomLevel > 0;
       const isSniper = (w.zoomType === 'sniper' || w.zoomType === 'sniper1') && zoomLevel > 0;
+      const scopeEl = document.getElementById('sniperScope');
       document.getElementById('crosshair').style.display = zoomLevel > 0 ? 'none' : 'block';
       document.getElementById('adsReticle').style.display = isHolo ? 'block' : 'none';
-      document.getElementById('sniperScope').style.display = isSniper ? 'block' : 'none';
+      scopeEl.style.display = isSniper ? 'block' : 'none';
+      scopeEl.classList.toggle('araxys-scope', isSniper && getCurrentWeaponKey() === 'operator' && equippedSkins.operator === 'araxys');
       gunGroup.visible = !isSniper;
     }
 
@@ -2320,14 +2720,15 @@
       const dist = startPos.distanceTo(endPos);
       if (dist < 0.2) return;
 
-      const thickness = isOperator ? 0.028 : 0.014;
-      const tracerGeo = new THREE.CylinderGeometry(thickness, thickness, dist, 6);
+      const isAraxys = isOperator === 'araxys';
+      const thickness = isAraxys ? 0.036 : (isOperator ? 0.028 : 0.014);
+      const tracerGeo = new THREE.CylinderGeometry(thickness, thickness, dist, 8);
       tracerGeo.rotateX(Math.PI / 2);
 
       const tracerMat = new THREE.MeshBasicMaterial({
-        color: isOperator ? 0xffaa33 : 0xffe066,
+        color: isAraxys ? 0xff2438 : (isOperator ? 0xffaa33 : 0xffe066),
         transparent: true,
-        opacity: 0.92
+        opacity: isAraxys ? 0.96 : 0.92
       });
 
       const tracerMesh = new THREE.Mesh(tracerGeo, tracerMat);
@@ -2628,6 +3029,218 @@
       });
     }
 
+    function playSynthAraxysFinisher() {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+
+      // 1. 바닥 포털 개방 초저음 임팩트 (0.0s)
+      const sub = audioCtx.createOscillator();
+      const subGain = audioCtx.createGain();
+      sub.type = 'sawtooth';
+      sub.frequency.setValueAtTime(95, now);
+      sub.frequency.exponentialRampToValueAtTime(28, now + 2.4);
+      const subLP = audioCtx.createBiquadFilter();
+      subLP.type = 'lowpass';
+      subLP.frequency.setValueAtTime(280, now);
+      subGain.gain.setValueAtTime(0.55, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 2.6);
+      sub.connect(subLP); subLP.connect(subGain); subGain.connect(audioCtx.destination);
+      sub.start(now); sub.stop(now + 2.7);
+
+      // 2. 시체에서 거대 레이저 광선 기둥이 하늘로 솟구치는 외계 에너지 빔 공명 (0.45s ~ 5.5s)
+      const beamFreqs = [110.00, 164.81, 220.00, 329.63, 440.00];
+      beamFreqs.forEach((f, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const bp = audioCtx.createBiquadFilter();
+        osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+        osc.frequency.setValueAtTime(f * 0.85, now + 0.35);
+        osc.frequency.exponentialRampToValueAtTime(f * 1.15, now + 1.4);
+        osc.frequency.linearRampToValueAtTime(f, now + 4.8);
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(f * 2.2, now + 0.35);
+        bp.Q.value = 3.0;
+        gain.gain.setValueAtTime(0.001, now + 0.35);
+        gain.gain.linearRampToValueAtTime(0.11, now + 0.9);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 5.2);
+        osc.connect(bp); bp.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now + 0.35);
+        osc.stop(now + 5.3);
+      });
+    }
+
+    function triggerAraxysFinisher(pos) {
+      clearChampionsFinisher();
+      stopFinisherAudio();
+
+      // 보내주신 아락시스 마무리 사운드 우선 재생, 없을 시 외계 레이저 피니셔 합성음 자동 폴백
+      const finCandidates = ['VALORANT 2026-11-14 17-42-47.mp3', './VALORANT 2026-11-14 17-42-47.mp3', 'araxys-finisher.mp3'];
+      let fIdx = 0;
+      function tryFinAudio() {
+        if (fIdx >= finCandidates.length) {
+          playSynthAraxysFinisher();
+          return;
+        }
+        const a = new Audio(finCandidates[fIdx++]);
+        a.volume = 0.95;
+        currentFinisherAudio = a;
+        const p = a.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            if (currentFinisherAudio === a) currentFinisherAudio = null;
+            tryFinAudio();
+          });
+        }
+        a.onerror = () => {
+          if (currentFinisherAudio === a) currentFinisherAudio = null;
+          tryFinAudio();
+        };
+      }
+      tryFinAudio();
+
+      const group = new THREE.Group();
+      group.position.set(pos.x, 0, pos.z);
+
+      // 1. 시체 주변 바닥에 펼쳐지는 외계 기하학 마법진 포털
+      const portalGroup = new THREE.Group();
+      portalGroup.position.y = 0.06;
+
+      const outerRingMat = new THREE.MeshBasicMaterial({
+        color: 0xff2438,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.92
+      });
+      const outerRing = new THREE.Mesh(new THREE.RingGeometry(2.6, 2.85, 6), outerRingMat);
+      outerRing.rotation.x = -Math.PI / 2;
+
+      const innerRingMat = new THREE.MeshBasicMaterial({
+        color: 0xff758f,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.88
+      });
+      const innerRing = new THREE.Mesh(new THREE.RingGeometry(1.45, 1.62, 6), innerRingMat);
+      innerRing.rotation.x = -Math.PI / 2;
+      innerRing.rotation.z = Math.PI / 6;
+
+      const coreDiscMat = new THREE.MeshBasicMaterial({
+        color: 0x3b040c,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85
+      });
+      const coreDisc = new THREE.Mesh(new THREE.CircleGeometry(2.6, 24), coreDiscMat);
+      coreDisc.rotation.x = -Math.PI / 2;
+      coreDisc.position.y = -0.01;
+
+      portalGroup.add(coreDisc, outerRing, innerRing);
+      group.add(portalGroup);
+
+      // 2. 시체 위치에서 하늘 끝까지 솟구치는 거대한 진홍빛 메인 레이저 광선 기둥 (코어 + 외곽 플라즈마 튜브)
+      const mainCoreMat = new THREE.MeshBasicMaterial({
+        color: 0xffd6dc,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide
+      });
+      const mainCoreBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 48, 16, 1, true), mainCoreMat);
+      mainCoreBeam.position.y = 24;
+
+      const mainOuterMat = new THREE.MeshBasicMaterial({
+        color: 0xff1e32,
+        transparent: true,
+        opacity: 0.62,
+        side: THREE.DoubleSide
+      });
+      const mainOuterBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.15, 48, 20, 1, true), mainOuterMat);
+      mainOuterBeam.position.y = 24;
+
+      group.add(mainCoreBeam, mainOuterBeam);
+
+      // 3. 주변 6개의 보조 수직 레이저 기둥 & 위로 빨려 올라가는 외계 에너지 파편
+      const subBeams = [];
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const radius = 2.45;
+        const sbMat = new THREE.MeshBasicMaterial({
+          color: 0xff3b4e,
+          transparent: true,
+          opacity: 0.55,
+          side: THREE.DoubleSide
+        });
+        const sb = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 38, 10, 1, true), sbMat);
+        sb.position.set(Math.cos(angle) * radius, 19, Math.sin(angle) * radius);
+        group.add(sb);
+        subBeams.push({ mesh: sb, mat: sbMat, angle, radius });
+      }
+
+      // 4. 공중으로 부양하며 레이저에 흡수되는 적 잔상 구체 + 상승 에너지 링 3개
+      const victimOrbMat = new THREE.MeshBasicMaterial({
+        color: 0xff4d5e,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.9
+      });
+      const victimOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.65, 1), victimOrbMat);
+      victimOrb.position.set(0, 1.2, 0);
+      group.add(victimOrb);
+
+      const pulseRings = [];
+      for (let rIdx = 0; rIdx < 3; rIdx++) {
+        const prMat = new THREE.MeshBasicMaterial({
+          color: 0xff5e6c,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.8
+        });
+        const pr = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.78, 6), prMat);
+        pr.rotation.x = -Math.PI / 2;
+        pr.position.y = 0.5 + rIdx * 2.2;
+        group.add(pr);
+        pulseRings.push({ mesh: pr, mat: prMat, offset: rIdx * 0.33 });
+      }
+
+      // 5. 상공 외계 차원 균열(Rift) 포털
+      const skyRiftMat = new THREE.MeshBasicMaterial({
+        color: 0xff1e32,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85
+      });
+      const skyRift = new THREE.Mesh(new THREE.RingGeometry(2.2, 4.4, 6), skyRiftMat);
+      skyRift.rotation.x = Math.PI / 2;
+      skyRift.position.set(0, 26, 0);
+      group.add(skyRift);
+
+      scene.add(group);
+
+      // 붉은 외계 일식 밤하늘 전환
+      scene.background = new THREE.Color(0x26060b);
+      if (scene.fog) scene.fog.color.setHex(0x26060b);
+
+      activeFinisher = {
+        edition: 'araxys',
+        group,
+        portalGroup,
+        outerRing,
+        innerRing,
+        mainCoreBeam,
+        mainOuterBeam,
+        mainCoreMat,
+        mainOuterMat,
+        subBeams,
+        victimOrb,
+        victimOrbMat,
+        pulseRings,
+        skyRift,
+        skyRiftMat,
+        timer: 0,
+        duration: 6.8
+      };
+    }
+
     function triggerChampions2024Finisher(pos) {
       clearChampionsFinisher();
 
@@ -2780,6 +3393,62 @@
       if (!activeFinisher) return;
       const f = activeFinisher;
       f.timer += dt;
+
+      if (f.edition === 'araxys') {
+        // 바닥 외계 마법진 회전 & 상공 차원 균열 회전
+        f.outerRing.rotation.z += dt * 1.4;
+        f.innerRing.rotation.z -= dt * 2.1;
+        f.skyRift.rotation.z += dt * 1.8;
+
+        // 0~0.45초: 바닥 마법진에서 하늘로 거대 레이저 광선 기둥이 폭발적으로 솟구침
+        const shootProgress = Math.min(1, f.timer / 0.45);
+        const beamPulse = 1.0 + Math.sin(f.timer * 24) * 0.14;
+        f.mainCoreBeam.scale.set(shootProgress * beamPulse, shootProgress, shootProgress * beamPulse);
+        f.mainOuterBeam.scale.set(shootProgress * beamPulse, shootProgress, shootProgress * beamPulse);
+
+        // 보조 레이저 기둥 회전 및 명멸
+        f.subBeams.forEach((sb, idx) => {
+          const curA = sb.angle + f.timer * 0.9;
+          sb.mesh.position.x = Math.cos(curA) * sb.radius;
+          sb.mesh.position.z = Math.sin(curA) * sb.radius;
+          sb.mesh.scale.y = shootProgress;
+          sb.mat.opacity = 0.35 + Math.sin(f.timer * 16 + idx) * 0.2;
+        });
+
+        // 적 잔상 구체가 공중으로 빨려 올라가며 레이저 코어에 흡수·소멸
+        if (f.timer < 3.6) {
+          const lift = f.timer / 3.6;
+          f.victimOrb.position.y = 1.2 + Math.pow(lift, 1.35) * 14.0;
+          f.victimOrb.rotation.y += dt * 6.0;
+          f.victimOrb.rotation.x += dt * 4.0;
+          const shrink = Math.max(0.05, 1.0 - Math.max(0, (lift - 0.65) / 0.35));
+          f.victimOrb.scale.set(shrink, shrink, shrink);
+        } else {
+          f.victimOrb.visible = false;
+        }
+
+        // 바닥에서 위로 치솟는 에너지 육각 링
+        f.pulseRings.forEach(pr => {
+          const cycle = ((f.timer * 0.85 + pr.offset) % 1);
+          pr.mesh.position.y = 0.3 + cycle * 18.0;
+          const rScale = 1.0 - cycle * 0.45;
+          pr.mesh.scale.set(rScale, rScale, 1);
+          pr.mat.opacity = (1 - cycle) * 0.85;
+        });
+
+        // 후반부 페이드 아웃
+        if (f.timer > f.duration - 1.2) {
+          const fade = Math.max(0, (f.duration - f.timer) / 1.2);
+          f.mainCoreMat.opacity = 0.95 * fade;
+          f.mainOuterMat.opacity = 0.62 * fade;
+          f.skyRiftMat.opacity = 0.85 * fade;
+        }
+
+        if (f.timer >= f.duration) {
+          clearChampionsFinisher();
+        }
+        return;
+      }
 
       if (f.edition === '2024') {
         f.sparkGroup.rotation.y += dt * 3.4;
@@ -2967,8 +3636,10 @@
       else blueScore += 1;
       updateScoreboard();
 
-      // 마지막 적 처치 시 챔피언스 마무리 모션 발동!
-      if (usedChampEdition === '2024' && killerPos) {
+      // 마지막 적 처치 시 전용 마무리 모션 발동!
+      if (usedChampEdition === 'araxys' && killerPos) {
+        triggerAraxysFinisher(killerPos);
+      } else if (usedChampEdition === '2024' && killerPos) {
         triggerChampions2024Finisher(killerPos);
       } else if ((usedChampEdition === '2021' || usedChampEdition === true) && killerPos) {
         triggerChampions2021Finisher(killerPos);
@@ -3682,7 +4353,9 @@
       document.getElementById('shopCredits').innerText = credits;
       const isMeleeChamp = equippedSkins.melee === 'champions2021';
       const isPhantom2024 = equippedSkins.phantom === 'champions2024';
+      const isOperatorAraxys = equippedSkins.operator === 'araxys';
       document.getElementById('weaponText').innerText =
+        (key === 'operator' && isOperatorAraxys) ? '아락시스 오퍼레이터' :
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
         (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
         (key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name;
@@ -3698,6 +4371,15 @@
 
       ['classic', 'shorty', 'frenzy', 'ghost', 'bandit', 'sheriff', 'stinger', 'spectre', 'bucky', 'judge', 'bulldog', 'guardian', 'phantom', 'vandal', 'marshal', 'outlaw', 'operator', 'ares', 'odin'].forEach(k => { const el = document.getElementById('buy-' + k); if (el) el.classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k); });
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
+      const opBadge = document.getElementById('operatorSkinBadge');
+      const opBtn = document.getElementById('toggleOperatorSkinBtn');
+      if (opBadge) {
+        opBadge.innerText = isOperatorAraxys ? '아락시스 (블랙)' : '기본 스킨';
+        opBadge.style.background = isOperatorAraxys ? '#3b0a12' : '#333';
+        opBadge.style.color = isOperatorAraxys ? '#ff4d5e' : '#ccc';
+      }
+      if (opBtn) opBtn.innerText = isOperatorAraxys ? '기본 스킨으로 변경' : '아락시스 장착';
+
       const pBadge = document.getElementById('phantomSkinBadge');
       const pBtn = document.getElementById('togglePhantomSkinBtn');
       if (pBadge) {
@@ -4042,8 +4724,9 @@
           if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
           }
+          const isAraxysOp = (key === 'operator' && equippedSkins.operator === 'araxys');
           const isChampSkin = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'phantom' && equippedSkins.phantom === 'champions2024');
-          spawnBulletTracer(muzzleWorld, tracerEnd, key === 'operator' || isChampSkin);
+          spawnBulletTracer(muzzleWorld, tracerEnd, isAraxysOp ? 'araxys' : (key === 'operator' || isChampSkin));
         }
 
         const hitTargetsSet = new Set();
@@ -4124,9 +4807,11 @@
               const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
               const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
               if (remainingEnemies === 0) {
-                const usedChamp = (key === 'phantom' && equippedSkins.phantom === 'champions2024')
-                  ? '2024'
-                  : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false);
+                const usedChamp = (key === 'operator' && equippedSkins.operator === 'araxys')
+                  ? 'araxys'
+                  : ((key === 'phantom' && equippedSkins.phantom === 'champions2024')
+                    ? '2024'
+                    : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false));
                 endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
               }
             }
@@ -4140,10 +4825,13 @@
         const hsTag = anyHeadshotKill ? ' [헤드샷]' : '';
         addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!${hsTag}` : `[${w.name}] 훈련봇 타겟 완료${hsTag}`, multiScoreCount >= 2 || anyHeadshotKill);
         if (currentMap === 'range' && currentStreak > 0 && currentStreak % 5 === 0) {
-          if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
-            triggerChampions2024Finisher(hits[0].point);
+          const finPos = lastFinisherPos || hits[0].point;
+          if (key === 'operator' && equippedSkins.operator === 'araxys') {
+            triggerAraxysFinisher(finPos);
+          } else if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
+            triggerChampions2024Finisher(finPos);
           } else if (key === 'vandal' && equippedSkins.vandal === 'champions2021') {
-            triggerChampions2021Finisher(hits[0].point);
+            triggerChampions2021Finisher(finPos);
           }
         }
       }
@@ -4533,6 +5221,18 @@
             karambitModel.userData.whooshAccum = 0;
             playKarambitWhooshSound(0.95 + Math.random() * 0.2);
           }
+        } else if (curKey === 'operator' && equippedSkins.operator === 'araxys') {
+          // 아락시스 오퍼레이터 자세히 보기(Y키): 총신을 위로 들어올리며 측면 비늘 장갑판이 활짝 펴짐!
+          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.12, 0.14);
+          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.10 + Math.sin(inspectTimer * 2.4) * 0.008, 0.14);
+          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.34, 0.14);
+          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.34, 0.14);
+          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.72, 0.14);
+          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.28, 0.14);
+          if (inspectTimer > 4.2) {
+            isInspecting = false;
+            inspectTimer = 0;
+          }
         } else {
           gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.14, 0.15);
           gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.14, 0.15);
@@ -4575,6 +5275,32 @@
             handObj.userData.thumbPivot.rotation.x = THREE.MathUtils.lerp(handObj.userData.thumbPivot.rotation.x, 0, 0.25);
           }
         }
+      }
+
+      // 아락시스 오퍼레이터 비늘(Scales) 개방 & 크림슨 코어 발광 애니메이션
+      if (araxysAuraTimer > 0) araxysAuraTimer -= dt;
+      const araxysModel = models.operator_araxys;
+      if (araxysModel && araxysModel.userData.leftScales) {
+        const isAraxysInspecting = (isInspecting && curKey === 'operator' && equippedSkins.operator === 'araxys');
+        const targetOpen = isAraxysInspecting ? 1.0 : (isReloading && curKey === 'operator' ? 0.55 : (araxysAuraTimer > 0 ? 0.35 : 0.0));
+        araxysModel.userData.scaleOpenAmount = THREE.MathUtils.lerp(araxysModel.userData.scaleOpenAmount, targetOpen, 0.16);
+        const openAmt = araxysModel.userData.scaleOpenAmount;
+
+        araxysModel.userData.leftScales.forEach((sc, idx) => {
+          const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
+          sc.rotation.y = -(openAmt * 0.62 + wave);
+          sc.rotation.z = openAmt * 0.24;
+          sc.position.x = -0.030 - openAmt * 0.016;
+        });
+        araxysModel.userData.rightScales.forEach((sc, idx) => {
+          const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
+          sc.rotation.y = (openAmt * 0.62 + wave);
+          sc.rotation.z = -openAmt * 0.24;
+          sc.position.x = 0.030 + openAmt * 0.016;
+        });
+
+        const pulse = Math.sin(performance.now() * 0.012) * 0.25;
+        araxysModel.userData.crimsonCoreMat.emissiveIntensity = (isAraxysInspecting || araxysAuraTimer > 0) ? (1.85 + pulse) : 1.15;
       }
 
       // 2024 챔피언스 팬텀 코어 & 오라 애니메이션
