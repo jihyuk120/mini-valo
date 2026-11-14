@@ -103,8 +103,8 @@
         <span style="color:#555;">|</span>
         <span style="font-size:14px; color:#bbb;">인원 구성:</span>
         <select id="brawlModeSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
-          <option value="1v1" selected>1 vs 1 (단판 승부)</option>
-          <option value="2v2">2 vs 2 (팀전 · 관전 지원)</option>
+          <option value="5v5" selected>5 vs 5 (어센트 폭파전 · AI 봇)</option>
+          <option value="2v2">2 vs 2 (소규모 폭파전)</option>
           <option value="pvp">친구 PvP 전용 (AI 없음)</option>
         </select>
       </div>
@@ -297,16 +297,22 @@
   <div id="topScoreboard" style="flex-direction:column; gap:4px; padding:8px 26px;">
     <div style="display:flex; align-items:center; gap:18px;">
       <span class="team-red">RED <span id="redScoreText">0</span></span>
-      <span id="roundTimerText" style="color:#00ffcc; font-size:18px; min-width:95px; text-align:center;">ROUND 1</span>
+      <span id="roundTimerText" style="color:#00ffcc; font-size:18px; min-width:115px; text-align:center;">PREP 30s</span>
       <span class="team-blue"><span id="blueScoreText">0</span> BLUE</span>
     </div>
     <div id="roundPhaseSub" style="font-size:12px; color:#ffcc00; letter-spacing:1px;">
-      준비 시간 (8초) - 상점(B) 이용 가능
+      구매 시간 (30초) - 상점(B) 이용 가능 | 공격(RED) vs 수비(BLUE)
+    </div>
+  </div>
+  <div id="spikePromptBanner" style="position:fixed; top:64%; left:50%; transform:translate(-50%, -50%); pointer-events:none; z-index:17; text-align:center; display:none; background:rgba(15,25,35,0.88); padding:10px 22px; border:1px solid #00ffcc; border-radius:6px;">
+    <div id="spikePromptTitle" style="font-size:16px; font-weight:bold; color:#00ffcc;">[4] 키를 꾹 눌러 스파이크 설치 (4.0초)</div>
+    <div style="width:220px; height:8px; background:#222; margin:6px auto 0; border-radius:4px; overflow:hidden;">
+      <div id="spikeProgressBar" style="width:0%; height:100%; background:#ff4655;"></div>
     </div>
   </div>
   <div id="roundCenterBanner" style="position:fixed; top:22%; left:50%; transform:translate(-50%, -50%); pointer-events:none; z-index:18; text-align:center; display:none;">
     <div id="roundBannerTitle" style="font-size:44px; font-weight:900; color:#ece8e1; letter-spacing:4px; text-shadow:0 4px 18px rgba(0,0,0,0.9);">ROUND 1</div>
-    <div id="roundBannerSub" style="font-size:18px; font-weight:bold; color:#00ffcc; margin-top:4px; text-shadow:0 2px 8px black;">구매 및 준비 시간 (장벽 해제까지 8초)</div>
+    <div id="roundBannerSub" style="font-size:18px; font-weight:bold; color:#00ffcc; margin-top:4px; text-shadow:0 2px 8px black;">구매 및 준비 시간 (장벽 해제까지 30초)</div>
   </div>
 
   <div id="crosshair"></div>
@@ -1744,42 +1750,243 @@
       addBlock(26, 1.1, 0.6, 0, 0.55, 10, 0xff4655);
     }
 
+    let ascentDoors = [];
+    let ascentGlassPanes = [];
+    let destructibleMeshes = [];
+    let spikeState = {
+      planted: false,
+      site: null,
+      pos: new THREE.Vector3(),
+      timer: 45.0,
+      plantProgress: 0,
+      defuseProgress: 0,
+      mesh: null
+    };
+
+    function clearSpikeVisual() {
+      if (spikeState.mesh) {
+        scene.remove(spikeState.mesh);
+        spikeState.mesh = null;
+      }
+      spikeState.planted = false;
+      spikeState.site = null;
+      spikeState.timer = 45.0;
+      spikeState.plantProgress = 0;
+      spikeState.defuseProgress = 0;
+      const prompt = document.getElementById('spikePromptBanner');
+      if (prompt) prompt.style.display = 'none';
+    }
+
+    function createSpikeMesh(pos) {
+      if (spikeState.mesh) scene.remove(spikeState.mesh);
+      const grp = new THREE.Group();
+      const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.36, 0.55, 12),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 })
+      );
+      base.position.y = 0.28;
+      const core = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.24, 0),
+        new THREE.MeshBasicMaterial({ color: 0xff2a3c })
+      );
+      core.position.y = 0.72;
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(4.2, 4.45, 48),
+        new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.03;
+      grp.add(base, core, ring);
+      grp.position.set(pos.x, 0, pos.z);
+      grp.userData.core = core;
+      scene.add(grp);
+      spikeState.mesh = grp;
+    }
+
+    function createAscentBlastDoor(name, x, z, rotY) {
+      const doorGroup = new THREE.Group();
+      doorGroup.position.set(x, 0, z);
+      doorGroup.rotation.y = rotY;
+
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x3b424c, metalness: 0.7, roughness: 0.35 });
+      const doorMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, metalness: 0.85, roughness: 0.25 });
+      const switchMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x00aa88, emissiveIntensity: 0.8 });
+
+      const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(0.6, 4.4, 0.8), frameMat);
+      leftPillar.position.set(-2.3, 2.2, 0);
+      const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(0.6, 4.4, 0.8), frameMat);
+      rightPillar.position.set(2.3, 2.2, 0);
+      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.6, 0.8), frameMat);
+      topBeam.position.set(0, 4.1, 0);
+
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(4.0, 3.8, 0.35), doorMat);
+      panel.position.set(0, 1.9, 0);
+
+      const sw1 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.25), switchMat);
+      sw1.position.set(-2.3, 1.4, 0.45);
+      const sw2 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.25), switchMat);
+      sw2.position.set(2.3, 1.4, -0.45);
+
+      doorGroup.add(leftPillar, rightPillar, topBeam, panel, sw1, sw2);
+      mapGroup.add(doorGroup);
+
+      const doorObj = {
+        name,
+        group: doorGroup,
+        panel,
+        switchMat,
+        x,
+        z,
+        rotY,
+        isOpen: true,
+        destroyed: false,
+        hp: 400,
+        collider: null
+      };
+      panel.userData = { targetType: 'ascentDoor', doorObj };
+      destructibleMeshes.push(panel);
+      ascentDoors.push(doorObj);
+      return doorObj;
+    }
+
+    function toggleAscentDoor(doorObj, forceState = null) {
+      if (!doorObj || doorObj.destroyed) return;
+      doorObj.isOpen = forceState !== null ? forceState : !doorObj.isOpen;
+      doorObj.panel.visible = !doorObj.isOpen;
+      doorObj.switchMat.color.setHex(doorObj.isOpen ? 0x00ffcc : 0xff4655);
+      doorObj.switchMat.emissive.setHex(doorObj.isOpen ? 0x00aa88 : 0xaa1122);
+
+      if (doorObj.collider) {
+        const idx = wallColliders.indexOf(doorObj.collider);
+        if (idx >= 0) wallColliders.splice(idx, 1);
+        doorObj.collider = null;
+      }
+      if (!doorObj.isOpen) {
+        const w = Math.abs(Math.cos(doorObj.rotY)) > 0.5 ? 4.2 : 0.6;
+        const d = Math.abs(Math.cos(doorObj.rotY)) > 0.5 ? 0.6 : 4.2;
+        doorObj.collider = {
+          minX: doorObj.x - w / 2 - 0.45,
+          maxX: doorObj.x + w / 2 + 0.45,
+          minZ: doorObj.z - d / 2 - 0.45,
+          maxZ: doorObj.z + d / 2 + 0.45,
+          maxY: 3.8
+        };
+        wallColliders.push(doorObj.collider);
+      }
+    }
+
+    function createBreakableGlass(x, y, z, w, h, d) {
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: 0xa5f3fc,
+        transparent: true,
+        opacity: 0.42,
+        roughness: 0.1,
+        metalness: 0.3
+      });
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glassMat);
+      glass.position.set(x, y, z);
+      mapGroup.add(glass);
+      const collider = {
+        minX: x - w / 2 - 0.3,
+        maxX: x + w / 2 + 0.3,
+        minZ: z - d / 2 - 0.3,
+        maxZ: z + d / 2 + 0.3,
+        maxY: y + h / 2
+      };
+      wallColliders.push(collider);
+      const glassObj = { mesh: glass, collider, destroyed: false, hp: 60 };
+      glass.userData = { targetType: 'ascentGlass', glassObj };
+      destructibleMeshes.push(glass);
+      ascentGlassPanes.push(glassObj);
+    }
+
     function buildBrawlMap() {
       while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
       wallColliders = [];
       wallMeshes = [];
-      scene.background = new THREE.Color(0x16202a);
-      scene.fog = new THREE.Fog(0x16202a, 30, 130);
+      ascentDoors = [];
+      ascentGlassPanes = [];
+      destructibleMeshes = [];
 
-      addBlock(70, 1, 90, 0, -0.5, 0, 0x24313d, false);
-      const grid = new THREE.GridHelper(70, 35, 0x00ffcc, 0x2f4050);
-      grid.position.set(0, 0.01, 0);
-      mapGroup.add(grid);
+      // 이탈리아 베네치아 공중 부유 섬 밝은 낮 하늘 테마
+      scene.background = new THREE.Color(0x7dd3fc);
+      scene.fog = new THREE.Fog(0xbae6fd, 55, 190);
 
-      const wallDark = 0x1d2731;
-      const pillarRed = 0x8f2934;
-      const pillarBlue = 0x1f5b82;
-      const coverBox = 0x3c4d5e;
+      const stoneFloor = 0xd6cfc2;     // 베네치아 석회암 바닥
+      const veniceWall = 0xe7d8c1;     // 베네치아 테라코타/석조 벽면
+      const terracottaRoof = 0xb85d43; // 붉은 기와 지붕/트림
+      const woodCrate = 0x8c6239;      // 나무 상자 엄폐물
+      const radianiteGreen = 0x2a6f5b; // 레디어나이트 상자
+      const canalBlue = 0x0284c7;      // 운하 수면
 
-      addBlock(70, 9, 1.5, 0, 4.5, -45, wallDark);
-      addBlock(70, 9, 1.5, 0, 4.5, 45, wallDark);
-      addBlock(1.5, 9, 90, -35, 4.5, 0, wallDark);
-      addBlock(1.5, 9, 90, 35, 4.5, 0, wallDark);
+      // 전체 바닥 & 주변 운하 풍경
+      addBlock(96, 1, 112, 0, -0.5, 0, stoneFloor, false);
+      addBlock(240, 0.5, 240, 0, -2.5, 0, canalBlue, false);
+      addBlock(3.5, 1.0, 11, -56, -1.8, -12, 0x5c3a21, false);
+      addBlock(3.5, 1.0, 11, 56, -1.8, 18, 0x5c3a21, false);
 
-      addBlock(5, 2.6, 5, 0, 1.3, 0, coverBox);
-      addBlock(3.2, 1.3, 2.2, -11, 0.65, 0, coverBox);
-      addBlock(3.2, 1.3, 2.2, 11, 0.65, 0, coverBox);
+      // 외곽 성벽 (동/서/남/북)
+      addBlock(96, 9, 2, 0, 4.5, -56, veniceWall); // 북쪽 (수비 스폰 뒤)
+      addBlock(96, 9, 2, 0, 4.5, 56, veniceWall);  // 남쪽 (공격 스폰 뒤)
+      addBlock(2, 9, 112, -48, 4.5, 0, veniceWall); // 서쪽 (B 사이트 외곽)
+      addBlock(2, 9, 112, 48, 4.5, 0, veniceWall);  // 동쪽 (A 사이트 외곽)
 
-      addBlock(2.2, 3.6, 18, -21, 1.8, 0, coverBox);
-      addBlock(2.2, 3.6, 18, 21, 1.8, 0, coverBox);
+      // 1. 중앙 미드 (Mid) - 넓은 개활지, 캣워크(Catwalk), 미드 마켓(Market)
+      addBlock(4.5, 1.5, 4.5, 0, 0.75, 4, veniceWall);
+      addBlock(2.2, 2.8, 2.2, 0, 1.4, 4, terracottaRoof);
+      addBlock(8, 1.2, 18, 12, 0.6, -10, stoneFloor);
+      addBlock(1.2, 2.4, 16, 8.2, 1.2, -10, veniceWall);
 
-      addBlock(6, 4.5, 2.5, -9, 2.25, 24, pillarRed);
-      addBlock(6, 4.5, 2.5, 9, 2.25, 24, pillarRed);
-      addBlock(3, 1.6, 3, 0, 0.8, 17, coverBox);
+      // 미드 마켓(Market) 건물
+      addBlock(1.5, 7, 14, -15, 3.5, -16, veniceWall);
+      addBlock(12, 7, 1.5, -21, 3.5, -9, veniceWall);
+      addBlock(12, 0.8, 14, -21, 7.2, -16, terracottaRoof, false);
 
-      addBlock(6, 4.5, 2.5, -9, 2.25, -24, pillarBlue);
-      addBlock(6, 4.5, 2.5, 9, 2.25, -24, pillarBlue);
-      addBlock(3, 1.6, 3, 0, 0.8, -17, coverBox);
+      // 2. 동쪽 A 사이트 (A Main, A Short/Tree, Heaven, Hell, 발전기)
+      addBlock(2, 8, 22, 18, 4, 16, veniceWall);
+      addBlock(2, 8, 16, 18, 4, -22, veniceWall);
+      addBlock(16, 8, 2, 32, 4, 22, veniceWall);
+      addBlock(2, 8, 16, 26, 4, 30, veniceWall);
+
+      // A 사이트 구역 바닥 표시 & 엄폐물
+      const siteRingMat = new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
+      const siteARing = new THREE.Mesh(new THREE.RingGeometry(6.8, 7.2, 48), siteRingMat);
+      siteARing.rotation.x = -Math.PI / 2;
+      siteARing.position.set(34, 0.02, -4);
+      mapGroup.add(siteARing);
+
+      addBlock(3.6, 2.6, 3.6, 33, 1.3, -4, radianiteGreen);
+      addBlock(2.4, 1.6, 2.4, 36, 0.8, -6, woodCrate);
+      addBlock(2.6, 2.4, 2.6, 28, 1.2, 4, woodCrate);
+
+      // A 헤븐(Heaven) 고지대 & 아래 헬(Hell) 구역
+      addBlock(16, 0.8, 10, 38, 3.4, -22, stoneFloor);
+      addBlock(16, 1.2, 0.8, 38, 4.4, -17.2, terracottaRoof);
+      addBlock(3.2, 3.4, 3.2, 44, 1.7, -28, veniceWall);
+
+      // 3. 서쪽 B 사이트 (B Main, 보트하우스 Boathouse, 저지대 바닥)
+      const siteBRing = new THREE.Mesh(new THREE.RingGeometry(6.8, 7.2, 48), siteRingMat);
+      siteBRing.rotation.x = -Math.PI / 2;
+      siteBRing.position.set(-35, 0.02, -4);
+      mapGroup.add(siteBRing);
+
+      addBlock(2, 8, 26, -18, 4, 14, veniceWall);
+      addBlock(14, 8, 2, -33, 4, 22, veniceWall);
+      addBlock(2, 8, 18, -28, 4, 31, veniceWall);
+
+      addBlock(3.4, 2.5, 3.4, -34, 1.25, -4, radianiteGreen);
+      addBlock(2.5, 1.5, 2.5, -31, 0.75, 2, woodCrate);
+      addBlock(14, 6.5, 1.5, -38, 3.25, -24, veniceWall);
+      addBlock(1.5, 6.5, 10, -31, 3.25, -19, veniceWall);
+      addBlock(14, 0.8, 10, -38, 6.8, -19, terracottaRoof, false);
+
+      // 4. 어센트 핵심 특수 기믹: 개폐·파괴형 철문 2개 + 파괴형 유리창
+      createAscentBlastDoor('A 쇼트 방화문', 18, -5, Math.PI / 2);
+      createAscentBlastDoor('B 마켓 방화문', -18, -15, Math.PI / 2);
+
+      addBlock(0.8, 1.3, 6, 18, 0.65, 2, veniceWall);
+      addBlock(0.8, 3.5, 6, 18, 6.25, 2, veniceWall);
+      createBreakableGlass(18, 2.9, 2, 0.25, 3.2, 5.8);
     }
 
     const gunGroup = new THREE.Group();
@@ -4015,8 +4222,9 @@
     // ==========================================
     let roundNumber = 1;
     let roundPhase = 'PREP'; // 'PREP' | 'COMBAT' | 'END'
-    let roundPhaseTimer = 8.0;
+    let roundPhaseTimer = 30.0;
     const prepBarrierMeshes = [];
+    let teamRoundCredits = { red: 800, blue: 800 };
 
     function clearPrepBarriers() {
       prepBarrierMeshes.forEach(m => scene.remove(m));
@@ -4025,33 +4233,32 @@
 
     function createPrepBarriers() {
       clearPrepBarriers();
-      // 준비 시간에는 상대 진영이 전혀 보이지 않도록 완전 불투명(opaque) 에너지 장벽 설치!
-      const redBarrierMat = new THREE.MeshStandardMaterial({
-        color: 0x991b27,
-        emissive: 0x5c0f17,
-        emissiveIntensity: 0.75,
-        roughness: 0.25,
-        metalness: 0.4,
+      const atkBarrierMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffcc,
+        emissive: 0x008877,
+        emissiveIntensity: 0.65,
+        transparent: true,
+        opacity: 0.45,
         side: THREE.DoubleSide
       });
-      const blueBarrierMat = new THREE.MeshStandardMaterial({
-        color: 0x124e78,
-        emissive: 0x0b3554,
-        emissiveIntensity: 0.75,
-        roughness: 0.25,
-        metalness: 0.4,
+      const defBarrierMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.65,
+        transparent: true,
+        opacity: 0.45,
         side: THREE.DoubleSide
       });
 
-      const redBarrier = new THREE.Mesh(new THREE.PlaneGeometry(69, 9.0), redBarrierMat);
-      redBarrier.position.set(0, 4.5, 21.5);
-      scene.add(redBarrier);
+      const atkBarrier = new THREE.Mesh(new THREE.PlaneGeometry(94, 9.0), atkBarrierMat);
+      atkBarrier.position.set(0, 4.5, 28.0);
+      scene.add(atkBarrier);
 
-      const blueBarrier = new THREE.Mesh(new THREE.PlaneGeometry(69, 9.0), blueBarrierMat);
-      blueBarrier.position.set(0, 4.5, -21.5);
-      scene.add(blueBarrier);
+      const defBarrier = new THREE.Mesh(new THREE.PlaneGeometry(94, 9.0), defBarrierMat);
+      defBarrier.position.set(0, 4.5, -28.0);
+      scene.add(defBarrier);
 
-      prepBarrierMeshes.push(redBarrier, blueBarrier);
+      prepBarrierMeshes.push(atkBarrier, defBarrier);
     }
 
     function showRoundBanner(title, sub, color = '#ece8e1', duration = 2200) {
@@ -4073,12 +4280,12 @@
 
     function syncBrawlRoster() {
       const modeEl = document.getElementById('brawlModeSelect');
-      const mode = modeEl ? modeEl.value : '1v1';
+      const mode = modeEl ? modeEl.value : '5v5';
       if (mode === 'pvp') {
         initBrawlBots(0, 0);
         return;
       }
-      const targetPerTeam = mode === '2v2' ? 2 : 1;
+      const targetPerTeam = mode === '2v2' ? 2 : 5;
       let redHumans = (myTeam === 'red' ? 1 : 0);
       let blueHumans = (myTeam === 'blue' ? 1 : 0);
       Object.values(remotePlayers).forEach(rp => {
@@ -4092,6 +4299,7 @@
 
     function resetLoadoutToPistolRound() {
       credits = 800;
+      teamRoundCredits = { red: 800, blue: 800 };
       slotWeapons = { 1: null, 2: 'classic', 3: 'melee' };
       activeSlot = 2;
       currentShieldKey = 'none';
@@ -4110,21 +4318,45 @@
       Object.values(remotePlayers).forEach(rp => {
         rp.team = rp.team === 'red' ? 'blue' : 'red';
       });
-      // 전반전/후반전 점수도 팀 진영에 맞춰 교체
       const prevRed = redScore;
       redScore = blueScore;
       blueScore = prevRed;
       updateScoreboard();
       updatePlayerListUI();
-      // 공수교대 시 발로란트 규칙에 따라 크레드 800 & 클래식으로 초기화
       resetLoadoutToPistolRound();
+    }
+
+    function getNearSpikeSite() {
+      const distA = Math.hypot(camera.position.x - 34, camera.position.z - (-4));
+      if (distA <= 7.2) return 'A';
+      const distB = Math.hypot(camera.position.x - (-35), camera.position.z - (-4));
+      if (distB <= 7.2) return 'B';
+      return null;
+    }
+
+    function resetAscentMapGimmicks() {
+      clearSpikeVisual();
+      ascentDoors.forEach(d => {
+        d.destroyed = false;
+        d.hp = 400;
+        d.panel.visible = true;
+        toggleAscentDoor(d, true);
+      });
+      ascentGlassPanes.forEach(g => {
+        if (g.destroyed) {
+          g.destroyed = false;
+          g.hp = 60;
+          g.mesh.visible = true;
+          wallColliders.push(g.collider);
+        }
+      });
     }
 
     function startBrawlRound(num) {
       roundNumber = num;
       isMatchOver = false;
+      resetAscentMapGimmicks();
 
-      // 1라운드 시작 또는 13라운드(전반 12라운드 종료 후 공수교대) 처리
       let halftimeNotice = '';
       if (num === 1) {
         resetLoadoutToPistolRound();
@@ -4133,7 +4365,6 @@
         halftimeNotice = ' [전반 12라운드 종료 · 공수 교대! 크레드 800 초기화]';
       }
 
-      // 이전 라운드에서 살아남았으면 총기와 남은 보호막 유지, 죽었으면 기본 권총(클래식)으로 리셋
       if (isDead && num !== 1 && num !== 13) {
         slotWeapons[1] = null;
         if (!slotWeapons[2]) slotWeapons[2] = 'classic';
@@ -4151,11 +4382,10 @@
       roundPurchasedShield = false;
 
       roundPhase = 'PREP';
-      roundPhaseTimer = 10.0;
+      roundPhaseTimer = 30.0;
       clearChampionsFinisher();
       resetScoreStreak();
 
-      // 플레이어 부활 및 스폰 위치 초기화
       isDead = false;
       playerHp = 100;
       tagSlowMultiplier = 1.0;
@@ -4165,52 +4395,57 @@
       document.getElementById('deathBanner').style.display = 'none';
       document.getElementById('deathBanner').style.background = 'rgba(180, 20, 35, 0.45)';
 
-      // 탄약 가득 채우기
       Object.keys(ammoState).forEach(k => {
         if (WEAPONS[k] && WEAPONS[k].magSize !== Infinity) ammoState[k] = WEAPONS[k].magSize;
       });
       updateHUD();
       spawnMyPlayer();
 
-      // 1v1 / 2v2 인원에 맞춰 아군/적군 AI 봇 동기화 및 스폰
       syncBrawlRoster();
+      equipBotsByCredits();
 
       createPrepBarriers();
       const halfTag = roundNumber <= 12 ? `전반전 (${roundNumber}/12)` : `후반전 (${roundNumber - 12}/12)`;
-      const sideLabel = myTeam === 'red' ? '공격(RED)' : '수비(BLUE)';
+      const sideLabel = myTeam === 'red' ? '공격팀(RED · 스파이크 보유)' : '수비팀(BLUE · 사이트 방어)';
       showRoundBanner(
         `ROUND ${roundNumber} · ${halfTag}`,
-        `진영: ${sideLabel} | 보유 크레드: ${credits} ¤ (상점: B)${halftimeNotice}`,
+        `진영: ${sideLabel} | 구매 시간 30초 · 크레드: ${credits} ¤ (상점: B)${halftimeNotice}`,
         num === 13 ? '#ffcc00' : '#00ffcc',
-        3200
+        3600
       );
     }
 
-    function endBrawlRound(winningTeam, killerPos = null, usedChampEdition = false) {
+    function endBrawlRound(winningTeam, killerPos = null, usedChampEdition = false, customReason = '') {
       if (roundPhase === 'END' || isMatchOver) return;
       roundPhase = 'END';
-      roundPhaseTimer = usedChampEdition ? 7.5 : 5.0;
+      roundPhaseTimer = usedChampEdition ? 7.5 : 5.5;
       currentStreak = 0;
 
       if (winningTeam === 'red') redScore += 1;
       else blueScore += 1;
       updateScoreboard();
 
-      // 발로란트 일반전 크레드 정산 규칙 적용
-      // 승리 팀: +3,000 크레드 / 패배 팀: 1연패 1,900 -> 2연패 2,400 -> 3연패 이상 2,900 크레드
+      ['red', 'blue'].forEach(t => {
+        if (winningTeam === t) {
+          lossStreak[t] = 0;
+          teamRoundCredits[t] = Math.min(MAX_CREDITS, (teamRoundCredits[t] || 800) + 3000);
+        } else {
+          lossStreak[t] = Math.min(3, (lossStreak[t] || 0) + 1);
+          const rew = lossStreak[t] === 1 ? 1900 : (lossStreak[t] === 2 ? 2400 : 2900);
+          teamRoundCredits[t] = Math.min(MAX_CREDITS, (teamRoundCredits[t] || 800) + rew);
+        }
+      });
+
       const didMyTeamWin = (winningTeam === myTeam);
       let roundReward = 0;
       if (didMyTeamWin) {
-        lossStreak[myTeam] = 0;
         roundReward = 3000;
       } else {
-        lossStreak[myTeam] = Math.min(3, (lossStreak[myTeam] || 0) + 1);
         roundReward = lossStreak[myTeam] === 1 ? 1900 : (lossStreak[myTeam] === 2 ? 2400 : 2900);
       }
       credits = Math.min(MAX_CREDITS, credits + roundReward);
       updateHUD();
 
-      // 마지막 적 처치 시 전용 마무리 모션 발동!
       if (usedChampEdition === 'araxys' && killerPos) {
         triggerAraxysFinisher(killerPos);
       } else if (usedChampEdition === '2024' && killerPos) {
@@ -4219,10 +4454,9 @@
         triggerChampions2021Finisher(killerPos);
       }
 
-      // 13선승 매치 승리 판정 (전반 12라운드 + 후반 12라운드, 12:12 시 25라운드 서든데스)
       if (redScore >= 13 || blueScore >= 13) {
         isMatchOver = true;
-        const champTeam = redScore >= 13 ? 'RED TEAM' : 'BLUE TEAM';
+        const champTeam = redScore >= 13 ? 'RED TEAM (공격)' : 'BLUE TEAM (수비)';
         const champColor = redScore >= 13 ? '#ff4655' : '#38bdf8';
         showRoundBanner(
           `MATCH VICTORY! ${champTeam}`,
@@ -4233,12 +4467,13 @@
         return;
       }
 
-      const winLabel = winningTeam === 'red' ? 'RED TEAM 라운드 승리!' : 'BLUE TEAM 라운드 승리!';
+      const winLabel = winningTeam === 'red' ? 'RED TEAM (공격) 라운드 승리!' : 'BLUE TEAM (수비) 라운드 승리!';
       const winColor = winningTeam === 'red' ? '#ff4655' : '#38bdf8';
+      const reasonPrefix = customReason ? `[${customReason}] ` : '';
       const nextHint = roundNumber === 12
-        ? '다음 라운드(R13) 공수 교대가 진행됩니다!'
-        : `라운드 보상 +${roundReward.toLocaleString()} ¤ (보유: ${credits.toLocaleString()} ¤)`;
-      showRoundBanner(winLabel, nextHint, winColor, 4500);
+        ? `${reasonPrefix}다음 라운드(R13) 공수 교대가 진행됩니다!`
+        : `${reasonPrefix}라운드 보상 +${roundReward.toLocaleString()} ¤ (보유: ${credits.toLocaleString()} ¤)`;
+      showRoundBanner(winLabel, nextHint, winColor, 4800);
     }
 
     function countAliveTeams() {
@@ -4267,6 +4502,116 @@
       return { redAlive, blueAlive };
     }
 
+    function updateSpikeAndGimmicks(dt) {
+      if (currentMap !== 'brawl') return;
+
+      const promptBanner = document.getElementById('spikePromptBanner');
+      const promptTitle = document.getElementById('spikePromptTitle');
+      const progressBar = document.getElementById('spikeProgressBar');
+
+      if (spikeState.mesh && spikeState.mesh.userData.core) {
+        spikeState.mesh.userData.core.rotation.y += dt * 4.5;
+        const pulse = 1.0 + Math.sin(performance.now() * (spikeState.timer < 10 ? 0.035 : 0.012)) * 0.22;
+        spikeState.mesh.userData.core.scale.setScalar(pulse);
+      }
+
+      if (roundPhase !== 'COMBAT') {
+        if (promptBanner) promptBanner.style.display = 'none';
+        return;
+      }
+
+      if (spikeState.planted) {
+        spikeState.timer -= dt;
+        if (spikeState.timer <= 0) {
+          endBrawlRound('red', spikeState.pos.clone(), false, '스파이크 폭발!');
+          return;
+        }
+
+        const distToSpike = Math.hypot(camera.position.x - spikeState.pos.x, camera.position.z - spikeState.pos.z);
+        if (!isDead && myTeam === 'blue' && distToSpike <= 3.2) {
+          if (promptBanner) promptBanner.style.display = 'block';
+          if (keys['Digit4']) {
+            spikeState.defuseProgress += dt;
+            const pct = Math.min(100, (spikeState.defuseProgress / 7.0) * 100);
+            if (promptTitle) {
+              promptTitle.innerText = `스파이크 해체 중... (${spikeState.defuseProgress.toFixed(1)} / 7.0초)`;
+              promptTitle.style.color = '#38bdf8';
+            }
+            if (progressBar) {
+              progressBar.style.width = `${pct}%`;
+              progressBar.style.background = '#38bdf8';
+            }
+            if (spikeState.defuseProgress >= 7.0) {
+              endBrawlRound('blue', null, false, '스파이크 해체 완료!');
+              return;
+            }
+          } else {
+            spikeState.defuseProgress = 0;
+            if (promptTitle) {
+              promptTitle.innerText = '[4] 키를 꾹 눌러 스파이크 해체 (7.0초)';
+              promptTitle.style.color = '#38bdf8';
+            }
+            if (progressBar) progressBar.style.width = '0%';
+          }
+        } else if (promptBanner) {
+          promptBanner.style.display = 'none';
+        }
+        return;
+      }
+
+      const nearSite = getNearSpikeSite();
+      if (!isDead && myTeam === 'red' && nearSite) {
+        if (promptBanner) promptBanner.style.display = 'block';
+        if (keys['Digit4']) {
+          spikeState.plantProgress += dt;
+          const pct = Math.min(100, (spikeState.plantProgress / 4.0) * 100);
+          if (promptTitle) {
+            promptTitle.innerText = `${nearSite} 사이트 스파이크 설치 중... (${spikeState.plantProgress.toFixed(1)} / 4.0초)`;
+            promptTitle.style.color = '#ff4655';
+          }
+          if (progressBar) {
+            progressBar.style.width = `${pct}%`;
+            progressBar.style.background = '#ff4655';
+          }
+          if (spikeState.plantProgress >= 4.0) {
+            spikeState.planted = true;
+            spikeState.site = nearSite;
+            spikeState.timer = 45.0;
+            spikeState.pos.set(camera.position.x, 0, camera.position.z);
+            createSpikeMesh(spikeState.pos);
+            if (promptBanner) promptBanner.style.display = 'none';
+            showRoundBanner(`SPIKE PLANTED (${nearSite} SITE)`, '45초 후 스파이크가 폭발합니다! 사이트를 사수하세요!', '#ff4655', 2600);
+          }
+        } else {
+          spikeState.plantProgress = 0;
+          if (promptTitle) {
+            promptTitle.innerText = `[4] 키를 꾹 눌러 ${nearSite} 사이트에 스파이크 설치 (4.0초)`;
+            promptTitle.style.color = '#00ffcc';
+          }
+          if (progressBar) progressBar.style.width = '0%';
+        }
+      } else {
+        spikeState.plantProgress = 0;
+        let nearDoor = null;
+        for (const d of ascentDoors) {
+          if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.2) {
+            nearDoor = d;
+            break;
+          }
+        }
+        if (!isDead && nearDoor && promptBanner) {
+          promptBanner.style.display = 'block';
+          if (promptTitle) {
+            promptTitle.innerText = `[G] ${nearDoor.name} ${nearDoor.isOpen ? '닫기' : '열기'} (HP: ${nearDoor.hp})`;
+            promptTitle.style.color = '#ffcc00';
+          }
+          if (progressBar) progressBar.style.width = `${(nearDoor.hp / 400) * 100}%`;
+        } else if (promptBanner) {
+          promptBanner.style.display = 'none';
+        }
+      }
+    }
+
     function updateBrawlRoundPhase(dt) {
       if (currentMap !== 'brawl') return;
 
@@ -4274,35 +4619,52 @@
       const subEl = document.getElementById('roundPhaseSub');
       const { redAlive, blueAlive } = countAliveTeams();
 
+      updateSpikeAndGimmicks(dt);
+
       if (roundPhase === 'PREP') {
         roundPhaseTimer -= dt;
         const sec = Math.max(0, Math.ceil(roundPhaseTimer));
-        if (timerEl) timerEl.innerText = `준비 ${sec}s`;
+        if (timerEl) {
+          timerEl.innerText = `구매 ${sec}s`;
+          timerEl.style.color = '#00ffcc';
+        }
         const halfStr = roundNumber <= 12 ? '전반전' : '후반전';
-        if (subEl) subEl.innerText = `R${roundNumber} (${halfStr} · 13선승) | 준비 시간 · 상점(B) 구매 가능`;
+        if (subEl) subEl.innerText = `R${roundNumber} (${halfStr} · 5v5 폭파전) | 상점(B) 무기 구매 · 장벽 해제까지 ${sec}초`;
 
         if (roundPhaseTimer <= 0) {
           roundPhase = 'COMBAT';
           clearPrepBarriers();
-          showRoundBanner('FIGHT!', '상대 팀을 모두 처치하세요!', '#ff4655', 1400);
+          showRoundBanner('FIGHT!', '공격(RED): A/B 사이트 스파이크 설치 | 수비(BLUE): 사이트 방어', '#ff4655', 1800);
         }
       } else if (roundPhase === 'COMBAT') {
-        if (timerEl) timerEl.innerText = `R${roundNumber} 전투`;
         const halfStrC = roundNumber <= 12 ? '전반' : '후반';
-        if (subEl) subEl.innerText = `R${roundNumber}(${halfStrC}) · 13선승 | 생존 RED ${redAlive} vs BLUE ${blueAlive}`;
+        if (spikeState.planted) {
+          const sSec = Math.max(0, spikeState.timer).toFixed(1);
+          if (timerEl) {
+            timerEl.innerText = `💣 ${sSec}s`;
+            timerEl.style.color = '#ff4655';
+          }
+          if (subEl) subEl.innerText = `${spikeState.site} 사이트 스파이크 가동 중! | 생존 RED ${redAlive} vs BLUE ${blueAlive}`;
+        } else {
+          if (timerEl) {
+            timerEl.innerText = `R${roundNumber} 전투`;
+            timerEl.style.color = '#00ffcc';
+          }
+          if (subEl) subEl.innerText = `R${roundNumber}(${halfStrC}) · 5v5 | 생존 RED ${redAlive} vs BLUE ${blueAlive} | [4]설치/해체 [G]철문`;
+        }
 
-        // 전멸 체크 (상대 팀이 0명이 되면 즉시 라운드 종료)
         if (blueAlive === 0 && redAlive > 0) {
-          endBrawlRound('red');
-        } else if (redAlive === 0 && blueAlive > 0) {
-          endBrawlRound('blue');
-        } else if (redAlive === 0 && blueAlive === 0) {
-          endBrawlRound(myTeam);
+          endBrawlRound('red', null, false, '수비팀 전멸');
+        } else if (redAlive === 0 && !spikeState.planted) {
+          endBrawlRound('blue', null, false, '공격팀 전멸');
         }
       } else if (roundPhase === 'END') {
         roundPhaseTimer -= dt;
         const sec = Math.max(0, Math.ceil(roundPhaseTimer));
-        if (timerEl) timerEl.innerText = `다음 라운드 ${sec}s`;
+        if (timerEl) {
+          timerEl.innerText = `다음 라운드 ${sec}s`;
+          timerEl.style.color = '#ffcc00';
+        }
         if (subEl) subEl.innerText = `ROUND ${roundNumber} 종료`;
 
         if (!isMatchOver && roundPhaseTimer <= 0) {
@@ -4313,8 +4675,8 @@
 
     const brawlBots = [];
     const brawlBotHitboxes = [];
-    const AI_NAMES = ['봇 제트', '봇 레이나', '봇 피닉스', '봇 오멘', '봇 소바', '봇 세이지'];
-    const AI_WEAPONS = ['vandal', 'phantom', 'sheriff'];
+    const AI_NAMES_RED = ['[공격] 봇 제트', '[공격] 봇 레이나', '[공격] 봇 피닉스', '[공격] 봇 브리치', '[공격] 봇 케이오'];
+    const AI_NAMES_BLUE = ['[수비] 봇 오멘', '[수비] 봇 소바', '[수비] 봇 세이지', '[수비] 봇 사이퍼', '[수비] 봇 킬조이'];
 
     function clearBrawlBots() {
       brawlBots.forEach(b => scene.remove(b));
@@ -4322,10 +4684,39 @@
       brawlBotHitboxes.length = 0;
     }
 
+    function equipBotsByCredits() {
+      for (const bot of brawlBots) {
+        const bd = bot.userData;
+        const teamCred = bd.team === myTeam ? credits : (teamRoundCredits[bd.team] || 800);
+
+        if (teamCred >= 3900) {
+          bd.weaponKey = Math.random() < 0.5 ? 'vandal' : 'phantom';
+          bd.shield = 50;
+        } else if (teamCred >= 2650) {
+          bd.weaponKey = Math.random() < 0.5 ? 'bulldog' : 'guardian';
+          bd.shield = 25;
+        } else if (teamCred >= 2000) {
+          bd.weaponKey = 'spectre';
+          bd.shield = 25;
+        } else if (teamCred >= 1200) {
+          bd.weaponKey = 'sheriff';
+          bd.shield = 25;
+        } else if (teamCred >= 800) {
+          const r = Math.random();
+          if (r < 0.45) { bd.weaponKey = 'ghost'; bd.shield = 0; }
+          else if (r < 0.75) { bd.weaponKey = 'sheriff'; bd.shield = 0; }
+          else { bd.weaponKey = 'classic'; bd.shield = 25; }
+        } else {
+          bd.weaponKey = 'classic';
+          bd.shield = 0;
+        }
+      }
+    }
+
     function spawnBrawlBot(bot) {
       const botTeam = bot.userData.team;
+      const laneIdx = bot.userData.laneIdx || 0;
       bot.userData.hp = 100;
-      bot.userData.shield = 50;
       bot.userData.dead = false;
       bot.userData.respawnTimer = 0;
       bot.userData.fireCooldown = 0.6 + Math.random() * 0.6;
@@ -4334,68 +4725,69 @@
       const teamColor = botTeam === 'red' ? 0xff4655 : 0x38bdf8;
       bot.userData.armorMat.color.setHex(teamColor);
 
-      const spawnZ = botTeam === 'red' ? 32 : -32;
-      const spawnX = (Math.random() - 0.5) * 20;
-      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 5);
+      const spawnZ = botTeam === 'red' ? 44 : -44;
+      const laneXOffsets = [-32, -16, 0, 16, 32];
+      const spawnX = laneXOffsets[laneIdx % laneXOffsets.length] + (Math.random() - 0.5) * 4;
+      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 4);
       bot.visible = true;
     }
 
-    function createSingleBrawlBot(i, team) {
+    function createSingleBrawlBot(i, team, laneIdx) {
       const botGroup = new THREE.Group();
       const teamColor = team === 'red' ? 0xff4655 : 0x38bdf8;
-        const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
-        const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.6, roughness: 0.4 });
-        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+      const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.6, roughness: 0.4 });
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
 
-        const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.28, 0.85, 12), darkMat);
-        legs.position.y = 0.425;
-        legs.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'leg' };
+      const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.28, 0.85, 12), darkMat);
+      legs.position.y = 0.425;
+      legs.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'leg' };
 
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat);
-        torso.position.y = 1.3;
-        torso.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'body' };
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat);
+      torso.position.y = 1.3;
+      torso.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'body' };
 
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat);
-        head.position.y = 2.08;
-        head.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat);
+      head.position.y = 2.08;
+      head.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
 
-        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat);
-        visor.position.set(0, 2.08, 0.24);
-        visor.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat);
+      visor.position.set(0, 2.08, 0.24);
+      visor.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
 
-        // 봇이 들고 있는 총기 표시
-        const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.55), darkMat);
-        gunMesh.position.set(0.35, 1.35, 0.32);
+      const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.55), darkMat);
+      gunMesh.position.set(0.35, 1.35, 0.32);
 
-        botGroup.add(legs, torso, head, visor, gunMesh);
-        const wKey = AI_WEAPONS[i % AI_WEAPONS.length];
-        botGroup.userData = {
-          idx: i,
-          nick: AI_NAMES[i % AI_NAMES.length],
-          weaponKey: wKey,
-          armorMat,
-          team: team,
-          hp: 100,
-          shield: 50,
-          dead: false,
-          respawnTimer: 0,
-          moveDir: new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5)).normalize(),
-          aiChangeTimer: 1.0 + Math.random() * 1.5,
-          fireCooldown: 0.8,
-          stepTimer: 0
-        };
+      botGroup.add(legs, torso, head, visor, gunMesh);
+      const namePool = team === 'red' ? AI_NAMES_RED : AI_NAMES_BLUE;
+      botGroup.userData = {
+        idx: i,
+        laneIdx,
+        nick: namePool[laneIdx % namePool.length],
+        weaponKey: 'classic',
+        armorMat,
+        team: team,
+        hp: 100,
+        shield: 0,
+        dead: false,
+        respawnTimer: 0,
+        moveDir: new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5)).normalize(),
+        aiChangeTimer: 1.0 + Math.random() * 1.5,
+        fireCooldown: 0.8,
+        stepTimer: 0
+      };
 
-        scene.add(botGroup);
-        brawlBots.push(botGroup);
-        brawlBotHitboxes.push(legs, torso, head, visor);
-        spawnBrawlBot(botGroup);
+      scene.add(botGroup);
+      brawlBots.push(botGroup);
+      brawlBotHitboxes.push(legs, torso, head, visor);
+      spawnBrawlBot(botGroup);
     }
 
-    function initBrawlBots(redCount = 0, blueCount = 1) {
+    function initBrawlBots(redCount = 5, blueCount = 5) {
       clearBrawlBots();
       let idx = 0;
-      for (let i = 0; i < redCount; i++) createSingleBrawlBot(idx++, 'red');
-      for (let i = 0; i < blueCount; i++) createSingleBrawlBot(idx++, 'blue');
+      for (let i = 0; i < redCount; i++) createSingleBrawlBot(idx++, 'red', i);
+      for (let i = 0; i < blueCount; i++) createSingleBrawlBot(idx++, 'blue', i);
     }
 
     const aiRaycaster = new THREE.Raycaster();
@@ -4410,7 +4802,7 @@
 
     function moveBrawlBotWithCollision(bot, dx, dz) {
       const nextX = bot.position.x + dx;
-      let blockedX = Math.abs(nextX) > 33.5;
+      let blockedX = Math.abs(nextX) > 45.5;
       if (!blockedX) {
         for (const c of wallColliders) {
           if (nextX > c.minX && nextX < c.maxX && bot.position.z > c.minZ && bot.position.z < c.maxZ && c.maxY > 0.6) {
@@ -4422,7 +4814,7 @@
       else bot.userData.moveDir.x *= -1;
 
       const nextZ = bot.position.z + dz;
-      let blockedZ = Math.abs(nextZ) > 43.5;
+      let blockedZ = Math.abs(nextZ) > 53.5;
       if (!blockedZ) {
         for (const c of wallColliders) {
           if (bot.position.x > c.minX && bot.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ && c.maxY > 0.6) {
@@ -4436,21 +4828,18 @@
 
     function updateBrawlBots(dt) {
       if (currentMap !== 'brawl') return;
-      if (roundPhase !== 'COMBAT') return; // 준비 시간에는 AI 봇도 대기
+      if (roundPhase !== 'COMBAT') return;
       const playerHeadPos = camera.position.clone();
 
       for (const bot of brawlBots) {
         const bd = bot.userData;
-        if (bd.dead) {
-          continue;
-        }
+        if (bd.dead) continue;
 
         const botEyePos = new THREE.Vector3(bot.position.x, 1.85, bot.position.z);
         const distToLocalPlayer = botEyePos.distanceTo(playerHeadPos);
 
-        // 가장 가까운 적 타겟 찾기 (로컬 플레이어 / 다른 AI 봇 / 원격 플레이어)
         let bestTarget = null;
-        let bestDist = 65;
+        let bestDist = 75;
 
         if (!isDead && bd.team !== myTeam && distToLocalPlayer < bestDist && hasLineOfSight(botEyePos, playerHeadPos)) {
           bestDist = distToLocalPlayer;
@@ -4479,17 +4868,17 @@
             const rightVec = new THREE.Vector3(Math.cos(targetYaw), 0, -Math.sin(targetYaw));
             const forwardVec = new THREE.Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw));
             bd.moveDir.copy(rightVec).multiplyScalar(strafeSign);
-            if (bestDist > 22) bd.moveDir.addScaledVector(forwardVec, 0.45);
-            else if (bestDist < 8) bd.moveDir.addScaledVector(forwardVec, -0.5);
+            if (bestDist > 24) bd.moveDir.addScaledVector(forwardVec, 0.45);
+            else if (bestDist < 9) bd.moveDir.addScaledVector(forwardVec, -0.5);
             bd.moveDir.normalize();
           }
 
-          moveBrawlBotWithCollision(bot, bd.moveDir.x * 5.8 * dt, bd.moveDir.z * 5.8 * dt);
+          moveBrawlBotWithCollision(bot, bd.moveDir.x * 5.6 * dt, bd.moveDir.z * 5.6 * dt);
 
           bd.fireCooldown -= dt;
           if (bd.fireCooldown <= 0) {
-            const w = WEAPONS[bd.weaponKey];
-            bd.fireCooldown = (bd.weaponKey === 'sheriff' ? 0.65 : 0.34) + Math.random() * 0.25;
+            const w = WEAPONS[bd.weaponKey] || WEAPONS.classic;
+            bd.fireCooldown = (bd.weaponKey === 'sheriff' || bd.weaponKey === 'guardian' ? 0.62 : 0.34) + Math.random() * 0.25;
 
             playWeaponSound(bd.weaponKey, distToLocalPlayer);
 
@@ -4524,18 +4913,27 @@
             }
           }
         } else {
-          // 순찰 이동 (맵 중앙으로 이동)
           bd.aiChangeTimer -= dt;
           if (bd.aiChangeTimer <= 0) {
-            bd.aiChangeTimer = 1.5 + Math.random() * 2.0;
-            const toCenter = new THREE.Vector3((Math.random() - 0.5) * 24 - bot.position.x, 0, (Math.random() - 0.5) * 24 - bot.position.z).normalize();
-            bd.moveDir.copy(toCenter);
+            bd.aiChangeTimer = 1.6 + Math.random() * 1.8;
+            let goalX = 0;
+            let goalZ = -4;
+            if (spikeState.planted) {
+              goalX = spikeState.pos.x + (Math.random() - 0.5) * 6;
+              goalZ = spikeState.pos.z + (Math.random() - 0.5) * 6;
+            } else {
+              const lane = bd.laneIdx % 3;
+              if (lane === 0) { goalX = 33 + (Math.random() - 0.5) * 6; goalZ = -4; }
+              else if (lane === 1) { goalX = (Math.random() - 0.5) * 10; goalZ = -2; }
+              else { goalX = -34 + (Math.random() - 0.5) * 6; goalZ = -4; }
+            }
+            const toGoal = new THREE.Vector3(goalX - bot.position.x, 0, goalZ - bot.position.z);
+            if (toGoal.lengthSq() > 1) bd.moveDir.copy(toGoal.normalize());
           }
-          moveBrawlBotWithCollision(bot, bd.moveDir.x * 6.5 * dt, bd.moveDir.z * 6.5 * dt);
+          moveBrawlBotWithCollision(bot, bd.moveDir.x * 6.2 * dt, bd.moveDir.z * 6.2 * dt);
           bot.rotation.y = Math.atan2(bd.moveDir.x, bd.moveDir.z);
         }
 
-        // AI 발소리 재생
         bd.stepTimer += dt;
         if (bd.stepTimer >= 0.42) {
           bd.stepTimer = 0;
@@ -4543,7 +4941,6 @@
         }
       }
     }
-
 
     let peer = null;
     let myPeerId = '';
@@ -4832,12 +5229,12 @@
         camera.position.set(0, 2.0, 16);
         yaw = 0;
       } else {
-        const offsetX = (Math.random() - 0.5) * 14;
+        const offsetX = (Math.random() - 0.5) * 20;
         if (myTeam === 'red') {
-          camera.position.set(offsetX, 2.0, 34);
+          camera.position.set(offsetX, 2.0, 46);
           yaw = 0;
         } else {
-          camera.position.set(offsetX, 2.0, -34);
+          camera.position.set(offsetX, 2.0, -46);
           yaw = Math.PI;
         }
       }
@@ -4993,6 +5390,7 @@
       ammoState[key] = w.magSize;
       cancelReload();
       activeSlot = w.slot;
+      if (currentMap === 'brawl' && roundPhase === 'PREP') equipBotsByCredits();
       updateGunVisual();
       updateHUD();
     };
@@ -5257,6 +5655,16 @@
         modeEl.style.color = botStrafeMode ? '#00ffcc' : '#ffcc00';
       }
 
+      if (e.code === 'KeyG' && currentMap === 'brawl') {
+        for (const d of ascentDoors) {
+          if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.5) {
+            toggleAscentDoor(d);
+            addKillFeed(`[기믹] ${d.name} ${d.isOpen ? '개방됨' : '폐쇄됨'}`, false);
+            break;
+          }
+        }
+      }
+
       if (e.code === 'Space' && isGrounded) {
         velY = 6.9;
         isGrounded = false;
@@ -5299,8 +5707,8 @@
       }
       // 준비 시간(PREP)에는 진영 보호막 밖으로 나갈 수 없음
       if (currentMap === 'brawl' && roundPhase === 'PREP') {
-        if (myTeam === 'red' && nextZ < 22.3) blockedZ = true;
-        if (myTeam === 'blue' && nextZ > -22.3) blockedZ = true;
+        if (myTeam === 'red' && nextZ < 28.8) blockedZ = true;
+        if (myTeam === 'blue' && nextZ > -28.8) blockedZ = true;
       }
       if (!blockedZ) camera.position.z = nextZ;
     }
@@ -5395,7 +5803,7 @@
         playWeaponSound(key, 0);
       }
 
-      const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes];
+      const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes, ...destructibleMeshes];
       const isClassicRightClick = (key === 'classic' && isHeavyAttack);
       const pelletCount = isClassicRightClick ? classicBurstShots : (w.pellets || 1);
       const extraPelletSpread = isClassicRightClick ? 0.065 : (w.pelletSpread || 0);
@@ -5457,6 +5865,37 @@
         for (const hit of hits) {
           if (hitTargetsSet.size >= w.penetration) break;
           const hitObj = hit.object;
+          if (hitObj.userData.targetType === 'ascentDoor') {
+            const dObj = hitObj.userData.doorObj;
+            if (dObj && !dObj.destroyed && !dObj.isOpen) {
+              dObj.hp -= w.getDamage(hit.distance, 'body');
+              if (dObj.hp <= 0) {
+                dObj.destroyed = true;
+                dObj.panel.visible = false;
+                if (dObj.collider) {
+                  const idx = wallColliders.indexOf(dObj.collider);
+                  if (idx >= 0) wallColliders.splice(idx, 1);
+                  dObj.collider = null;
+                }
+                addKillFeed(`[파괴] ${dObj.name}이(가) 산산조각 났습니다!`, false);
+              }
+            }
+            break;
+          }
+          if (hitObj.userData.targetType === 'ascentGlass') {
+            const gObj = hitObj.userData.glassObj;
+            if (gObj && !gObj.destroyed) {
+              gObj.hp -= w.getDamage(hit.distance, 'body');
+              if (gObj.hp <= 0) {
+                gObj.destroyed = true;
+                gObj.mesh.visible = false;
+                const idx = wallColliders.indexOf(gObj.collider);
+                if (idx >= 0) wallColliders.splice(idx, 1);
+                addKillFeed(`[파괴] A 쇼트 유리창이 깨졌습니다!`, false);
+              }
+            }
+            continue;
+          }
           const part = hitObj.userData.part;
           const distance = hit.distance;
           const baseDmg = key === 'melee' ? w.getDamage(distance, part, isMeleeHeavySlash) : w.getDamage(distance, part);
