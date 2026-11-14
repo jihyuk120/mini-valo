@@ -40,7 +40,8 @@
 
     #topScoreboard { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 18px; background: rgba(15, 25, 35, 0.88); padding: 8px 24px; border-radius: 6px; border-bottom: 2px solid #00ffcc; color: white; font-weight: bold; z-index: 6; pointer-events: none; }
     .team-red { color: #ff4655; font-size: 22px; }
-    .team-blue { color: #38bdf8; font-size: 22px; }
+    .team-green { color: #10b981; font-size: 22px; }
+    .team-blue { color: #10b981; font-size: 22px; }
 
     #hud { position: fixed; bottom: 25px; left: 25px; right: 25px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; z-index: 5; }
     .hud-box { background: rgba(15, 25, 35, 0.85); color: white; padding: 14px 24px; border-bottom: 3px solid #ff4655; font-weight: bold; letter-spacing: 1px; }
@@ -64,8 +65,8 @@
     .btn-secondary:hover { background: #29465e; }
     .btn-team-red { background: #4a1922; color: #ff4655; border: 2px solid #ff4655; padding: 8px 18px; font-weight: bold; cursor: pointer; border-radius: 4px; }
     .btn-team-red.active { background: #ff4655; color: white; }
-    .btn-team-blue { background: #153247; color: #38bdf8; border: 2px solid #38bdf8; padding: 8px 18px; font-weight: bold; cursor: pointer; border-radius: 4px; }
-    .btn-team-blue.active { background: #38bdf8; color: #0f1923; }
+    .btn-team-blue { background: #0d3b2e; color: #10b981; border: 2px solid #10b981; padding: 8px 18px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+    .btn-team-blue.active { background: #10b981; color: #0f1923; }
 
     #shopModal { display: none; }
     .shop-header { width: 800px; max-width: 95vw; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -98,8 +99,8 @@
       </div>
       <div class="row" style="margin-top:12px;">
         <span style="font-size:14px; color:#bbb;">내 팀 선택:</span>
-        <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">레드 팀 (RED)</button>
-        <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">블루 팀 (BLUE)</button>
+        <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">공격팀 (GREEN · 초록)</button>
+        <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">수비팀 (RED · 빨강)</button>
         <span style="color:#555;">|</span>
         <span style="font-size:14px; color:#bbb;">인원 구성:</span>
         <select id="brawlModeSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
@@ -131,7 +132,7 @@
     </div>
 
     <p style="color:#999; font-size:12px; margin-top:14px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | 우클릭: 줌/칼 강공격 | F: 훈련봇 무빙
+      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | 우클릭: 줌/칼 강공격 | F: 철문 개폐 / 훈련봇 무빙
     </p>
   </div>
 
@@ -296,12 +297,12 @@
 
   <div id="topScoreboard" style="flex-direction:column; gap:4px; padding:8px 26px;">
     <div style="display:flex; align-items:center; gap:18px;">
-      <span class="team-red">RED <span id="redScoreText">0</span></span>
+      <span class="team-blue">ATK (GREEN) <span id="redScoreText">0</span></span>
       <span id="roundTimerText" style="color:#00ffcc; font-size:18px; min-width:115px; text-align:center;">PREP 30s</span>
-      <span class="team-blue"><span id="blueScoreText">0</span> BLUE</span>
+      <span class="team-red"><span id="blueScoreText">0</span> DEF (RED)</span>
     </div>
     <div id="roundPhaseSub" style="font-size:12px; color:#ffcc00; letter-spacing:1px;">
-      구매 시간 (30초) - 상점(B) 이용 가능 | 공격(RED) vs 수비(BLUE)
+      구매 시간 (30초) - 상점(B) 이용 가능 | 공격(GREEN) vs 수비(RED)
     </div>
   </div>
   <div id="spikePromptBanner" style="position:fixed; top:64%; left:50%; transform:translate(-50%, -50%); pointer-events:none; z-index:17; text-align:center; display:none; background:rgba(15,25,35,0.88); padding:10px 22px; border:1px solid #00ffcc; border-radius:6px;">
@@ -1900,6 +1901,38 @@
       ascentGlassPanes.push(glassObj);
     }
 
+    let floorZones = [];
+    function getFloorHeightAt(x, z) {
+      let h = 0;
+      for (const fz of floorZones) {
+        if (x >= fz.minX && x <= fz.maxX && z >= fz.minZ && z <= fz.maxZ) {
+          if (fz.slopeZ) {
+            const t = Math.max(0, Math.min(1, (z - fz.minZ) / (fz.maxZ - fz.minZ)));
+            h = fz.hStart + (fz.hEnd - fz.hStart) * t;
+          } else {
+            h = fz.y;
+          }
+        }
+      }
+      return h;
+    }
+
+    function addFloorZone(w, d, x, y, z, color, slopeZ = false, hStart = 0, hEnd = 0) {
+      floorZones.push({
+        minX: x - w / 2,
+        maxX: x + w / 2,
+        minZ: z - d / 2,
+        maxZ: z + d / 2,
+        y,
+        slopeZ,
+        hStart,
+        hEnd
+      });
+      if (!slopeZ) {
+        addBlock(w, 0.4, d, x, y - 0.2, z, color, false);
+      }
+    }
+
     function buildBrawlMap() {
       while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
       wallColliders = [];
@@ -1907,86 +1940,164 @@
       ascentDoors = [];
       ascentGlassPanes = [];
       destructibleMeshes = [];
+      floorZones = [];
 
       // 이탈리아 베네치아 공중 부유 섬 밝은 낮 하늘 테마
       scene.background = new THREE.Color(0x7dd3fc);
-      scene.fog = new THREE.Fog(0xbae6fd, 55, 190);
+      scene.fog = new THREE.Fog(0xbae6fd, 60, 210);
 
       const stoneFloor = 0xd6cfc2;     // 베네치아 석회암 바닥
+      const sunkenFloor = 0xb8b0a2;    // B 사이트 낮게 꺼진 바닥
       const veniceWall = 0xe7d8c1;     // 베네치아 테라코타/석조 벽면
       const terracottaRoof = 0xb85d43; // 붉은 기와 지붕/트림
       const woodCrate = 0x8c6239;      // 나무 상자 엄폐물
       const radianiteGreen = 0x2a6f5b; // 레디어나이트 상자
       const canalBlue = 0x0284c7;      // 운하 수면
+      const atkZoneColor = 0x10b981;   // 공격팀(초록) 스폰 표시
+      const defZoneColor = 0xff4655;   // 수비팀(빨강) 스폰 표시
 
-      // 전체 바닥 & 주변 운하 풍경
-      addBlock(96, 1, 112, 0, -0.5, 0, stoneFloor, false);
-      addBlock(240, 0.5, 240, 0, -2.5, 0, canalBlue, false);
-      addBlock(3.5, 1.0, 11, -56, -1.8, -12, 0x5c3a21, false);
-      addBlock(3.5, 1.0, 11, 56, -1.8, 18, 0x5c3a21, false);
+      // 전체 기본 지반 & 주변 운하 풍경
+      addBlock(110, 1, 126, 0, -0.5, 0, stoneFloor, false);
+      addBlock(260, 0.5, 260, 0, -2.8, 0, canalBlue, false);
 
-      // 외곽 성벽 (동/서/남/북)
-      addBlock(96, 9, 2, 0, 4.5, -56, veniceWall); // 북쪽 (수비 스폰 뒤)
-      addBlock(96, 9, 2, 0, 4.5, 56, veniceWall);  // 남쪽 (공격 스폰 뒤)
-      addBlock(2, 9, 112, -48, 4.5, 0, veniceWall); // 서쪽 (B 사이트 외곽)
-      addBlock(2, 9, 112, 48, 4.5, 0, veniceWall);  // 동쪽 (A 사이트 외곽)
+      // 외곽 성벽 (북쪽: 수비 스폰 / 남쪽: 공격 스폰 / 서쪽: B / 동쪽: A)
+      addBlock(110, 9.5, 2, 0, 4.75, -62, veniceWall); // 북쪽 외벽
+      addBlock(110, 9.5, 2, 0, 4.75, 62, veniceWall);  // 남쪽 외벽
+      addBlock(2, 9.5, 124, -54, 4.75, 0, veniceWall); // 서쪽 외벽
+      addBlock(2, 9.5, 124, 54, 4.75, 0, veniceWall);  // 동쪽 외벽
 
-      // 1. 중앙 미드 (Mid) - 넓은 개활지, 캣워크(Catwalk), 미드 마켓(Market)
-      addBlock(4.5, 1.5, 4.5, 0, 0.75, 4, veniceWall);
-      addBlock(2.2, 2.8, 2.2, 0, 1.4, 4, terracottaRoof);
-      addBlock(8, 1.2, 18, 12, 0.6, -10, stoneFloor);
-      addBlock(1.2, 2.4, 16, 8.2, 1.2, -10, veniceWall);
+      // =========================================================
+      // [북쪽 위: 수비팀 스폰 (RED)] & [남쪽 아래: 공격팀 스폰 (GREEN)]
+      // =========================================================
+      const defPad = new THREE.Mesh(new THREE.PlaneGeometry(34, 12), new THREE.MeshBasicMaterial({ color: defZoneColor, transparent: true, opacity: 0.22 }));
+      defPad.rotation.x = -Math.PI / 2; defPad.position.set(0, 0.02, -52); mapGroup.add(defPad);
 
-      // 미드 마켓(Market) 건물
-      addBlock(1.5, 7, 14, -15, 3.5, -16, veniceWall);
-      addBlock(12, 7, 1.5, -21, 3.5, -9, veniceWall);
-      addBlock(12, 0.8, 14, -21, 7.2, -16, terracottaRoof, false);
+      const atkPad = new THREE.Mesh(new THREE.PlaneGeometry(44, 12), new THREE.MeshBasicMaterial({ color: atkZoneColor, transparent: true, opacity: 0.22 }));
+      atkPad.rotation.x = -Math.PI / 2; atkPad.position.set(0, 0.02, 52); mapGroup.add(atkPad);
 
-      // 2. 동쪽 A 사이트 (A Main, A Short/Tree, Heaven, Hell, 발전기)
-      addBlock(2, 8, 22, 18, 4, 16, veniceWall);
-      addBlock(2, 8, 16, 18, 4, -22, veniceWall);
-      addBlock(16, 8, 2, 32, 4, 22, veniceWall);
-      addBlock(2, 8, 16, 26, 4, 30, veniceWall);
+      // 남쪽 공격 로비 분리벽 (B 로비 서쪽 / 미드 탑 중앙 / A 로비 동쪽)
+      addBlock(12, 7.5, 2, -22, 3.75, 36, veniceWall);
+      addBlock(12, 7.5, 2, 22, 3.75, 36, veniceWall);
 
-      // A 사이트 구역 바닥 표시 & 엄폐물
-      const siteRingMat = new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
-      const siteARing = new THREE.Mesh(new THREE.RingGeometry(6.8, 7.2, 48), siteRingMat);
-      siteARing.rotation.x = -Math.PI / 2;
-      siteARing.position.set(34, 0.02, -4);
-      mapGroup.add(siteARing);
+      // =========================================================
+      // [중앙: 넓은 미드 (Mid Courtyard, Mid Plaza, Mid Bottom, Mid Catwalk, Mid Market)]
+      // =========================================================
+      // 미드 중앙 분수대/기둥 & 엄폐 상자 (Mid Courtyard & Mid Bottom)
+      addBlock(4.2, 1.4, 4.2, -1, 0.7, 6, veniceWall);
+      addBlock(2.0, 2.8, 2.0, -1, 1.4, 6, terracottaRoof);
+      addBlock(2.2, 1.5, 2.2, -6, 0.75, -4, woodCrate); // Mid Bottom 엄폐 상자
+      addBlock(2.2, 1.5, 2.2, 6, 0.75, 10, radianiteGreen); // Mid Courtyard 엄폐 상자
 
-      addBlock(3.6, 2.6, 3.6, 33, 1.3, -4, radianiteGreen);
-      addBlock(2.4, 1.6, 2.4, 36, 0.8, -6, woodCrate);
-      addBlock(2.6, 2.4, 2.6, 28, 1.2, 4, woodCrate);
+      // 미드 오른쪽: 캣워크(Mid Catwalk) & A 쇼트(가든/A Tree) 연결 통로
+      addFloorZone(7, 22, 11, 0.55, -6, stoneFloor);
+      addBlock(7, 0.55, 22, 11, 0.275, -6, stoneFloor, false);
+      // 캣워크 계단 단차
+      addBlock(7, 0.28, 2.5, 11, 0.14, 6.2, stoneFloor, false);
+      addBlock(7, 0.28, 2.5, 11, 0.14, -18.2, stoneFloor, false);
+      // 캣워크 난간 및 미드 커비(Mid Cubby) 엄폐물
+      addBlock(0.8, 1.4, 16, 7.4, 0.7, -6, veniceWall);
+      addBlock(2.2, 1.8, 2.2, 9.5, 1.45, -12, radianiteGreen);
 
-      // A 헤븐(Heaven) 고지대 & 아래 헬(Hell) 구역
-      addBlock(16, 0.8, 10, 38, 3.4, -22, stoneFloor);
-      addBlock(16, 1.2, 0.8, 38, 4.4, -17.2, terracottaRoof);
-      addBlock(3.2, 3.4, 3.2, 44, 1.7, -28, veniceWall);
+      // 미드 왼쪽: 미드 마켓(Mid Market) 건물 & 아치
+      addBlock(2, 8, 16, -15, 4, -16, veniceWall);
+      addBlock(14, 8, 2, -22, 4, -8, veniceWall);
+      addBlock(14, 8, 2, -22, 4, -24, veniceWall);
+      addBlock(14, 0.8, 16, -22, 8.2, -16, terracottaRoof, false);
+      // 마켓 내부 엄폐 상자
+      addBlock(2.2, 1.5, 2.2, -20, 0.75, -13, woodCrate);
 
-      // 3. 서쪽 B 사이트 (B Main, 보트하우스 Boathouse, 저지대 바닥)
-      const siteBRing = new THREE.Mesh(new THREE.RingGeometry(6.8, 7.2, 48), siteRingMat);
+      // 미드 플라자(Mid Plaza) 북쪽 수비 연결부 분리벽
+      addBlock(10, 8, 2, -9, 4, -30, veniceWall);
+      addBlock(10, 8, 2, 11, 4, -30, veniceWall);
+
+      // =========================================================
+      // [서쪽(왼쪽): B 사이트 — B 로비 → 좁고 긴 'B 메인' → 낮게 꺼진 'B 사이트' + 보트하우스 + 마켓 철문]
+      // =========================================================
+      // B 로비 → 좁고 긴 'B 메인' 통로 (서쪽 외벽 x=-53 과 B 메인 동쪽 벽 x=-38 사이 폭 15 -> 좁게 x=-40으로 설정)
+      addBlock(2, 8, 26, -38, 4, 15, veniceWall); // B 메인 동쪽 벽 (좁고 긴 통로 형성)
+      addBlock(12, 8, 2, -32, 4, 24, veniceWall); // B 로비-미드 링크 경계벽
+      addBlock(2.2, 1.6, 2.2, -49, 0.8, 12, woodCrate); // B 메인 엄폐 상자
+
+      // 낮게 꺼진 'B 사이트' 바닥 구역 (y = -0.85m, B 메인/마켓에서 계단 경사로로 내려감)
+      addFloorZone(32, 24, -36, -0.85, -12, sunkenFloor);
+      // B 사이트 바닥 시각적  sunken 프레임
+      const sunkenMat = new THREE.MeshStandardMaterial({ color: sunkenFloor, roughness: 0.85 });
+      const bFloorMesh = new THREE.Mesh(new THREE.BoxGeometry(32, 0.2, 24), sunkenMat);
+      bFloorMesh.position.set(-36, -0.75, -12);
+      mapGroup.add(bFloorMesh);
+
+      // B 사이트 구역 표시 링
+      const siteRingMat = new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.42 });
+      const siteBRing = new THREE.Mesh(new THREE.RingGeometry(6.8, 7.3, 48), siteRingMat);
       siteBRing.rotation.x = -Math.PI / 2;
-      siteBRing.position.set(-35, 0.02, -4);
+      siteBRing.position.set(-37, -0.63, -10);
       mapGroup.add(siteBRing);
 
-      addBlock(2, 8, 26, -18, 4, 14, veniceWall);
-      addBlock(14, 8, 2, -33, 4, 22, veniceWall);
-      addBlock(2, 8, 18, -28, 4, 31, veniceWall);
+      // B 사이트 내부 엄폐물 (중앙 레디어나이트 더블 상자 + 계단 앞 상자)
+      addBlock(3.4, 2.5, 3.4, -36, 0.5, -10, radianiteGreen);
+      addBlock(2.4, 1.5, 2.4, -33, 0.0, -7, woodCrate);
+      addBlock(2.4, 1.5, 2.4, -42, 0.0, -4, woodCrate);
 
-      addBlock(3.4, 2.5, 3.4, -34, 1.25, -4, radianiteGreen);
-      addBlock(2.5, 1.5, 2.5, -31, 0.75, 2, woodCrate);
-      addBlock(14, 6.5, 1.5, -38, 3.25, -24, veniceWall);
-      addBlock(1.5, 6.5, 10, -31, 3.25, -19, veniceWall);
-      addBlock(14, 0.8, 10, -38, 6.8, -19, terracottaRoof, false);
+      // B 사이트 서쪽 끝: 보트하우스 (Boat House) 내부 엄폐 구조물
+      addBlock(10, 7.5, 1.8, -48, 3.75, -22, veniceWall);
+      addBlock(1.8, 7.5, 12, -43, 3.75, -16, veniceWall);
+      addBlock(10, 0.8, 12, -48, 7.6, -16, terracottaRoof, false);
+      addBlock(2.2, 1.4, 3.8, -49, 0.0, -15, woodCrate); // 보트하우스 내부 엄폐물
 
-      // 4. 어센트 핵심 특수 기믹: 개폐·파괴형 철문 2개 + 파괴형 유리창
-      createAscentBlastDoor('A 쇼트 방화문', 18, -5, Math.PI / 2);
-      createAscentBlastDoor('B 마켓 방화문', -18, -15, Math.PI / 2);
+      // =========================================================
+      // [동쪽(오른쪽): A 사이트 — A 로비 → 'A 메인' & 'A 쇼트(가든/Tree)' 2갈래 진입로 + 발전기 + 헤븐/헬]
+      // =========================================================
+      // A 메인 통로와 A 쇼트(가든/Tree) 사이 분리 건물
+      addBlock(2, 8, 22, 22, 4, 16, veniceWall);
+      addBlock(14, 8, 2, 29, 4, 24, veniceWall);
+      addBlock(2, 8, 12, 22, 4, -15, veniceWall); // A 가든/트리 서쪽 벽
 
-      addBlock(0.8, 1.3, 6, 18, 0.65, 2, veniceWall);
-      addBlock(0.8, 3.5, 6, 18, 6.25, 2, veniceWall);
-      createBreakableGlass(18, 2.9, 2, 0.25, 3.2, 5.8);
+      // A 사이트 구역 표시 링
+      const siteARing = new THREE.Mesh(new THREE.RingGeometry(6.8, 7.3, 48), siteRingMat);
+      siteARing.rotation.x = -Math.PI / 2;
+      siteARing.position.set(37, 0.02, -6);
+      mapGroup.add(siteARing);
+
+      // A 사이트 중앙 발전기(Generator) & 상자 엄폐물 (4번째 사진 기준)
+      addBlock(4.4, 2.6, 2.8, 35, 1.3, -5, radianiteGreen); // 중앙 대형 발전기
+      addBlock(2.2, 1.6, 2.2, 33, 0.8, -3, woodCrate);      // 발전기 옆 상자
+      addBlock(2.6, 2.4, 2.6, 48, 1.2, 3, woodCrate);       // A 메인 우측 코너 상자
+      addBlock(2.4, 1.6, 2.4, 29, 0.8, 6, woodCrate);       // A 메인 입구 앞 상자
+
+      // 수비 쪽 2층 높이의 '헤븐(Heaven / A Rafters)'과 아래쪽 '헬(Hell)' 구역 (4번째 사진 기준)
+      // 헬(Hell) 천장 겸 헤븐(Heaven) 바닥 (y = 3.4m, 아래 공간은 사람이 걸어 들어갈 수 있는 헬 구역!)
+      addFloorZone(22, 11, 41, 3.4, -22, stoneFloor);
+      const heavenDeck = new THREE.Mesh(new THREE.BoxGeometry(22, 0.6, 11), new THREE.MeshStandardMaterial({ color: stoneFloor, roughness: 0.7 }));
+      heavenDeck.position.set(41, 3.1, -22);
+      mapGroup.add(heavenDeck);
+
+      // 헤븐(Heaven) 난간 & 엄폐 상자 (2층 위)
+      addBlock(22, 1.1, 0.7, 41, 3.95, -16.8, terracottaRoof);
+      addBlock(2.4, 1.5, 2.4, 46, 4.15, -21, woodCrate);
+
+      // 헬(Hell) 내부 기둥 및 엄폐물 (y = 0 ~ 2.8m 아래 공간)
+      addBlock(1.4, 2.8, 1.4, 34, 1.4, -18, veniceWall);
+      addBlock(2.0, 1.4, 2.0, 44, 0.7, -23, woodCrate);
+
+      // 수비 스폰에서 헤븐(2층)으로 올라가는 경사로/계단 (x=26..31, z=-34..-26)
+      addFloorZone(7, 10, 27, 3.4, -28, stoneFloor, true, 0, 3.4);
+      const rampGeo = new THREE.BoxGeometry(7, 0.5, 11.2);
+      const rampMesh = new THREE.Mesh(rampGeo, new THREE.MeshStandardMaterial({ color: stoneFloor, roughness: 0.75 }));
+      rampMesh.position.set(27, 1.6, -28);
+      rampMesh.rotation.x = Math.atan2(3.4, 10);
+      mapGroup.add(rampMesh);
+
+      // =========================================================
+      // [핵심 기믹: 스위치(F키) 개폐 & 총격 파괴 가능한 방화 철문 2개]
+      // 1) A 사이트 (A 쇼트/Tree 입구: x=22, z=-6)
+      // 2) B 사이트 (미드 마켓 입구: x=-22, z=-16)
+      // =========================================================
+      createAscentBlastDoor('A 쇼트 방화 철문', 22, -6, Math.PI / 2);
+      createAscentBlastDoor('B 마켓 방화 철문', -22, -16, 0);
+
+      // A 가든/트리 쪽 파괴 가능한 유리창 (A Window)
+      addBlock(0.8, 1.2, 5, 22, 0.6, -11, veniceWall);
+      createBreakableGlass(22, 2.8, -11, 0.25, 3.2, 4.8);
     }
 
     const gunGroup = new THREE.Group();
@@ -4234,16 +4345,16 @@
     function createPrepBarriers() {
       clearPrepBarriers();
       const atkBarrierMat = new THREE.MeshStandardMaterial({
-        color: 0x00ffcc,
-        emissive: 0x008877,
+        color: 0x10b981,
+        emissive: 0x059669,
         emissiveIntensity: 0.65,
         transparent: true,
         opacity: 0.45,
         side: THREE.DoubleSide
       });
       const defBarrierMat = new THREE.MeshStandardMaterial({
-        color: 0x38bdf8,
-        emissive: 0x0284c7,
+        color: 0xff4655,
+        emissive: 0xdc2626,
         emissiveIntensity: 0.65,
         transparent: true,
         opacity: 0.45,
@@ -4251,11 +4362,11 @@
       });
 
       const atkBarrier = new THREE.Mesh(new THREE.PlaneGeometry(94, 9.0), atkBarrierMat);
-      atkBarrier.position.set(0, 4.5, 28.0);
+      atkBarrier.position.set(0, 4.5, 37.5);
       scene.add(atkBarrier);
 
       const defBarrier = new THREE.Mesh(new THREE.PlaneGeometry(94, 9.0), defBarrierMat);
-      defBarrier.position.set(0, 4.5, -28.0);
+      defBarrier.position.set(0, 4.5, -37.5);
       scene.add(defBarrier);
 
       prepBarrierMeshes.push(atkBarrier, defBarrier);
@@ -4327,9 +4438,9 @@
     }
 
     function getNearSpikeSite() {
-      const distA = Math.hypot(camera.position.x - 34, camera.position.z - (-4));
+      const distA = Math.hypot(camera.position.x - 37, camera.position.z - (-6));
       if (distA <= 7.2) return 'A';
-      const distB = Math.hypot(camera.position.x - (-35), camera.position.z - (-4));
+      const distB = Math.hypot(camera.position.x - (-37), camera.position.z - (-10));
       if (distB <= 7.2) return 'B';
       return null;
     }
@@ -4406,7 +4517,7 @@
 
       createPrepBarriers();
       const halfTag = roundNumber <= 12 ? `전반전 (${roundNumber}/12)` : `후반전 (${roundNumber - 12}/12)`;
-      const sideLabel = myTeam === 'red' ? '공격팀(RED · 스파이크 보유)' : '수비팀(BLUE · 사이트 방어)';
+      const sideLabel = myTeam === 'red' ? '공격팀(GREEN · 스파이크 보유)' : '수비팀(RED · 사이트 방어)';
       showRoundBanner(
         `ROUND ${roundNumber} · ${halfTag}`,
         `진영: ${sideLabel} | 구매 시간 30초 · 크레드: ${credits} ¤ (상점: B)${halftimeNotice}`,
@@ -4456,8 +4567,8 @@
 
       if (redScore >= 13 || blueScore >= 13) {
         isMatchOver = true;
-        const champTeam = redScore >= 13 ? 'RED TEAM (공격)' : 'BLUE TEAM (수비)';
-        const champColor = redScore >= 13 ? '#ff4655' : '#38bdf8';
+        const champTeam = redScore >= 13 ? 'GREEN TEAM (공격)' : 'RED TEAM (수비)';
+        const champColor = redScore >= 13 ? '#10b981' : '#ff4655';
         showRoundBanner(
           `MATCH VICTORY! ${champTeam}`,
           `최종 스코어 ${redScore} : ${blueScore} (13선승 달성!) — ESC를 눌러 새 게임 시작`,
@@ -4467,8 +4578,8 @@
         return;
       }
 
-      const winLabel = winningTeam === 'red' ? 'RED TEAM (공격) 라운드 승리!' : 'BLUE TEAM (수비) 라운드 승리!';
-      const winColor = winningTeam === 'red' ? '#ff4655' : '#38bdf8';
+      const winLabel = winningTeam === 'red' ? 'GREEN TEAM (공격) 라운드 승리!' : 'RED TEAM (수비) 라운드 승리!';
+      const winColor = winningTeam === 'red' ? '#10b981' : '#ff4655';
       const reasonPrefix = customReason ? `[${customReason}] ` : '';
       const nextHint = roundNumber === 12
         ? `${reasonPrefix}다음 라운드(R13) 공수 교대가 진행됩니다!`
@@ -4602,7 +4713,7 @@
         if (!isDead && nearDoor && promptBanner) {
           promptBanner.style.display = 'block';
           if (promptTitle) {
-            promptTitle.innerText = `[G] ${nearDoor.name} ${nearDoor.isOpen ? '닫기' : '열기'} (HP: ${nearDoor.hp})`;
+            promptTitle.innerText = `[F] ${nearDoor.name} ${nearDoor.isOpen ? '닫기' : '열기'} (HP: ${nearDoor.hp})`;
             promptTitle.style.color = '#ffcc00';
           }
           if (progressBar) progressBar.style.width = `${(nearDoor.hp / 400) * 100}%`;
@@ -4634,7 +4745,7 @@
         if (roundPhaseTimer <= 0) {
           roundPhase = 'COMBAT';
           clearPrepBarriers();
-          showRoundBanner('FIGHT!', '공격(RED): A/B 사이트 스파이크 설치 | 수비(BLUE): 사이트 방어', '#ff4655', 1800);
+          showRoundBanner('FIGHT!', '공격(GREEN): A/B 사이트 스파이크 설치 | 수비(RED): 사이트 방어', '#ff4655', 1800);
         }
       } else if (roundPhase === 'COMBAT') {
         const halfStrC = roundNumber <= 12 ? '전반' : '후반';
@@ -4644,13 +4755,13 @@
             timerEl.innerText = `💣 ${sSec}s`;
             timerEl.style.color = '#ff4655';
           }
-          if (subEl) subEl.innerText = `${spikeState.site} 사이트 스파이크 가동 중! | 생존 RED ${redAlive} vs BLUE ${blueAlive}`;
+          if (subEl) subEl.innerText = `${spikeState.site} 사이트 스파이크 가동 중! | 생존 공격(GREEN) ${redAlive} vs 수비(RED) ${blueAlive}`;
         } else {
           if (timerEl) {
             timerEl.innerText = `R${roundNumber} 전투`;
             timerEl.style.color = '#00ffcc';
           }
-          if (subEl) subEl.innerText = `R${roundNumber}(${halfStrC}) · 5v5 | 생존 RED ${redAlive} vs BLUE ${blueAlive} | [4]설치/해체 [G]철문`;
+          if (subEl) subEl.innerText = `R${roundNumber}(${halfStrC}) · 5v5 | 생존 공격(GREEN) ${redAlive} vs 수비(RED) ${blueAlive} | [4]설치/해체 [G]철문`;
         }
 
         if (blueAlive === 0 && redAlive > 0) {
@@ -4675,8 +4786,45 @@
 
     const brawlBots = [];
     const brawlBotHitboxes = [];
+    // 공격팀(red 변수=GREEN 초록) / 수비팀(blue 변수=RED 빨강)
     const AI_NAMES_RED = ['[공격] 봇 제트', '[공격] 봇 레이나', '[공격] 봇 피닉스', '[공격] 봇 브리치', '[공격] 봇 케이오'];
     const AI_NAMES_BLUE = ['[수비] 봇 오멘', '[수비] 봇 소바', '[수비] 봇 세이지', '[수비] 봇 사이퍼', '[수비] 봇 킬조이'];
+
+    // 어센트 경유지(Waypoint) 그래프
+    const WAYPOINTS_ATK_A_MAIN = [
+      new THREE.Vector3(34, 0, 44),
+      new THREE.Vector3(36, 0, 26),
+      new THREE.Vector3(36, 0, 10),
+      new THREE.Vector3(37, 0, -6)
+    ];
+    const WAYPOINTS_ATK_A_SHORT = [
+      new THREE.Vector3(0, 0, 32),
+      new THREE.Vector3(11, 0, 12),
+      new THREE.Vector3(11, 0, -6),
+      new THREE.Vector3(26, 0, -6),
+      new THREE.Vector3(37, 0, -6)
+    ];
+    const WAYPOINTS_ATK_B_MAIN = [
+      new THREE.Vector3(-44, 0, 44),
+      new THREE.Vector3(-46, 0, 24),
+      new THREE.Vector3(-46, 0, 4),
+      new THREE.Vector3(-37, 0, -10)
+    ];
+    const WAYPOINTS_ATK_B_MARKET = [
+      new THREE.Vector3(-4, 0, 30),
+      new THREE.Vector3(-8, 0, 4),
+      new THREE.Vector3(-18, 0, -12),
+      new THREE.Vector3(-22, 0, -20),
+      new THREE.Vector3(-37, 0, -10)
+    ];
+
+    const DEF_HOLD_SPOTS = [
+      new THREE.Vector3(40, 0, -12),  // A 사이트 방어
+      new THREE.Vector3(28, 0, -8),   // A 쇼트/가든 방어
+      new THREE.Vector3(0, 0, -20),   // 미드 플라자 방어
+      new THREE.Vector3(-22, 0, -18), // 미드 마켓 방어
+      new THREE.Vector3(-38, 0, -14)  // B 사이트 방어
+    ];
 
     function clearBrawlBots() {
       brawlBots.forEach(b => scene.remove(b));
@@ -4722,19 +4870,39 @@
       bot.userData.fireCooldown = 0.6 + Math.random() * 0.6;
       bot.userData.stepTimer = 0;
 
-      const teamColor = botTeam === 'red' ? 0xff4655 : 0x38bdf8;
+      // 팀 색상: 공격(red 변수)=초록 0x10b981, 수비(blue 변수)=빨강 0xff4655
+      const teamColor = botTeam === 'red' ? 0x10b981 : 0xff4655;
       bot.userData.armorMat.color.setHex(teamColor);
 
-      const spawnZ = botTeam === 'red' ? 44 : -44;
-      const laneXOffsets = [-32, -16, 0, 16, 32];
-      const spawnX = laneXOffsets[laneIdx % laneXOffsets.length] + (Math.random() - 0.5) * 4;
-      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 4);
+      // FSM 초기화
+      bot.userData.fsmState = botTeam === 'red' ? 'ADVANCE' : 'HOLD';
+      bot.userData.wpIndex = 0;
+      bot.userData.stuckTimer = 0;
+      bot.userData.detourTimer = 0;
+      bot.userData.detourSign = Math.random() < 0.5 ? 1 : -1;
+      bot.userData.lastCheckPos = new THREE.Vector3();
+      bot.userData.plantTimer = 0;
+      bot.userData.defuseTimer = 0;
+
+      if (botTeam === 'red') {
+        const routes = [WAYPOINTS_ATK_A_MAIN, WAYPOINTS_ATK_A_SHORT, WAYPOINTS_ATK_B_MAIN, WAYPOINTS_ATK_B_MARKET, WAYPOINTS_ATK_A_MAIN];
+        bot.userData.waypoints = routes[laneIdx % routes.length];
+        bot.userData.targetSite = (laneIdx % 4 < 2) ? 'A' : 'B';
+      } else {
+        bot.userData.holdPos = DEF_HOLD_SPOTS[laneIdx % DEF_HOLD_SPOTS.length].clone();
+      }
+
+      const spawnZ = botTeam === 'red' ? 52 : -52;
+      const laneXOffsets = [-24, -12, 0, 12, 24];
+      const spawnX = laneXOffsets[laneIdx % laneXOffsets.length] + (Math.random() - 0.5) * 3;
+      bot.position.set(spawnX, 0, spawnZ + (Math.random() - 0.5) * 3);
+      bot.userData.lastCheckPos.copy(bot.position);
       bot.visible = true;
     }
 
     function createSingleBrawlBot(i, team, laneIdx) {
       const botGroup = new THREE.Group();
-      const teamColor = team === 'red' ? 0xff4655 : 0x38bdf8;
+      const teamColor = team === 'red' ? 0x10b981 : 0xff4655;
       const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.6, roughness: 0.4 });
       const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
@@ -4771,8 +4939,17 @@
         shield: 0,
         dead: false,
         respawnTimer: 0,
-        moveDir: new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5)).normalize(),
-        aiChangeTimer: 1.0 + Math.random() * 1.5,
+        moveDir: new THREE.Vector3(0, 0, 1),
+        fsmState: 'ADVANCE',
+        waypoints: WAYPOINTS_ATK_A_MAIN,
+        wpIndex: 0,
+        holdPos: new THREE.Vector3(),
+        stuckTimer: 0,
+        detourTimer: 0,
+        detourSign: 1,
+        lastCheckPos: new THREE.Vector3(),
+        plantTimer: 0,
+        defuseTimer: 0,
         fireCooldown: 0.8,
         stepTimer: 0
       };
@@ -4801,8 +4978,9 @@
     }
 
     function moveBrawlBotWithCollision(bot, dx, dz) {
+      let hitWall = false;
       const nextX = bot.position.x + dx;
-      let blockedX = Math.abs(nextX) > 45.5;
+      let blockedX = Math.abs(nextX) > 51.5;
       if (!blockedX) {
         for (const c of wallColliders) {
           if (nextX > c.minX && nextX < c.maxX && bot.position.z > c.minZ && bot.position.z < c.maxZ && c.maxY > 0.6) {
@@ -4811,10 +4989,10 @@
         }
       }
       if (!blockedX) bot.position.x = nextX;
-      else bot.userData.moveDir.x *= -1;
+      else hitWall = true;
 
       const nextZ = bot.position.z + dz;
-      let blockedZ = Math.abs(nextZ) > 53.5;
+      let blockedZ = Math.abs(nextZ) > 59.5;
       if (!blockedZ) {
         for (const c of wallColliders) {
           if (bot.position.x > c.minX && bot.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ && c.maxY > 0.6) {
@@ -4823,23 +5001,33 @@
         }
       }
       if (!blockedZ) bot.position.z = nextZ;
-      else bot.userData.moveDir.z *= -1;
+      else hitWall = true;
+
+      const fY = getFloorHeightAt(bot.position.x, bot.position.z);
+      bot.position.y = Math.min(0, fY);
+      return hitWall;
     }
+
+    let lastCombatAlertPos = null;
+    let combatAlertTimer = 0;
 
     function updateBrawlBots(dt) {
       if (currentMap !== 'brawl') return;
       if (roundPhase !== 'COMBAT') return;
+      if (combatAlertTimer > 0) combatAlertTimer -= dt;
+
       const playerHeadPos = camera.position.clone();
 
       for (const bot of brawlBots) {
         const bd = bot.userData;
         if (bd.dead) continue;
 
-        const botEyePos = new THREE.Vector3(bot.position.x, 1.85, bot.position.z);
+        const botEyePos = new THREE.Vector3(bot.position.x, bot.position.y + 1.85, bot.position.z);
         const distToLocalPlayer = botEyePos.distanceTo(playerHeadPos);
 
+        // 1. 시야 내 적 탐색 (FSM: COMBAT 상태 전환 판정)
         let bestTarget = null;
-        let bestDist = 75;
+        let bestDist = 78;
 
         if (!isDead && bd.team !== myTeam && distToLocalPlayer < bestDist && hasLineOfSight(botEyePos, playerHeadPos)) {
           bestDist = distToLocalPlayer;
@@ -4848,7 +5036,7 @@
 
         for (const otherBot of brawlBots) {
           if (otherBot === bot || otherBot.userData.dead || otherBot.userData.team === bd.team) continue;
-          const otherPos = new THREE.Vector3(otherBot.position.x, 1.75, otherBot.position.z);
+          const otherPos = new THREE.Vector3(otherBot.position.x, otherBot.position.y + 1.75, otherBot.position.z);
           const d = botEyePos.distanceTo(otherPos);
           if (d < bestDist && hasLineOfSight(botEyePos, otherPos)) {
             bestDist = d;
@@ -4856,44 +5044,58 @@
           }
         }
 
+        // 2. FSM 상태 결정 (COMBAT / PLANT / DEFUSE / ROTATE / ADVANCE / HOLD)
         if (bestTarget) {
-          const toTarget = new THREE.Vector3().subVectors(bestTarget.pos, botEyePos);
-          const targetYaw = Math.atan2(toTarget.x, toTarget.z);
-          bot.rotation.y = targetYaw;
-
-          bd.aiChangeTimer -= dt;
-          if (bd.aiChangeTimer <= 0) {
-            bd.aiChangeTimer = 0.6 + Math.random() * 0.9;
-            const strafeSign = Math.random() < 0.5 ? 1 : -1;
-            const rightVec = new THREE.Vector3(Math.cos(targetYaw), 0, -Math.sin(targetYaw));
-            const forwardVec = new THREE.Vector3(Math.sin(targetYaw), 0, Math.cos(targetYaw));
-            bd.moveDir.copy(rightVec).multiplyScalar(strafeSign);
-            if (bestDist > 24) bd.moveDir.addScaledVector(forwardVec, 0.45);
-            else if (bestDist < 9) bd.moveDir.addScaledVector(forwardVec, -0.5);
-            bd.moveDir.normalize();
+          bd.fsmState = 'COMBAT';
+          lastCombatAlertPos = bestTarget.pos.clone();
+          combatAlertTimer = 6.0;
+        } else if (bd.team === 'red') {
+          // 공격팀: 사이트 도착 시 스파이크 설치, 아니면 경유지 전진
+          const siteCenter = bd.targetSite === 'A' ? new THREE.Vector3(37, 0, -6) : new THREE.Vector3(-37, 0, -10);
+          const distSite = Math.hypot(bot.position.x - siteCenter.x, bot.position.z - siteCenter.z);
+          if (!spikeState.planted && distSite < 5.5) {
+            bd.fsmState = 'PLANT';
+          } else if (spikeState.planted) {
+            bd.fsmState = 'GUARD_SPIKE';
+          } else {
+            bd.fsmState = 'ADVANCE';
           }
+        } else {
+          // 수비팀: 스파이크 설치 시 해체 합류, 교전 발생 시 지원 이동, 평소엔 지정 거점 방어
+          if (spikeState.planted) {
+            const distSpike = Math.hypot(bot.position.x - spikeState.pos.x, bot.position.z - spikeState.pos.z);
+            bd.fsmState = distSpike < 2.6 ? 'DEFUSE' : 'ROTATE_SPIKE';
+          } else if (combatAlertTimer > 0 && lastCombatAlertPos) {
+            bd.fsmState = 'ROTATE_COMBAT';
+          } else {
+            bd.fsmState = 'HOLD';
+          }
+        }
 
-          moveBrawlBotWithCollision(bot, bd.moveDir.x * 5.6 * dt, bd.moveDir.z * 5.6 * dt);
+        // 3. FSM 상태별 행동 실행
+        if (bd.fsmState === 'COMBAT' && bestTarget) {
+          // 시야 내 적 발견 시 멈춰서 정밀 조준 및 사격! (왔다갔다 배회 제거)
+          const toTarget = new THREE.Vector3().subVectors(bestTarget.pos, botEyePos);
+          bot.rotation.y = Math.atan2(toTarget.x, toTarget.z);
 
           bd.fireCooldown -= dt;
           if (bd.fireCooldown <= 0) {
             const w = WEAPONS[bd.weaponKey] || WEAPONS.classic;
-            bd.fireCooldown = (bd.weaponKey === 'sheriff' || bd.weaponKey === 'guardian' ? 0.62 : 0.34) + Math.random() * 0.25;
-
+            bd.fireCooldown = (bd.weaponKey === 'sheriff' || bd.weaponKey === 'guardian' ? 0.58 : 0.32) + Math.random() * 0.22;
             playWeaponSound(bd.weaponKey, distToLocalPlayer);
 
             const muzzlePos = botEyePos.clone().add(new THREE.Vector3(0, -0.25, 0));
             const aimSpread = new THREE.Vector3(
-              (Math.random() - 0.5) * 2.2,
-              (Math.random() - 0.5) * 1.4,
-              (Math.random() - 0.5) * 2.2
+              (Math.random() - 0.5) * 1.8,
+              (Math.random() - 0.5) * 1.2,
+              (Math.random() - 0.5) * 1.8
             );
             const endPos = bestTarget.pos.clone().add(aimSpread);
             spawnBulletTracer(muzzlePos, endPos, false);
 
-            const hitChance = Math.max(0.14, 0.42 - bestDist * 0.005);
+            const hitChance = Math.max(0.16, 0.46 - bestDist * 0.005);
             if (Math.random() < hitChance) {
-              const isHeadHit = Math.random() < 0.18;
+              const isHeadHit = Math.random() < 0.20;
               const hitPart = isHeadHit ? 'head' : 'body';
               const dmg = Math.round(w.getDamage(bestDist, hitPart) * 0.65);
 
@@ -4912,32 +5114,87 @@
               }
             }
           }
-        } else {
-          bd.aiChangeTimer -= dt;
-          if (bd.aiChangeTimer <= 0) {
-            bd.aiChangeTimer = 1.6 + Math.random() * 1.8;
-            let goalX = 0;
-            let goalZ = -4;
-            if (spikeState.planted) {
-              goalX = spikeState.pos.x + (Math.random() - 0.5) * 6;
-              goalZ = spikeState.pos.z + (Math.random() - 0.5) * 6;
-            } else {
-              const lane = bd.laneIdx % 3;
-              if (lane === 0) { goalX = 33 + (Math.random() - 0.5) * 6; goalZ = -4; }
-              else if (lane === 1) { goalX = (Math.random() - 0.5) * 10; goalZ = -2; }
-              else { goalX = -34 + (Math.random() - 0.5) * 6; goalZ = -4; }
-            }
-            const toGoal = new THREE.Vector3(goalX - bot.position.x, 0, goalZ - bot.position.z);
-            if (toGoal.lengthSq() > 1) bd.moveDir.copy(toGoal.normalize());
-          }
-          moveBrawlBotWithCollision(bot, bd.moveDir.x * 6.2 * dt, bd.moveDir.z * 6.2 * dt);
-          bot.rotation.y = Math.atan2(bd.moveDir.x, bd.moveDir.z);
+          continue;
         }
 
-        bd.stepTimer += dt;
-        if (bd.stepTimer >= 0.42) {
-          bd.stepTimer = 0;
-          playFootstepSound(false, distToLocalPlayer);
+        if (bd.fsmState === 'PLANT') {
+          bd.plantTimer += dt;
+          if (bd.plantTimer >= 4.0 && !spikeState.planted) {
+            spikeState.planted = true;
+            spikeState.site = bd.targetSite;
+            spikeState.timer = 45.0;
+            spikeState.pos.set(bot.position.x, 0, bot.position.z);
+            createSpikeMesh(spikeState.pos);
+            showRoundBanner(`SPIKE PLANTED (${bd.targetSite} SITE)`, `${bd.nick}이(가) 스파이크를 설치했습니다!`, '#10b981', 2600);
+          }
+          continue;
+        }
+
+        if (bd.fsmState === 'DEFUSE') {
+          bd.defuseTimer += dt;
+          if (bd.defuseTimer >= 7.0 && spikeState.planted) {
+            endBrawlRound('blue', null, false, `${bd.nick} 스파이크 해체 완료!`);
+          }
+          continue;
+        }
+
+        // 이동 목표 좌표(goalPos) 산출
+        let goalPos = null;
+        if (bd.fsmState === 'ADVANCE') {
+          const wps = bd.waypoints;
+          const curWp = wps[Math.min(bd.wpIndex, wps.length - 1)];
+          if (Math.hypot(bot.position.x - curWp.x, bot.position.z - curWp.z) < 2.6 && bd.wpIndex < wps.length - 1) {
+            bd.wpIndex++;
+          }
+          goalPos = wps[Math.min(bd.wpIndex, wps.length - 1)];
+        } else if (bd.fsmState === 'GUARD_SPIKE') {
+          goalPos = spikeState.pos;
+        } else if (bd.fsmState === 'ROTATE_SPIKE') {
+          goalPos = spikeState.pos;
+        } else if (bd.fsmState === 'ROTATE_COMBAT') {
+          goalPos = lastCombatAlertPos;
+        } else if (bd.fsmState === 'HOLD') {
+          goalPos = bd.holdPos;
+        }
+
+        if (goalPos) {
+          const toGoal = new THREE.Vector3(goalPos.x - bot.position.x, 0, goalPos.z - bot.position.z);
+          const distGoal = toGoal.length();
+          if (distGoal > 1.2) {
+            toGoal.normalize();
+
+            // 벽에 부딪혀 1초 이상 제자리걸음 시 벽을 따라 측면 우회(Detour)
+            const movedDist = bot.position.distanceTo(bd.lastCheckPos);
+            if (movedDist < 0.35 * dt) {
+              bd.stuckTimer += dt;
+            } else {
+              bd.stuckTimer = 0;
+            }
+            bd.lastCheckPos.copy(bot.position);
+
+            if (bd.stuckTimer >= 1.0) {
+              bd.detourTimer = 1.1;
+              bd.stuckTimer = 0;
+              bd.detourSign *= -1;
+            }
+
+            let moveVec = toGoal.clone();
+            if (bd.detourTimer > 0) {
+              bd.detourTimer -= dt;
+              const sideVec = new THREE.Vector3(-toGoal.z * bd.detourSign, 0, toGoal.x * bd.detourSign);
+              moveVec.addScaledVector(sideVec, 1.35).normalize();
+            }
+
+            const blocked = moveBrawlBotWithCollision(bot, moveVec.x * 6.4 * dt, moveVec.z * 6.4 * dt);
+            if (blocked) bd.stuckTimer += dt * 1.5;
+
+            bot.rotation.y = Math.atan2(moveVec.x, moveVec.z);
+            bd.stepTimer += dt;
+            if (bd.stepTimer >= 0.42) {
+              bd.stepTimer = 0;
+              playFootstepSound(false, distToLocalPlayer);
+            }
+          }
         }
       }
     }
@@ -4954,7 +5211,7 @@
         scene.remove(remotePlayers[peerId].mesh);
       }
       const group = new THREE.Group();
-      const teamColor = team === 'red' ? 0xff4655 : 0x38bdf8;
+      const teamColor = team === 'red' ? 0x10b981 : 0xff4655;
       const bodyMat = new THREE.MeshStandardMaterial({ color: teamColor, roughness: 0.4 });
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.5 });
 
@@ -5006,9 +5263,9 @@
 
     function updatePlayerListUI() {
       const myNick = document.getElementById('nickInput').value || '플레이어';
-      const list = [`[나] ${myNick} (${myTeam === 'red' ? 'RED' : 'BLUE'})`];
+      const list = [`[나] ${myNick} (${myTeam === 'red' ? '공격·GREEN' : '수비·RED'})`];
       Object.values(remotePlayers).forEach(rp => {
-        list.push(`${rp.nick} (${rp.team === 'red' ? 'RED' : 'BLUE'})`);
+        list.push(`${rp.nick} (${rp.team === 'red' ? '공격·GREEN' : '수비·RED'})`);
       });
       document.getElementById('playerListBox').innerText = '참가자 (' + list.length + '/4): ' + list.join('  |  ');
     }
@@ -5231,10 +5488,10 @@
       } else {
         const offsetX = (Math.random() - 0.5) * 20;
         if (myTeam === 'red') {
-          camera.position.set(offsetX, 2.0, 46);
+          camera.position.set(offsetX, 2.0, 52);
           yaw = 0;
         } else {
-          camera.position.set(offsetX, 2.0, -46);
+          camera.position.set(offsetX, 2.0, -52);
           yaw = Math.PI;
         }
       }
@@ -5649,10 +5906,20 @@
       }
 
       if (e.code === 'KeyF') {
-        botStrafeMode = !botStrafeMode;
-        const modeEl = document.getElementById('botModeText');
-        modeEl.innerText = botStrafeMode ? '좌우 무빙' : '고정';
-        modeEl.style.color = botStrafeMode ? '#00ffcc' : '#ffcc00';
+        if (currentMap === 'brawl') {
+          for (const d of ascentDoors) {
+            if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.8) {
+              toggleAscentDoor(d);
+              addKillFeed(`[스위치] ${d.name} ${d.isOpen ? '개방됨' : '폐쇄됨'}`, false);
+              break;
+            }
+          }
+        } else {
+          botStrafeMode = !botStrafeMode;
+          const modeEl = document.getElementById('botModeText');
+          modeEl.innerText = botStrafeMode ? '좌우 무빙' : '고정';
+          modeEl.style.color = botStrafeMode ? '#00ffcc' : '#ffcc00';
+        }
       }
 
       if (e.code === 'KeyG' && currentMap === 'brawl') {
@@ -5707,8 +5974,8 @@
       }
       // 준비 시간(PREP)에는 진영 보호막 밖으로 나갈 수 없음
       if (currentMap === 'brawl' && roundPhase === 'PREP') {
-        if (myTeam === 'red' && nextZ < 28.8) blockedZ = true;
-        if (myTeam === 'blue' && nextZ > -28.8) blockedZ = true;
+        if (myTeam === 'red' && nextZ < 38.0) blockedZ = true;
+        if (myTeam === 'blue' && nextZ > -38.0) blockedZ = true;
       }
       if (!blockedZ) camera.position.z = nextZ;
     }
@@ -6253,13 +6520,15 @@
       } else if (!isGrounded) {
         velY -= 20.5 * dt;
         camera.position.y += velY * dt;
-        if (camera.position.y <= currentEyeHeight) {
-          camera.position.y = currentEyeHeight;
+        const gFloorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
+        if (camera.position.y <= gFloorY + currentEyeHeight) {
+          camera.position.y = gFloorY + currentEyeHeight;
           velY = 0;
           isGrounded = true;
         }
       } else {
-        camera.position.y = currentEyeHeight;
+        const floorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
+        camera.position.y = floorY + currentEyeHeight;
       }
 
       const karambitModel = models.melee_champions2021;
