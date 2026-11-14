@@ -165,14 +165,8 @@
           <div class="item-price" style="font-size:12px;">650 ¤</div>
         </div>
         <div class="shop-item" id="buy-sheriff" onclick="buyWeapon('sheriff')" style="padding:7px 10px;">
-          <div>
-            <div class="item-title" style="font-size:13px;">셰리프 (Sheriff) <span id="sheriffSkinBadge" style="font-size:10px; background:#093629; color:#2dffc4; padding:1px 5px; border-radius:3px;">네오 프런티어</span></div>
-            <div class="item-desc" style="font-size:11px;">6발 | 헤드 159 / 몸 55</div>
-          </div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
-            <div class="item-price" style="font-size:12px;">800 ¤</div>
-            <button id="toggleSheriffSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('sheriff');" style="background:#08261d; border:1px solid #00ff9d; color:#6bffc6; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">기본 스킨으로 변경</button>
-          </div>
+          <div><div class="item-title" style="font-size:13px;">셰리프 (Sheriff)</div><div class="item-desc" style="font-size:11px;">6발 | 헤드 159 / 몸 55</div></div>
+          <div class="item-price" style="font-size:12px;">800 ¤</div>
         </div>
       </div>
 
@@ -242,8 +236,14 @@
           <div class="item-price" style="font-size:12px;">950 ¤</div>
         </div>
         <div class="shop-item" id="buy-outlaw" onclick="buyWeapon('outlaw')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">아웃로 (Outlaw)</div><div class="item-desc" style="font-size:11px;">2발 | 더블배럴 스나이퍼 (헤드238/몸140)</div></div>
-          <div class="item-price" style="font-size:12px;">2,400 ¤</div>
+          <div>
+            <div class="item-title" style="font-size:13px;">아웃로 (Outlaw) <span id="outlawSkinBadge" style="font-size:10px; background:#3b0a12; color:#ff4d5e; padding:1px 5px; border-radius:3px;">아락시스 (블랙)</span></div>
+            <div class="item-desc" style="font-size:11px;">2발 | 더블배럴 스나이퍼 (헤드238/몸140)</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+            <div class="item-price" style="font-size:12px;">2,400 ¤</div>
+            <button id="toggleOutlawSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('outlaw');" style="background:#2b090e; border:1px solid #ff3b4e; color:#ff808c; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">기본 스킨으로 변경</button>
+          </div>
         </div>
         <div class="shop-item" id="buy-operator" onclick="buyWeapon('operator')" style="padding:7px 10px;">
           <div>
@@ -412,49 +412,8 @@
         return;
       }
 
-      // 네오 프런티어 셰리프 전용 SF 레이저-리볼버 총성
-      if (weaponKey === 'sheriff' && equippedSkins.sheriff === 'neo_frontier') {
-        const punch = audioCtx.createOscillator();
-        const pGain = audioCtx.createGain();
-        punch.type = 'sawtooth';
-        punch.frequency.setValueAtTime(240, now);
-        punch.frequency.exponentialRampToValueAtTime(42, now + 0.24);
-        const lp = audioCtx.createBiquadFilter();
-        lp.type = 'lowpass';
-        lp.frequency.setValueAtTime(1600, now);
-        lp.frequency.exponentialRampToValueAtTime(180, now + 0.24);
-        pGain.gain.setValueAtTime(0.62 * distGain, now);
-        pGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
-        punch.connect(lp); lp.connect(pGain); pGain.connect(audioCtx.destination);
-        punch.start(now); punch.stop(now + 0.27);
-
-        // 네오 프런티어 시그니처 하이테크 레이저 차임 ("퓨-웅!")
-        const laser = audioCtx.createOscillator();
-        const lGain = audioCtx.createGain();
-        laser.type = 'sine';
-        laser.frequency.setValueAtTime(1950, now);
-        laser.frequency.exponentialRampToValueAtTime(460, now + 0.19);
-        lGain.gain.setValueAtTime(0.28 * distGain, now);
-        lGain.gain.exponentialRampToValueAtTime(0.001, now + 0.21);
-        laser.connect(lGain); lGain.connect(audioCtx.destination);
-        laser.start(now); laser.stop(now + 0.22);
-
-        const noise = audioCtx.createBufferSource();
-        noise.buffer = noiseBuffer;
-        const bp = audioCtx.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.setValueAtTime(1400, now);
-        bp.Q.value = 1.6;
-        const nGain = audioCtx.createGain();
-        nGain.gain.setValueAtTime(0.42 * distGain, now);
-        nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-        noise.connect(bp); bp.connect(nGain); nGain.connect(audioCtx.destination);
-        noise.start(now); noise.stop(now + 0.23);
-        return;
-      }
-
-      // 아락시스 오퍼레이터 전용 외계 생체금속 플라즈마 저격 총성
-      if (weaponKey === 'operator' && equippedSkins.operator === 'araxys') {
+      // 아락시스 오퍼레이터 & 아락시스 아웃로 전용 외계 생체금속 플라즈마 저격 총성
+      if ((weaponKey === 'operator' && equippedSkins.operator === 'araxys') || (weaponKey === 'outlaw' && equippedSkins.outlaw === 'araxys')) {
         const sub = audioCtx.createOscillator();
         const subGain = audioCtx.createGain();
         sub.type = 'sawtooth';
@@ -680,76 +639,6 @@
       5: ['valorant-champions-2024-kill-5.mp3', './valorant-champions-2024-kill-5.mp3', 'champions-2024-kill-5.mp3']
     };
 
-    const NEO_FRONTIER_STREAK_FILES = {
-      1: ['Neo Frontier Kill Successive.wav', './Neo Frontier Kill Successive.wav'],
-      2: ['Neo Frontier Kill Successive (1).wav', './Neo Frontier Kill Successive (1).wav'],
-      3: ['Neo Frontier Kill Successive (2).wav', './Neo Frontier Kill Successive (2).wav'],
-      4: ['Neo Frontier Kill Successive (3).wav', './Neo Frontier Kill Successive (3).wav'],
-      5: ['Neo Frontier Kill Successive (4).wav', './Neo Frontier Kill Successive (4).wav']
-    };
-
-    function playNeoFrontierSpinSound() {
-      initAudio();
-      if (!audioCtx) return;
-      const now = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(520, now);
-      osc.frequency.exponentialRampToValueAtTime(1180, now + 0.08);
-      osc.frequency.exponentialRampToValueAtTime(680, now + 0.16);
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(0.14, now + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
-      osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.start(now); osc.stop(now + 0.18);
-    }
-
-    function playSynthNeoFrontierKillSound(tier = 1, isHeadshot = false) {
-      initAudio();
-      if (!audioCtx) return;
-      const now = audioCtx.currentTime;
-      const clampedTier = Math.min(5, Math.max(1, tier));
-      // 서부극 황동 벨 + 네오 에메랄드 신디사이저 5단계 상승 멜로디
-      const notes = [293.66, 349.23, 392.00, 440.00, 587.33];
-      const root = notes[clampedTier - 1];
-
-      const bell = audioCtx.createOscillator();
-      const bGain = audioCtx.createGain();
-      bell.type = 'triangle';
-      bell.frequency.setValueAtTime(root, now);
-      bGain.gain.setValueAtTime(0.36, now);
-      bGain.gain.exponentialRampToValueAtTime(0.001, now + (clampedTier === 5 ? 1.4 : 0.75));
-      bell.connect(bGain); bGain.connect(audioCtx.destination);
-      bell.start(now); bell.stop(now + 1.45);
-
-      const harmonics = clampedTier === 5 ? [1.0, 1.25, 1.5, 2.0, 2.5] : [1.0, 1.5, 2.0];
-      harmonics.forEach((h, idx) => {
-        const st = now + (clampedTier === 5 ? idx * 0.05 : 0);
-        const osc = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(root * h, st);
-        g.gain.setValueAtTime(0.001, st);
-        g.gain.linearRampToValueAtTime(0.18, st + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.001, st + 0.85);
-        osc.connect(g); g.connect(audioCtx.destination);
-        osc.start(st); osc.stop(st + 0.9);
-      });
-
-      if (isHeadshot) {
-        const hs = audioCtx.createOscillator();
-        const hsg = audioCtx.createGain();
-        hs.type = 'sine';
-        hs.frequency.setValueAtTime(1760, now);
-        hs.frequency.exponentialRampToValueAtTime(2640, now + 0.14);
-        hsg.gain.setValueAtTime(0.24, now);
-        hsg.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-        hs.connect(hsg); hsg.connect(audioCtx.destination);
-        hs.start(now); hs.stop(now + 0.3);
-      }
-    }
-
     const ARAXYS_STREAK_FILES = {
       1: ['Araxys Kill 1.mp3', './Araxys Kill 1.mp3', 'araxys-kill-sound-1.mp3'],
       2: ['Araxys Kill 2.mp3', './Araxys Kill 2.mp3', 'araxys-kill-sound-2.mp3'],
@@ -879,12 +768,10 @@
 
     function playKillStreakAudio(tier, champEdition, isHeadshot) {
       const soundTier = Math.min(5, Math.max(1, tier));
-      const isNeoFrontier = champEdition === 'neo_frontier';
       const isAraxys = champEdition === 'araxys';
       const isChamp2024 = champEdition === '2024';
       const isChamp2021 = champEdition === '2021' || champEdition === true;
       const candidates = (
-        isNeoFrontier ? NEO_FRONTIER_STREAK_FILES[soundTier] :
         isAraxys ? ARAXYS_STREAK_FILES[soundTier] :
         isChamp2024 ? CHAMPIONS_2024_STREAK_FILES[soundTier] :
         isChamp2021 ? CHAMPIONS_2021_STREAK_FILES[soundTier] :
@@ -894,9 +781,7 @@
       let idx = 0;
       function tryNextFile() {
         if (idx >= candidates.length) {
-          if (isNeoFrontier) {
-            playSynthNeoFrontierKillSound(soundTier, isHeadshot);
-          } else if (isAraxys) {
+          if (isAraxys) {
             playSynthAraxysKillSound(soundTier, isHeadshot);
           } else {
             playSynthKillSound(soundTier, isChamp2021 || isChamp2024, isHeadshot);
@@ -923,14 +808,14 @@
     const equippedSkins = {
       vandal: 'champions2021',
       phantom: 'champions2024',
-      sheriff: 'neo_frontier', // 네오 프런티어 셰리프 기본 장착
+      sheriff: 'standard',
+      outlaw: 'araxys', // 아락시스 아웃로 (블랙/레드 크로마) 기본 장착
       operator: 'araxys', // 아락시스 오퍼레이터 (블랙/레드 크로마) 기본 장착
       melee: 'champions2021'
     };
     let championsAuraTimer = 0;
     let champions2024AuraTimer = 0;
     let araxysAuraTimer = 0; // 아락시스 킬 달성 시 비늘 맥박 & 크림슨 코어 발광 타이머
-    let neoFrontierAuraTimer = 0; // 네오 프런티어 셰리프 킬 달성 시 에메랄드 코어 증폭 타이머
 
     let currentStreak = 0;
     let streakBannerTimer = null;
@@ -1358,126 +1243,14 @@
       </svg>`;
     }
 
-    function buildNeoFrontierEmblemSVG(count, isHeadshot = false) {
-      const tier = Math.min(6, Math.max(1, count));
-      // 1~5+킬: 상단 리볼버 탄창/아크 에메랄드 네온 게이지 (보내주신 4장 이미지 기반)
-      const bulletAngles = [
-        [-126, -108],
-        [-106, -92],
-        [-88, -74],
-        [-72, -54],
-        [-142, -128]
-      ];
-      const cx = 100, cy = 100, r = 56;
-      function polar(deg) {
-        const rad = (deg * Math.PI) / 180;
-        return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
-      }
-      const gaugeArcs = bulletAngles.slice(0, Math.min(5, tier)).map(([s, e]) => {
-        const [x1, y1] = polar(s);
-        const [x2, y2] = polar(e);
-        return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
-                  fill="none" stroke="#18ff92" stroke-width="6.8" stroke-linecap="butt"
-                  style="filter: drop-shadow(0 0 7px #00ff88);" />`;
-      }).join('');
-
-      const activeChambers = Math.min(6, tier);
-      const chamberCircles = [0, 1, 2, 3, 4, 5].map(idx => {
-        const ang = (-90 + idx * 60) * Math.PI / 180;
-        const bx = 100 + Math.cos(ang) * 14.5;
-        const by = 100 + Math.sin(ang) * 14.5;
-        const lit = idx < activeChambers;
-        return `<circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="4.3"
-                  fill="${lit ? '#18ff92' : '#122620'}"
-                  stroke="${lit ? '#b8ffe0' : '#4a6b60'}" stroke-width="1"
-                  ${lit ? 'style="filter: drop-shadow(0 0 4px #00ff88);"' : ''} />`;
-      }).join('');
-
-      return `
-      <svg viewBox="0 0 200 200" width="154" height="154" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <radialGradient id="nfBannerBg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="rgba(6, 26, 20, 0.90)" />
-            <stop offset="72%" stop-color="rgba(8, 18, 16, 0.50)" />
-            <stop offset="100%" stop-color="rgba(6, 12, 10, 0)" />
-          </radialGradient>
-          <linearGradient id="nfBronzeWing" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#f2d59b" />
-            <stop offset="50%" stop-color="#b88c4a" />
-            <stop offset="100%" stop-color="#6e5023" />
-          </linearGradient>
-        </defs>
-
-        <!-- 배경 오라 -->
-        <circle cx="100" cy="100" r="80" fill="url(#nfBannerBg)" />
-
-        <!-- 외곽 사이버 링 -->
-        <circle cx="100" cy="100" r="65" fill="none" stroke="rgba(180, 255, 220, 0.35)" stroke-width="1.2" stroke-dasharray="44 16 12 16" />
-        <circle cx="100" cy="100" r="56" fill="none" stroke="rgba(24, 255, 146, 0.25)" stroke-width="1.4" />
-        <circle cx="100" cy="100" r="45" fill="none" stroke="#eef7f3" stroke-width="3.0" />
-
-        <!-- 1~5킬 상단 에메랄드 네온 탄환 게이지 -->
-        ${gaugeArcs}
-
-        <!-- 상단 브론즈 보안관 배지 팁 -->
-        <polygon points="100,15 107,26 100,33 93,26" fill="url(#nfBronzeWing)" stroke="#fff2cc" stroke-width="0.9" />
-        <line x1="86" y1="26" x2="114" y2="26" stroke="#fff2cc" stroke-width="1.4" />
-
-        <!-- 좌우 서부 사이버 날개 프레임 (이미지 디테일) -->
-        <polygon points="24,84 52,88 55,98 20,96" fill="url(#nfBronzeWing)" stroke="#18ff92" stroke-width="0.9" />
-        <polygon points="28,104 55,102 52,112 24,114" fill="url(#nfBronzeWing)" stroke="#18ff92" stroke-width="0.9" />
-        <polygon points="176,84 148,88 145,98 180,96" fill="url(#nfBronzeWing)" stroke="#18ff92" stroke-width="0.9" />
-        <polygon points="172,104 145,102 148,112 176,114" fill="url(#nfBronzeWing)" stroke="#18ff92" stroke-width="0.9" />
-
-        <!-- 4방향 대각선 안테나 -->
-        <polyline points="68,68 48,48 34,48" fill="none" stroke="rgba(230,255,245,0.8)" stroke-width="1.5" />
-        <circle cx="33" cy="48" r="2" fill="#18ff92" />
-        <polyline points="132,68 152,48 166,48" fill="none" stroke="rgba(230,255,245,0.8)" stroke-width="1.5" />
-        <circle cx="167" cy="48" r="2" fill="#18ff92" />
-        <polyline points="68,132 48,152 34,152" fill="none" stroke="rgba(230,255,245,0.8)" stroke-width="1.5" />
-        <circle cx="33" cy="152" r="2" fill="#18ff92" />
-        <polyline points="132,132 152,152 166,152" fill="none" stroke="rgba(230,255,245,0.8)" stroke-width="1.5" />
-        <circle cx="167" cy="152" r="2" fill="#18ff92" />
-
-        <!-- 중앙 보안관 별(Star) 배지 배경 -->
-        <polygon points="100,66 109,84 129,85 115,100 124,119 105,114 100,132 95,114 76,119 85,100 71,85 91,84"
-                 fill="url(#nfBronzeWing)" stroke="#fff4d6" stroke-width="1.1" />
-
-        <!-- 중앙 리볼버 6연발 실린더 코어 -->
-        <circle cx="100" cy="100" r="22" fill="#131918" stroke="#e5c88b" stroke-width="2.2" />
-        <circle cx="100" cy="100" r="4.2" fill="#18ff92" style="filter: drop-shadow(0 0 5px #00ff88);" />
-        ${chamberCircles}
-
-        <!-- 하단 WANTED 현상금 태그 (이미지 하단 골드 명판) -->
-        <rect x="75" y="136" width="50" height="14" rx="2" fill="#2a1f10" stroke="#f0cf88" stroke-width="1.3" />
-        <text x="100" y="146" text-anchor="middle" fill="#ffe49e" font-size="8.2" font-weight="900" letter-spacing="1.1" font-family="Impact, sans-serif">WANTED</text>
-
-        <!-- 최하단 트윈 리본 코드 -->
-        <path d="M 95 150 C 95 160, 105 165, 105 178" fill="none" stroke="#eef7f3" stroke-width="1.8" />
-        <path d="M 105 150 C 105 160, 95 165, 95 178" fill="none" stroke="#eef7f3" stroke-width="1.8" />
-        <circle cx="95" cy="181" r="2" fill="#18ff92" />
-        <circle cx="105" cy="181" r="2" fill="#18ff92" />
-
-        ${isHeadshot ? `
-        <g stroke="#ff2a3c" stroke-width="2.6" stroke-linecap="round" style="filter: drop-shadow(0 0 5px #ff0019);">
-          <line x1="91" y1="74" x2="109" y2="92" />
-          <line x1="109" y1="74" x2="91" y2="92" />
-        </g>` : ''}
-      </svg>`;
-    }
-
     function triggerScoreStreak(addCount = 1, isHeadshot = false) {
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
       const curW = getCurrentWeaponKey();
-      const isNeoFrontierActive = (curW === 'sheriff' && equippedSkins.sheriff === 'neo_frontier');
-      const isAraxysActive = (curW === 'operator' && equippedSkins.operator === 'araxys');
+      const isAraxysActive = (curW === 'operator' && equippedSkins.operator === 'araxys') || (curW === 'outlaw' && equippedSkins.outlaw === 'araxys');
       const isChamp2024Active = (curW === 'phantom' && equippedSkins.phantom === 'champions2024');
       const isChamp2021Active = (curW === 'vandal' && equippedSkins.vandal === 'champions2021') || (curW === 'melee' && equippedSkins.melee === 'champions2021');
-      if (isNeoFrontierActive) {
-        neoFrontierAuraTimer = 4.5;
-      }
       if (isAraxysActive) {
         araxysAuraTimer = 4.5; // 4.5초간 아락시스 크림슨 코어 및 비늘 맥박 발광
       }
@@ -1487,20 +1260,18 @@
       if (isChamp2021Active) {
         championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
       }
-      const champEdition = isNeoFrontierActive ? 'neo_frontier' : (isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null)));
+      const champEdition = isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null));
       playKillStreakAudio(soundTier, champEdition, isHeadshot);
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = isNeoFrontierActive
-        ? buildNeoFrontierEmblemSVG(currentStreak, isHeadshot)
-        : (isAraxysActive
-          ? buildAraxysEmblemSVG(currentStreak, isHeadshot)
-          : (isChamp2024Active
-            ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
-            : (isChamp2021Active
-              ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
-              : buildStreakEmblemSVG(currentStreak, isHeadshot))));
+      svgWrap.innerHTML = isAraxysActive
+        ? buildAraxysEmblemSVG(currentStreak, isHeadshot)
+        : (isChamp2024Active
+          ? buildChampions2024EmblemSVG(currentStreak, isHeadshot)
+          : (isChamp2021Active
+            ? buildChampions2021EmblemSVG(currentStreak, isHeadshot)
+            : buildStreakEmblemSVG(currentStreak, isHeadshot)));
 
       banner.style.transition = 'opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
       banner.style.opacity = '1';
@@ -1783,148 +1554,6 @@
 
     const gunGroup = new THREE.Group();
 
-    function buildNeoFrontierSheriffModel() {
-      const rootGroup = new THREE.Group();
-      rootGroup.add(buildFirstPersonHandModel('gun'));
-
-      // 리볼버 본체 피벗 (꺼낼 때 및 Y키 자세히 보기 시 검지 방아쇠울 축으로 카우보이 건스핀 회전!)
-      const spinPivot = new THREE.Group();
-      rootGroup.add(spinPivot);
-
-      const gunmetalMat = new THREE.MeshStandardMaterial({
-        color: 0x22262c,
-        metalness: 0.86,
-        roughness: 0.24
-      });
-      const darkObsidianMat = new THREE.MeshStandardMaterial({
-        color: 0x121418,
-        metalness: 0.90,
-        roughness: 0.20
-      });
-      const copperBronzeMat = new THREE.MeshStandardMaterial({
-        color: 0xc89654,
-        metalness: 0.92,
-        roughness: 0.22
-      });
-      const emeraldGlowMat = new THREE.MeshStandardMaterial({
-        color: 0x18ff92,
-        emissive: new THREE.Color(0x00ff80),
-        emissiveIntensity: 1.35,
-        roughness: 0.12,
-        metalness: 0.15
-      });
-      const walnutGripMat = new THREE.MeshStandardMaterial({
-        color: 0x3b2316,
-        roughness: 0.72,
-        metalness: 0.12
-      });
-
-      // 1. 각진 SF 총열 슈라우드 + 상단 피카티니 레일 + 내부 에메랄드 에너지 코어 슬릿
-      const upperBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.036, 0.29), gunmetalMat);
-      upperBarrel.position.set(0, 0.044, -0.15);
-
-      const topCopperRail = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.010, 0.28), copperBronzeMat);
-      topCopperRail.position.set(0, 0.065, -0.15);
-
-      const lowerBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.024, 0.27), darkObsidianMat);
-      lowerBarrel.position.set(0, 0.002, -0.14);
-
-      // 총열 좌우 측면에서 빛나는 에메랄드 플라즈마 라인 (영상 속 초록빛 에너지 틈새)
-      const barrelCoreL = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.24), emeraldGlowMat);
-      barrelCoreL.position.set(-0.022, 0.022, -0.15);
-      const barrelCoreR = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.24), emeraldGlowMat);
-      barrelCoreR.position.set(0.022, 0.022, -0.15);
-
-      // 다면체 총구(Muzzle) & 발광 가늠쇠
-      const muzzleCap = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.056, 0.026), copperBronzeMat);
-      muzzleCap.position.set(0, 0.026, -0.30);
-      const muzzleHole = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.030, 12), emeraldGlowMat);
-      muzzleHole.rotation.x = Math.PI / 2;
-      muzzleHole.position.set(0, 0.036, -0.302);
-
-      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.015, 0.024), emeraldGlowMat);
-      frontSight.position.set(0, 0.076, -0.275);
-
-      // 2. 회전하는 6연발 에메랄드 코어 리볼버 실린더
-      const cylinderGroup = new THREE.Group();
-      cylinderGroup.position.set(0, 0.022, 0.018);
-
-      const cylDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.082, 18), darkObsidianMat);
-      cylDrum.rotation.x = Math.PI / 2;
-      const cylCoreGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.085, 16), emeraldGlowMat);
-      cylCoreGlow.rotation.x = Math.PI / 2;
-      const cylFrontRing = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.004, 10, 24), copperBronzeMat);
-      cylFrontRing.position.z = -0.041;
-      const cylRearRing = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.004, 10, 24), copperBronzeMat);
-      cylRearRing.position.z = 0.041;
-
-      cylinderGroup.add(cylDrum, cylCoreGlow, cylFrontRing, cylRearRing);
-
-      // 실린더 주변 6개의 발광 약실 챔버
-      for (let i = 0; i < 6; i++) {
-        const ang = (i / 6) * Math.PI * 2;
-        const chamber = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.088, 10), emeraldGlowMat);
-        chamber.rotation.x = Math.PI / 2;
-        chamber.position.set(Math.cos(ang) * 0.022, Math.sin(ang) * 0.022, 0);
-        cylinderGroup.add(chamber);
-      }
-
-      // 3. 프레임, 해머, 방아쇠울 & 서부 호두나무+구리 장식 손잡이
-      const topStrap = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.014, 0.11), gunmetalMat);
-      topStrap.position.set(0, 0.062, 0.02);
-
-      const rearFrame = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.072, 0.068), gunmetalMat);
-      rearFrame.position.set(0, 0.024, 0.088);
-
-      // 후면 디지털 홀로그램 조준기 (영상에서 조준 시 초록 홀로그램이 뜨는 디테일)
-      const rearHoloPlate = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.020, 0.008), emeraldGlowMat);
-      rearHoloPlate.position.set(0, 0.068, 0.082);
-
-      const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.026, 0.026), copperBronzeMat);
-      hammer.rotation.x = -0.45;
-      hammer.position.set(0, 0.056, 0.125);
-
-      const triggerGuard = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0045, 8, 18), copperBronzeMat);
-      triggerGuard.rotation.y = Math.PI / 2;
-      triggerGuard.position.set(0, -0.026, 0.028);
-
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.145, 0.068), walnutGripMat);
-      grip.rotation.x = 0.30;
-      grip.position.set(0, -0.076, 0.106);
-
-      const gripCap = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.016, 0.074), copperBronzeMat);
-      gripCap.rotation.x = 0.30;
-      gripCap.position.set(0, -0.145, 0.128);
-
-      // 스핀 시 잔상 링
-      const spinTrailMat = new THREE.MeshBasicMaterial({
-        color: 0x18ff92,
-        transparent: true,
-        opacity: 0.0,
-        side: THREE.DoubleSide
-      });
-      const spinTrail = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.25, 28, 1, -0.8, 2.2), spinTrailMat);
-      spinTrail.rotation.y = Math.PI / 2;
-      spinTrail.position.set(0, 0.01, -0.04);
-
-      spinPivot.add(
-        upperBarrel, topCopperRail, lowerBarrel, barrelCoreL, barrelCoreR,
-        muzzleCap, muzzleHole, frontSight,
-        cylinderGroup, topStrap, rearFrame, rearHoloPlate, hammer,
-        triggerGuard, grip, gripCap, spinTrail
-      );
-
-      rootGroup.userData = {
-        spinPivot,
-        cylinder: cylinderGroup,
-        emeraldGlowMat,
-        spinTrailMat,
-        spinAngle: 0,
-        spinSoundAccum: 0
-      };
-      return rootGroup;
-    }
-
     function buildSheriffModel() {
       const group = new THREE.Group();
       group.add(buildFirstPersonHandModel('gun'));
@@ -1984,6 +1613,140 @@
       const straightMag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.175, 0.068), darkMat); straightMag.rotation.x = -0.08; straightMag.position.set(0, -0.105, -0.095);
       const sight = buildHoloSight(); sight.position.set(0, 0.052, -0.02);
       group.add(receiver, suppressor, straightMag, sight);
+      return group;
+    }
+
+    function buildAraxysOutlawModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+
+      const matteArmorMat = new THREE.MeshStandardMaterial({
+        color: 0x141518,
+        metalness: 0.82,
+        roughness: 0.28
+      });
+      const darkObsidianMat = new THREE.MeshStandardMaterial({
+        color: 0x0b0c0e,
+        metalness: 0.88,
+        roughness: 0.22
+      });
+      const edgeTrimMat = new THREE.MeshStandardMaterial({
+        color: 0x2d3038,
+        metalness: 0.90,
+        roughness: 0.20
+      });
+      const crimsonCoreMat = new THREE.MeshStandardMaterial({
+        color: 0xff2a3c,
+        emissive: new THREE.Color(0xff1428),
+        emissiveIntensity: 1.25,
+        roughness: 0.15,
+        metalness: 0.2
+      });
+
+      // 1. 아웃로 특유의 중절식(Break-action) 2발 챔버 & 내부 발광 에너지 코어
+      const innerCore = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.062, 0.42), crimsonCoreMat);
+      innerCore.position.set(0, 0.012, -0.02);
+
+      // 중절식 브레이크 힌지 & 상단 붉은 에너지 락
+      const breakLatch = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.018, 0.065), crimsonCoreMat);
+      breakLatch.position.set(0, 0.048, -0.14);
+
+      const topSpine = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.022, 0.40), matteArmorMat);
+      topSpine.position.set(0, 0.042, -0.02);
+
+      const bottomKeel = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.028, 0.38), darkObsidianMat);
+      bottomKeel.position.set(0, -0.024, -0.02);
+
+      // 각진 외계 개머리판
+      const stockRear = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.084, 0.17), matteArmorMat);
+      stockRear.position.set(0, 0.002, 0.23);
+      const stockGlow = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.010, 0.13), crimsonCoreMat);
+      stockGlow.position.set(0, 0.008, 0.23);
+
+      // 2. 아웃로 시그니처 병렬 더블 배럴 (좌/우 2개 총열 + 중앙 붉은 플라즈마 레일 + 쐐기형 머즐)
+      const barrelLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.015, 0.46, 8), darkObsidianMat);
+      barrelLeft.rotation.x = Math.PI / 2;
+      barrelLeft.position.set(-0.017, 0.022, -0.44);
+
+      const barrelRight = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.015, 0.46, 8), darkObsidianMat);
+      barrelRight.rotation.x = Math.PI / 2;
+      barrelRight.position.set(0.017, 0.022, -0.44);
+
+      // 두 총열 사이를 잇는 진홍빛 플라즈마 코어 레일
+      const centerPlasmaRail = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.018, 0.44), crimsonCoreMat);
+      centerPlasmaRail.position.set(0, 0.022, -0.43);
+
+      // 더블 배럴 전용 와이드 소염기
+      const twinMuzzle = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.036, 0.085), matteArmorMat);
+      twinMuzzle.position.set(0, 0.022, -0.68);
+      const twinMuzzleGlow = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.014, 0.022), crimsonCoreMat);
+      twinMuzzleGlow.position.set(0, 0.022, -0.725);
+
+      // 3. 아락시스 쐐기형 스코프
+      const scopeGroup = new THREE.Group();
+      scopeGroup.position.set(0, 0.082, -0.02);
+
+      const scopeUpperHood = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.024, 0.26), matteArmorMat);
+      scopeUpperHood.position.set(0, 0.016, -0.01);
+      const scopeLowerHood = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.016, 0.22), darkObsidianMat);
+      scopeLowerHood.position.set(0, -0.016, -0.01);
+      const scopeSideL = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.040, 0.24), edgeTrimMat);
+      scopeSideL.position.set(-0.028, 0, -0.01);
+      scopeSideL.rotation.z = -0.22;
+      const scopeSideR = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.040, 0.24), edgeTrimMat);
+      scopeSideR.position.set(0.028, 0, -0.01);
+      scopeSideR.rotation.z = 0.22;
+
+      const scopeLensRim = new THREE.Mesh(new THREE.RingGeometry(0.014, 0.020, 6), crimsonCoreMat);
+      scopeLensRim.position.set(0, 0.002, 0.121);
+      const scopeGlass = new THREE.Mesh(
+        new THREE.CircleGeometry(0.014, 12),
+        new THREE.MeshBasicMaterial({ color: 0x1a0508 })
+      );
+      scopeGlass.position.set(0, 0.002, 0.120);
+      scopeGroup.add(scopeUpperHood, scopeLowerHood, scopeSideL, scopeSideR, scopeLensRim, scopeGlass);
+
+      // 4. 살아 움직이는 측면 외계 금속 비늘 장갑판 (4쌍)
+      const leftScales = [];
+      const rightScales = [];
+      for (let i = 0; i < 4; i++) {
+        const zPos = 0.10 - i * 0.082;
+        const scaleHeight = 0.058 - i * 0.004;
+
+        const lPivot = new THREE.Group();
+        lPivot.position.set(-0.032, 0.012, zPos);
+        const lPlate = new THREE.Mesh(new THREE.BoxGeometry(0.009, scaleHeight, 0.068), matteArmorMat);
+        lPlate.position.set(-0.003, 0, 0);
+        lPlate.rotation.y = 0.14;
+        const lGlowEdge = new THREE.Mesh(new THREE.BoxGeometry(0.004, scaleHeight * 0.72, 0.014), crimsonCoreMat);
+        lGlowEdge.position.set(0.002, 0, -0.030);
+        lPivot.add(lPlate, lGlowEdge);
+        group.add(lPivot);
+        leftScales.push(lPivot);
+
+        const rPivot = new THREE.Group();
+        rPivot.position.set(0.032, 0.012, zPos);
+        const rPlate = new THREE.Mesh(new THREE.BoxGeometry(0.009, scaleHeight, 0.068), matteArmorMat);
+        rPlate.position.set(0.003, 0, 0);
+        rPlate.rotation.y = -0.14;
+        const rGlowEdge = new THREE.Mesh(new THREE.BoxGeometry(0.004, scaleHeight * 0.72, 0.014), crimsonCoreMat);
+        rGlowEdge.position.set(-0.002, 0, -0.030);
+        rPivot.add(rPlate, rGlowEdge);
+        group.add(rPivot);
+        rightScales.push(rPivot);
+      }
+
+      group.add(
+        innerCore, breakLatch, topSpine, bottomKeel, stockRear, stockGlow,
+        barrelLeft, barrelRight, centerPlasmaRail, twinMuzzle, twinMuzzleGlow, scopeGroup
+      );
+
+      group.userData = {
+        leftScales,
+        rightScales,
+        crimsonCoreMat,
+        scaleOpenAmount: 0
+      };
       return group;
     }
 
@@ -2998,7 +2761,6 @@
       ghost: buildCompactPistolModel({ slideLen: 0.24, slideColor: 0x23262b, suppressor: true }),
       bandit: buildSheriffModel(),
       sheriff: buildSheriffModel(),
-      sheriff_neo_frontier: buildNeoFrontierSheriffModel(),
       stinger: buildSmgModel({ angledMag: true, bodyColor: 0x2b3038 }),
       spectre: buildSmgModel({ suppressor: true, bodyColor: 0x23272e }),
       bucky: buildShotgunModel({ short: false, bodyColor: 0x2d3238 }),
@@ -3011,6 +2773,7 @@
       vandal_champions2021: buildChampions2021VandalModel(),
       marshal: buildSniperModel({ bodyColor: 0x323840 }),
       outlaw: buildSniperModel({ doubleBarrel: true, bodyColor: 0x2c2829 }),
+      outlaw_araxys: buildAraxysOutlawModel(),
       operator: buildOperatorModel(),
       operator_araxys: buildAraxysOperatorModel(),
       ares: buildLmgModel({ bodyColor: 0x2c3138 }),
@@ -3020,8 +2783,8 @@
     };
 
     function getActiveModelForWeapon(wKey) {
-      if (wKey === 'sheriff' && equippedSkins.sheriff === 'neo_frontier') {
-        return models.sheriff_neo_frontier;
+      if (wKey === 'outlaw' && equippedSkins.outlaw === 'araxys') {
+        return models.outlaw_araxys;
       }
       if (wKey === 'operator' && equippedSkins.operator === 'araxys') {
         return models.operator_araxys;
@@ -3039,10 +2802,10 @@
     }
 
     window.toggleWeaponSkin = function(wKey) {
-      if (wKey === 'sheriff') {
-        equippedSkins.sheriff = equippedSkins.sheriff === 'neo_frontier' ? 'standard' : 'neo_frontier';
+      if (wKey === 'outlaw') {
+        equippedSkins.outlaw = equippedSkins.outlaw === 'araxys' ? 'standard' : 'araxys';
         updateHUD();
-        if (getCurrentWeaponKey() === 'sheriff') updateGunVisual();
+        if (getCurrentWeaponKey() === 'outlaw') updateGunVisual();
       } else if (wKey === 'operator') {
         equippedSkins.operator = equippedSkins.operator === 'araxys' ? 'standard' : 'araxys';
         updateHUD();
@@ -3071,12 +2834,6 @@
         kModel.userData.spinAngle = 0;
         kModel.userData.trailMat.opacity = 0;
       }
-      const nfModel = models.sheriff_neo_frontier;
-      if (nfModel && nfModel.userData.spinPivot) {
-        nfModel.userData.spinPivot.rotation.set(0, 0, 0);
-        nfModel.userData.spinAngle = 0;
-        nfModel.userData.spinTrailMat.opacity = 0;
-      }
       while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
       gunGroup.add(getActiveModelForWeapon(getCurrentWeaponKey()));
       gunGroup.visible = true;
@@ -3086,8 +2843,6 @@
       swapAnimTimer = 0.34;
       if (getCurrentWeaponKey() === 'melee' && equippedSkins.melee === 'champions2021') {
         playKarambitWhooshSound(1.15);
-      } else if (getCurrentWeaponKey() === 'sheriff' && equippedSkins.sheriff === 'neo_frontier') {
-        playNeoFrontierSpinSound();
       }
     }
     updateGunVisual();
@@ -3104,7 +2859,7 @@
       document.getElementById('crosshair').style.display = zoomLevel > 0 ? 'none' : 'block';
       document.getElementById('adsReticle').style.display = isHolo ? 'block' : 'none';
       scopeEl.style.display = isSniper ? 'block' : 'none';
-      scopeEl.classList.toggle('araxys-scope', isSniper && getCurrentWeaponKey() === 'operator' && equippedSkins.operator === 'araxys');
+      scopeEl.classList.toggle('araxys-scope', isSniper && ((getCurrentWeaponKey() === 'operator' && equippedSkins.operator === 'araxys') || (getCurrentWeaponKey() === 'outlaw' && equippedSkins.outlaw === 'araxys')));
       gunGroup.visible = !isSniper;
     }
 
@@ -3114,16 +2869,15 @@
       const dist = startPos.distanceTo(endPos);
       if (dist < 0.2) return;
 
-      const isNeoFrontier = isOperator === 'neo_frontier';
       const isAraxys = isOperator === 'araxys';
-      const thickness = isAraxys ? 0.036 : (isNeoFrontier ? 0.022 : (isOperator ? 0.028 : 0.014));
+      const thickness = isAraxys ? 0.036 : (isOperator ? 0.028 : 0.014);
       const tracerGeo = new THREE.CylinderGeometry(thickness, thickness, dist, 8);
       tracerGeo.rotateX(Math.PI / 2);
 
       const tracerMat = new THREE.MeshBasicMaterial({
-        color: isNeoFrontier ? 0x18ff92 : (isAraxys ? 0xff2438 : (isOperator ? 0xffaa33 : 0xffe066)),
+        color: isAraxys ? 0xff2438 : (isOperator ? 0xffaa33 : 0xffe066),
         transparent: true,
-        opacity: (isAraxys || isNeoFrontier) ? 0.96 : 0.92
+        opacity: isAraxys ? 0.96 : 0.92
       });
 
       const tracerMesh = new THREE.Mesh(tracerGeo, tracerMat);
@@ -3465,180 +3219,6 @@
       });
     }
 
-    function playSynthNeoFrontierFinisher() {
-      initAudio();
-      if (!audioCtx) return;
-      const now = audioCtx.currentTime;
-      // 서부극 황동 현상수배 종소리 + 하이테크 에메랄드 홀로그램 스캔 사운드
-      const bellNotes = [293.66, 349.23, 440.00, 587.33];
-      bellNotes.forEach((freq, idx) => {
-        const st = now + idx * 0.24;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, st);
-        gain.gain.setValueAtTime(0.001, st);
-        gain.gain.linearRampToValueAtTime(0.24, st + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, st + 1.5);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(st); osc.stop(st + 1.55);
-      });
-
-      const holoOsc = audioCtx.createOscillator();
-      const holoGain = audioCtx.createGain();
-      holoOsc.type = 'sawtooth';
-      holoOsc.frequency.setValueAtTime(140, now + 0.35);
-      holoOsc.frequency.exponentialRampToValueAtTime(520, now + 1.1);
-      holoOsc.frequency.linearRampToValueAtTime(320, now + 4.5);
-      const bp = audioCtx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(900, now + 0.35);
-      bp.Q.value = 3.2;
-      holoGain.gain.setValueAtTime(0.001, now + 0.35);
-      holoGain.gain.linearRampToValueAtTime(0.11, now + 0.9);
-      holoGain.gain.exponentialRampToValueAtTime(0.001, now + 4.8);
-      holoOsc.connect(bp); bp.connect(holoGain); holoGain.connect(audioCtx.destination);
-      holoOsc.start(now + 0.35); holoOsc.stop(now + 4.9);
-    }
-
-    function createWantedPosterTexture() {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 768;
-      const ctx = canvas.getContext('2d');
-
-      ctx.fillStyle = 'rgba(4, 24, 14, 0.88)';
-      ctx.fillRect(0, 0, 512, 768);
-
-      // 이중 네온 테두리
-      ctx.strokeStyle = '#18ff92';
-      ctx.lineWidth = 10;
-      ctx.strokeRect(22, 22, 468, 724);
-      ctx.lineWidth = 3;
-      ctx.strokeRect(38, 38, 436, 708 - 16);
-
-      // 상단 WANTED & DEAD OR ALIVE
-      ctx.fillStyle = '#52ffb2';
-      ctx.font = '900 76px Impact, Arial Black, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('WANTED', 256, 128);
-
-      ctx.font = 'bold 24px Segoe UI, sans-serif';
-      ctx.fillStyle = '#a8ffd6';
-      ctx.fillText('DEAD OR ALIVE', 256, 166);
-
-      // 중앙 초상화 홀로그램 프레임 & X 마크
-      ctx.strokeStyle = '#18ff92';
-      ctx.lineWidth = 5;
-      ctx.strokeRect(86, 195, 340, 330);
-
-      // 홀로그램 스캔라인
-      ctx.fillStyle = 'rgba(24, 255, 146, 0.14)';
-      for (let y = 200; y < 520; y += 12) {
-        ctx.fillRect(90, y, 332, 4);
-      }
-
-      // 커다란 네온 X 표식 (트레일러 0:22 장면 재현)
-      ctx.strokeStyle = '#18ff92';
-      ctx.shadowColor = '#00ff88';
-      ctx.shadowBlur = 22;
-      ctx.lineWidth = 26;
-      ctx.beginPath();
-      ctx.moveTo(145, 250);
-      ctx.lineTo(367, 472);
-      ctx.moveTo(367, 250);
-      ctx.lineTo(145, 472);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // 하단 현상금 CASH REWARD $20,000
-      ctx.fillStyle = '#a8ffd6';
-      ctx.font = 'bold 28px Segoe UI, sans-serif';
-      ctx.fillText('CASH REWARD', 256, 588);
-
-      ctx.fillStyle = '#3dff9e';
-      ctx.font = '900 74px Impact, Arial Black, sans-serif';
-      ctx.fillText('$20,000', 256, 672);
-
-      const tex = new THREE.CanvasTexture(canvas);
-      return tex;
-    }
-
-    function triggerNeoFrontierFinisher(pos) {
-      clearChampionsFinisher();
-      stopFinisherAudio();
-      playSynthNeoFrontierFinisher();
-
-      const group = new THREE.Group();
-      group.position.set(pos.x, 0, pos.z);
-
-      // 1. 바닥 에메랄드 보안관 홀로그램 원진
-      const baseRingMat = new THREE.MeshBasicMaterial({
-        color: 0x18ff92,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.92
-      });
-      const baseRing = new THREE.Mesh(new THREE.RingGeometry(1.8, 2.1, 24), baseRingMat);
-      baseRing.rotation.x = -Math.PI / 2;
-      baseRing.position.y = 0.06;
-      group.add(baseRing);
-
-      // 2. 위로 솟구치는 에메랄드 홀로그램 프로젝션 기둥
-      const beamMat = new THREE.MeshBasicMaterial({
-        color: 0x18ff92,
-        transparent: true,
-        opacity: 0.34,
-        side: THREE.DoubleSide
-      });
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.9, 10, 16, 1, true), beamMat);
-      beam.position.y = 5.0;
-      group.add(beam);
-
-      // 3. 공중에 떠오르는 초대형 WANTED $20,000 홀로그램 포스터 (트레일러 0:21~0:22 재현)
-      const posterTex = createWantedPosterTexture();
-      const posterMat = new THREE.MeshBasicMaterial({
-        map: posterTex,
-        transparent: true,
-        opacity: 0.95,
-        side: THREE.DoubleSide
-      });
-      const posterMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.8), posterMat);
-      posterMesh.position.set(0, 3.2, 0);
-      group.add(posterMesh);
-
-      // 4. 주변 회전하는 네온 에너지 링
-      const orbitRingMat = new THREE.MeshBasicMaterial({
-        color: 0x52ffb2,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.78
-      });
-      const orbitRing = new THREE.Mesh(new THREE.RingGeometry(2.3, 2.45, 28), orbitRingMat);
-      orbitRing.rotation.x = Math.PI / 2;
-      orbitRing.position.y = 1.4;
-      group.add(orbitRing);
-
-      scene.add(group);
-
-      scene.background = new THREE.Color(0x092418);
-      if (scene.fog) scene.fog.color.setHex(0x092418);
-
-      activeFinisher = {
-        edition: 'neo_frontier',
-        group,
-        baseRing,
-        baseRingMat,
-        beamMat,
-        posterMesh,
-        posterMat,
-        orbitRing,
-        orbitRingMat,
-        timer: 0,
-        duration: 6.5
-      };
-    }
-
     function triggerAraxysFinisher(pos) {
       clearChampionsFinisher();
       stopFinisherAudio();
@@ -3963,27 +3543,6 @@
       const f = activeFinisher;
       f.timer += dt;
 
-      if (f.edition === 'neo_frontier') {
-        // 포스터가 플레이어 카메라를 향해 서서히 공중 부양하며 홀로그램처럼 흔들림
-        f.posterMesh.lookAt(camera.position.x, f.posterMesh.position.y, camera.position.z);
-        f.posterMesh.position.y = 2.9 + Math.sin(f.timer * 3.0) * 0.18 + Math.min(0.8, f.timer * 0.4);
-        f.orbitRing.rotation.z += dt * 2.2;
-        f.orbitRing.position.y = 0.8 + ((f.timer * 1.6) % 4.5);
-        f.beamMat.opacity = 0.28 + Math.sin(f.timer * 18) * 0.10;
-
-        if (f.timer > f.duration - 1.1) {
-          const fade = Math.max(0, (f.duration - f.timer) / 1.1);
-          f.posterMat.opacity = 0.95 * fade;
-          f.beamMat.opacity *= fade;
-          f.baseRingMat.opacity = 0.92 * fade;
-          f.orbitRingMat.opacity = 0.78 * fade;
-        }
-        if (f.timer >= f.duration) {
-          clearChampionsFinisher();
-        }
-        return;
-      }
-
       if (f.edition === 'araxys') {
         // 바닥 외계 마법진 회전 & 상공 차원 균열 회전
         f.outerRing.rotation.z += dt * 1.4;
@@ -4227,9 +3786,7 @@
       updateScoreboard();
 
       // 마지막 적 처치 시 전용 마무리 모션 발동!
-      if (usedChampEdition === 'neo_frontier' && killerPos) {
-        triggerNeoFrontierFinisher(killerPos);
-      } else if (usedChampEdition === 'araxys' && killerPos) {
+      if (usedChampEdition === 'araxys' && killerPos) {
         triggerAraxysFinisher(killerPos);
       } else if (usedChampEdition === '2024' && killerPos) {
         triggerChampions2024Finisher(killerPos);
@@ -4943,12 +4500,12 @@
       document.getElementById('regenText').innerText = currentShieldKey === 'regen' ? `재생 보호막 (예비: ${Math.ceil(shieldReserve)})` : `${SHIELDS[currentShieldKey].name}`;
       document.getElementById('creditText').innerText = credits;
       document.getElementById('shopCredits').innerText = credits;
-      const isSheriffNeo = equippedSkins.sheriff === 'neo_frontier';
       const isMeleeChamp = equippedSkins.melee === 'champions2021';
       const isPhantom2024 = equippedSkins.phantom === 'champions2024';
       const isOperatorAraxys = equippedSkins.operator === 'araxys';
+      const isOutlawAraxys = equippedSkins.outlaw === 'araxys';
       document.getElementById('weaponText').innerText =
-        (key === 'sheriff' && isSheriffNeo) ? '네오 프런티어 셰리프' :
+        (key === 'outlaw' && isOutlawAraxys) ? '아락시스 아웃로' :
         (key === 'operator' && isOperatorAraxys) ? '아락시스 오퍼레이터' :
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
         (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
@@ -4965,14 +4522,14 @@
 
       ['classic', 'shorty', 'frenzy', 'ghost', 'bandit', 'sheriff', 'stinger', 'spectre', 'bucky', 'judge', 'bulldog', 'guardian', 'phantom', 'vandal', 'marshal', 'outlaw', 'operator', 'ares', 'odin'].forEach(k => { const el = document.getElementById('buy-' + k); if (el) el.classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k); });
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
-      const shBadge = document.getElementById('sheriffSkinBadge');
-      const shBtn = document.getElementById('toggleSheriffSkinBtn');
-      if (shBadge) {
-        shBadge.innerText = isSheriffNeo ? '네오 프런티어' : '기본 스킨';
-        shBadge.style.background = isSheriffNeo ? '#093629' : '#333';
-        shBadge.style.color = isSheriffNeo ? '#2dffc4' : '#ccc';
+      const outBadge = document.getElementById('outlawSkinBadge');
+      const outBtn = document.getElementById('toggleOutlawSkinBtn');
+      if (outBadge) {
+        outBadge.innerText = isOutlawAraxys ? '아락시스 (블랙)' : '기본 스킨';
+        outBadge.style.background = isOutlawAraxys ? '#3b0a12' : '#333';
+        outBadge.style.color = isOutlawAraxys ? '#ff4d5e' : '#ccc';
       }
-      if (shBtn) shBtn.innerText = isSheriffNeo ? '기본 스킨으로 변경' : '네오 프런티어 장착';
+      if (outBtn) outBtn.innerText = isOutlawAraxys ? '기본 스킨으로 변경' : '아락시스 장착';
 
       const opBadge = document.getElementById('operatorSkinBadge');
       const opBtn = document.getElementById('toggleOperatorSkinBtn');
@@ -5247,11 +4804,8 @@
       } else {
         gunGroup.position.z = zoomLevel > 0 ? -0.22 : -0.32;
         gunGroup.rotation.x = zoomLevel > 0 ? 0.06 : 0.14;
-        if (key === 'sheriff') {
-          const activeSh = getActiveModelForWeapon('sheriff');
-          if (activeSh && activeSh.userData.cylinder) {
-            activeSh.userData.cylinder.rotation.z += Math.PI / 3;
-          }
+        if (key === 'sheriff' && models.sheriff.userData.cylinder) {
+          models.sheriff.userData.cylinder.rotation.z += Math.PI / 3;
         }
       }
 
@@ -5330,10 +4884,9 @@
           if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
           }
-          const isNeoSheriff = (key === 'sheriff' && equippedSkins.sheriff === 'neo_frontier');
-          const isAraxysOp = (key === 'operator' && equippedSkins.operator === 'araxys');
+          const isAraxysOp = (key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys');
           const isChampSkin = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'phantom' && equippedSkins.phantom === 'champions2024');
-          spawnBulletTracer(muzzleWorld, tracerEnd, isNeoSheriff ? 'neo_frontier' : (isAraxysOp ? 'araxys' : (key === 'operator' || isChampSkin)));
+          spawnBulletTracer(muzzleWorld, tracerEnd, isAraxysOp ? 'araxys' : (key === 'operator' || isChampSkin));
         }
 
         const hitTargetsSet = new Set();
@@ -5414,13 +4967,11 @@
               const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
               const remainingEnemies = enemyTeam === 'red' ? redAlive : blueAlive;
               if (remainingEnemies === 0) {
-                const usedChamp = (key === 'sheriff' && equippedSkins.sheriff === 'neo_frontier')
-                  ? 'neo_frontier'
-                  : ((key === 'operator' && equippedSkins.operator === 'araxys')
-                    ? 'araxys'
-                    : ((key === 'phantom' && equippedSkins.phantom === 'champions2024')
-                      ? '2024'
-                      : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false)));
+                const usedChamp = ((key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys'))
+                  ? 'araxys'
+                  : ((key === 'phantom' && equippedSkins.phantom === 'champions2024')
+                    ? '2024'
+                    : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false));
                 endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
               }
             }
@@ -5435,9 +4986,7 @@
         addKillFeed(multiScoreCount >= 2 ? `[${w.name}] 관통 ${multiScoreCount}연속 득점!${hsTag}` : `[${w.name}] 훈련봇 타겟 완료${hsTag}`, multiScoreCount >= 2 || anyHeadshotKill);
         if (currentMap === 'range' && currentStreak > 0 && currentStreak % 5 === 0) {
           const finPos = lastFinisherPos || hits[0].point;
-          if (key === 'sheriff' && equippedSkins.sheriff === 'neo_frontier') {
-            triggerNeoFrontierFinisher(finPos);
-          } else if (key === 'operator' && equippedSkins.operator === 'araxys') {
+          if ((key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys')) {
             triggerAraxysFinisher(finPos);
           } else if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
             triggerChampions2024Finisher(finPos);
@@ -5723,13 +5272,6 @@
           gunGroup.rotation.set(0, 0, 0);
           karambitModel.userData.spinPivot.rotation.z = -progress * Math.PI * 2;
           karambitModel.userData.trailMat.opacity = Math.sin(progress * Math.PI) * 0.55;
-        } else if (curKey === 'sheriff' && equippedSkins.sheriff === 'neo_frontier' && models.sheriff_neo_frontier) {
-          // 꺼낼 때 방아쇠울 축으로 카우보이 건스핀 회전!
-          const nf = models.sheriff_neo_frontier;
-          gunGroup.position.set(0.26, -0.20 - progress * 0.14, -0.42 + progress * 0.08);
-          gunGroup.rotation.set(0, 0, 0);
-          nf.userData.spinPivot.rotation.x = progress * Math.PI * 2;
-          nf.userData.spinTrailMat.opacity = Math.sin(progress * Math.PI) * 0.52;
         } else if (curKey === 'melee') {
           gunGroup.position.set(0.26, -0.22 - progress * 0.25, -0.42 + progress * 0.15);
           gunGroup.rotation.set(-progress * 1.4, progress * 0.8, progress * Math.PI * 2);
@@ -5839,7 +5381,7 @@
             karambitModel.userData.whooshAccum = 0;
             playKarambitWhooshSound(0.95 + Math.random() * 0.2);
           }
-        } else if (curKey === 'operator' && equippedSkins.operator === 'araxys') {
+        } else if ((curKey === 'operator' && equippedSkins.operator === 'araxys') || (curKey === 'outlaw' && equippedSkins.outlaw === 'araxys')) {
           // 아락시스 오퍼레이터 자세히 보기(Y키): 총신을 위로 들어올리며 측면 비늘 장갑판이 활짝 펴짐!
           gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.12, 0.14);
           gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.10 + Math.sin(inspectTimer * 2.4) * 0.008, 0.14);
@@ -5850,25 +5392,6 @@
           if (inspectTimer > 4.2) {
             isInspecting = false;
             inspectTimer = 0;
-          }
-        } else if (curKey === 'sheriff' && equippedSkins.sheriff === 'neo_frontier' && models.sheriff_neo_frontier) {
-          // 네오 프런티어 셰리프 Y키 자세히 보기: 총을 들어올려 검지로 카우보이 건스핀 무한 회전!
-          const nf = models.sheriff_neo_frontier;
-          gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.16, 0.16);
-          gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.12 + Math.sin(inspectTimer * 4.0) * 0.01, 0.16);
-          gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.36, 0.16);
-          gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0.08, 0.16);
-          gunGroup.rotation.y = THREE.MathUtils.lerp(gunGroup.rotation.y, 0.35, 0.16);
-          gunGroup.rotation.z = THREE.MathUtils.lerp(gunGroup.rotation.z, -0.12, 0.16);
-
-          const spinSpd = 12.5;
-          nf.userData.spinAngle += spinSpd * dt;
-          nf.userData.spinPivot.rotation.x = nf.userData.spinAngle;
-          nf.userData.spinTrailMat.opacity = 0.45 + Math.sin(inspectTimer * 16) * 0.15;
-          nf.userData.spinSoundAccum += spinSpd * dt;
-          if (nf.userData.spinSoundAccum >= Math.PI * 2) {
-            nf.userData.spinSoundAccum = 0;
-            playNeoFrontierSpinSound();
           }
         } else {
           gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.14, 0.15);
@@ -5914,46 +5437,35 @@
         }
       }
 
-      // 네오 프런티어 셰리프 스핀 복귀 & 에메랄드 코어 맥동 애니메이션
-      if (neoFrontierAuraTimer > 0) neoFrontierAuraTimer -= dt;
-      const nfModelIdle = models.sheriff_neo_frontier;
-      if (nfModelIdle && nfModelIdle.userData.spinPivot) {
-        if (!(isInspecting && curKey === 'sheriff' && equippedSkins.sheriff === 'neo_frontier') && swapAnimTimer <= 0) {
-          const curX = nfModelIdle.userData.spinPivot.rotation.x;
-          const nearestTurn = Math.round(curX / (Math.PI * 2)) * (Math.PI * 2);
-          nfModelIdle.userData.spinPivot.rotation.x = THREE.MathUtils.lerp(curX, nearestTurn, 0.25);
-          nfModelIdle.userData.spinAngle = nfModelIdle.userData.spinPivot.rotation.x;
-          nfModelIdle.userData.spinTrailMat.opacity = THREE.MathUtils.lerp(nfModelIdle.userData.spinTrailMat.opacity, 0, 0.25);
-        }
-        const nfPulse = Math.sin(performance.now() * 0.01) * 0.25;
-        nfModelIdle.userData.emeraldGlowMat.emissiveIntensity = neoFrontierAuraTimer > 0 ? (2.1 + nfPulse) : (1.35 + nfPulse * 0.4);
-      }
-
-      // 아락시스 오퍼레이터 비늘(Scales) 개방 & 크림슨 코어 발광 애니메이션
+      // 아락시스 오퍼레이터 & 아락시스 아웃로 비늘(Scales) 개방 & 크림슨 코어 발광 애니메이션
       if (araxysAuraTimer > 0) araxysAuraTimer -= dt;
-      const araxysModel = models.operator_araxys;
-      if (araxysModel && araxysModel.userData.leftScales) {
-        const isAraxysInspecting = (isInspecting && curKey === 'operator' && equippedSkins.operator === 'araxys');
-        const targetOpen = isAraxysInspecting ? 1.0 : (isReloading && curKey === 'operator' ? 0.55 : (araxysAuraTimer > 0 ? 0.35 : 0.0));
-        araxysModel.userData.scaleOpenAmount = THREE.MathUtils.lerp(araxysModel.userData.scaleOpenAmount, targetOpen, 0.16);
-        const openAmt = araxysModel.userData.scaleOpenAmount;
+      [
+        { m: models.operator_araxys, wKey: 'operator', sKey: equippedSkins.operator, baseX: 0.030 },
+        { m: models.outlaw_araxys, wKey: 'outlaw', sKey: equippedSkins.outlaw, baseX: 0.032 }
+      ].forEach(({ m: araxysModel, wKey, sKey, baseX }) => {
+        if (araxysModel && araxysModel.userData.leftScales) {
+          const isAraxysInspecting = (isInspecting && curKey === wKey && sKey === 'araxys');
+          const targetOpen = isAraxysInspecting ? 1.0 : (isReloading && curKey === wKey ? 0.55 : (araxysAuraTimer > 0 && curKey === wKey ? 0.35 : 0.0));
+          araxysModel.userData.scaleOpenAmount = THREE.MathUtils.lerp(araxysModel.userData.scaleOpenAmount, targetOpen, 0.16);
+          const openAmt = araxysModel.userData.scaleOpenAmount;
 
-        araxysModel.userData.leftScales.forEach((sc, idx) => {
-          const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
-          sc.rotation.y = -(openAmt * 0.62 + wave);
-          sc.rotation.z = openAmt * 0.24;
-          sc.position.x = -0.030 - openAmt * 0.016;
-        });
-        araxysModel.userData.rightScales.forEach((sc, idx) => {
-          const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
-          sc.rotation.y = (openAmt * 0.62 + wave);
-          sc.rotation.z = -openAmt * 0.24;
-          sc.position.x = 0.030 + openAmt * 0.016;
-        });
+          araxysModel.userData.leftScales.forEach((sc, idx) => {
+            const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
+            sc.rotation.y = -(openAmt * 0.62 + wave);
+            sc.rotation.z = openAmt * 0.24;
+            sc.position.x = -baseX - openAmt * 0.016;
+          });
+          araxysModel.userData.rightScales.forEach((sc, idx) => {
+            const wave = Math.sin(performance.now() * 0.008 - idx * 0.65) * 0.08 * openAmt;
+            sc.rotation.y = (openAmt * 0.62 + wave);
+            sc.rotation.z = -openAmt * 0.24;
+            sc.position.x = baseX + openAmt * 0.016;
+          });
 
-        const pulse = Math.sin(performance.now() * 0.012) * 0.25;
-        araxysModel.userData.crimsonCoreMat.emissiveIntensity = (isAraxysInspecting || araxysAuraTimer > 0) ? (1.85 + pulse) : 1.15;
-      }
+          const pulse = Math.sin(performance.now() * 0.012) * 0.25;
+          araxysModel.userData.crimsonCoreMat.emissiveIntensity = (isAraxysInspecting || (araxysAuraTimer > 0 && curKey === wKey)) ? (1.85 + pulse) : 1.15;
+        }
+      });
 
       // 2024 챔피언스 팬텀 코어 & 오라 애니메이션
       if (champions2024AuraTimer > 0) champions2024AuraTimer -= dt;
