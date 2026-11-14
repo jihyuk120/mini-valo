@@ -1785,6 +1785,30 @@
 
     let credits = 800;
     let playerStats = { k: 0, d: 0, a: 0 };
+    let botStatsMap = {};
+    let playerRoundKills = 0;
+
+    function getBotStat(nick) {
+      if (!botStatsMap[nick]) botStatsMap[nick] = { k: 0, d: 0, a: 0, roundKills: 0 };
+      return botStatsMap[nick];
+    }
+
+    function playAceAnnouncerSound() {
+      const candidates = [
+        'ace.mp3',
+        './ace.mp3',
+        '아나운서 _ 용감한 위키 _ 팬덤 - Chrome 2026-11-15 01-46-08.mp3',
+        './아나운서 _ 용감한 위키 _ 팬덤 - Chrome 2026-11-15 01-46-08.mp3'
+      ];
+      let idx = 0;
+      const tryPlay = () => {
+        if (idx >= candidates.length) return;
+        const audio = new Audio(encodeURI(candidates[idx++]));
+        audio.volume = 0.9;
+        audio.play().catch(() => tryPlay());
+      };
+      tryPlay();
+    }
 
     function renderTabLeaderboard() {
       const allyBody = document.getElementById('lbAllyBody');
@@ -4928,6 +4952,8 @@
     function startBrawlRound(num) {
       roundNumber = num;
       isMatchOver = false;
+      playerRoundKills = 0;
+      Object.values(botStatsMap).forEach(s => { s.roundKills = 0; });
       resetAscentMapGimmicks();
 
       let halftimeNotice = '';
@@ -5040,13 +5066,56 @@
         return;
       }
 
+      let aceAchiever = null;
+      const myNickAce = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+      if (playerRoundKills >= 5) {
+        aceAchiever = myNickAce;
+      } else {
+        for (const [nick, st] of Object.entries(botStatsMap)) {
+          if (st.roundKills >= 5) {
+            aceAchiever = nick;
+            break;
+          }
+        }
+      }
+
       const winLabel = winningTeam === 'red' ? 'GREEN TEAM (공격) 라운드 승리!' : 'RED TEAM (수비) 라운드 승리!';
       const winColor = winningTeam === 'red' ? '#10b981' : '#ff4655';
       const reasonPrefix = customReason ? `[${customReason}] ` : '';
       const nextHint = roundNumber === 12
         ? `${reasonPrefix}다음 라운드(R13) 공수 교대가 진행됩니다!`
         : `${reasonPrefix}라운드 보상 +${roundReward.toLocaleString()} ¤ (보유: ${credits.toLocaleString()} ¤)`;
-      showRoundBanner(winLabel, nextHint, winColor, 4800);
+
+      if (aceAchiever) {
+        playAceAnnouncerSound();
+        const banner = document.getElementById('roundCenterBanner');
+        const titleEl = document.getElementById('roundBannerTitle');
+        const subEl = document.getElementById('roundBannerSub');
+        if (banner && titleEl && subEl) {
+          banner.style.top = '46%';
+          titleEl.style.fontSize = '84px';
+          titleEl.style.letterSpacing = '12px';
+          titleEl.style.textShadow = '0 0 28px rgba(255, 204, 0, 0.95), 0 6px 24px rgba(0, 0, 0, 0.95)';
+          subEl.style.fontSize = '24px';
+          showRoundBanner(
+            'ACE!',
+            `${aceAchiever} — 적 팀 전원(5명) 처치! | ${nextHint}`,
+            '#ffcc00',
+            4800
+          );
+          setTimeout(() => {
+            banner.style.top = '22%';
+            titleEl.style.fontSize = '44px';
+            titleEl.style.letterSpacing = '4px';
+            titleEl.style.textShadow = '0 4px 18px rgba(0,0,0,0.9)';
+            subEl.style.fontSize = '18px';
+          }, 4900);
+        } else {
+          showRoundBanner('ACE!', `${aceAchiever} — 적 팀 전원(5명) 처치! | ${nextHint}`, '#ffcc00', 4800);
+        }
+      } else {
+        showRoundBanner(winLabel, nextHint, winColor, 4800);
+      }
     }
 
     function countAliveTeams() {
@@ -5431,6 +5500,12 @@
       };
 
       scene.add(botGroup);
+      {
+        const saved = getBotStat(botGroup.userData.nick);
+        botGroup.userData.k = saved.k;
+        botGroup.userData.d = saved.d;
+        botGroup.userData.a = saved.a;
+      }
       brawlBots.push(botGroup);
       brawlBotHitboxes.push(legs, torso, head, visor);
       spawnBrawlBot(botGroup);
@@ -5592,8 +5667,13 @@
                   bd.k = (bd.k || 0) + 1;
                   bd.credits = Math.min(MAX_CREDITS, (bd.credits || 800) + 200);
                   tbd.d = (tbd.d || 0) + 1;
+                  const atkStat = getBotStat(bd.nick);
+                  atkStat.k += 1;
+                  atkStat.roundKills += 1;
+                  getBotStat(tbd.nick).d += 1;
                   bestTarget.bot.visible = false;
                   addKillFeed(`${bd.nick} [${w.name}] ➔ ${tbd.nick}${isHeadHit ? ' [헤드샷]' : ''}`, false);
+                  if (document.getElementById('tabLeaderboard').style.display === 'block') renderTabLeaderboard();
                 }
               }
             }
@@ -5946,6 +6026,15 @@
         const killerBot = brawlBots.find(b => b.userData.nick === attackerNick);
         if (killerBot) {
           killerBot.userData.k = (killerBot.userData.k || 0) + 1;
+        }
+        if (attackerNick) {
+          const kStat = getBotStat(attackerNick);
+          kStat.k += 1;
+          kStat.roundKills += 1;
+        }
+        if (document.getElementById('tabLeaderboard').style.display === 'block') renderTabLeaderboard();
+        if (killerBot) {
+          killerBot.userData.k = (killerBot.userData.k || 0) + 1;
           killerBot.userData.credits = Math.min(MAX_CREDITS, (killerBot.userData.credits || 800) + 200);
         }
         tagSlowMultiplier = 1.0;
@@ -6018,6 +6107,8 @@
         redScore = 0;
         blueScore = 0;
         playerStats = { k: 0, d: 0, a: 0 };
+        botStatsMap = {};
+        playerRoundKills = 0;
         updateScoreboard();
         startBrawlRound(1);
         return;
@@ -6845,7 +6936,10 @@
               const myNick = document.getElementById('nickInput').value || '플레이어';
               const isHead = part === 'head';
               playerStats.k += 1;
+              playerRoundKills += 1;
               bd.d = (bd.d || 0) + 1;
+              getBotStat(bd.nick).d += 1;
+              if (document.getElementById('tabLeaderboard').style.display === 'block') renderTabLeaderboard();
               credits = Math.min(MAX_CREDITS, credits + 200);
               updateHUD();
               triggerScoreStreak(1, isHead);
