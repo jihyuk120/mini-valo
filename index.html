@@ -132,7 +132,7 @@
     </div>
 
     <p style="color:#999; font-size:12px; margin-top:14px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | 우클릭: 줌/칼 강공격 | F: 철문 개폐 / 훈련봇 무빙
+      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | TAB: 전황표 | F: 상호작용(철문·스파이크·무기 줍기)
     </p>
   </div>
 
@@ -347,6 +347,113 @@
   </div>
   <div id="killfeed"></div>
 
+
+  <style>
+    #tabLeaderboard {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 820px;
+      max-width: 94vw;
+      background: rgba(12, 20, 29, 0.94);
+      border: 1px solid rgba(0, 255, 204, 0.45);
+      border-top: 3px solid #00ffcc;
+      border-radius: 8px;
+      padding: 18px 22px;
+      color: #ece8e1;
+      z-index: 25;
+      display: none;
+      pointer-events: none;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.78);
+    }
+    .lb-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      font-weight: bold;
+    }
+    .lb-team-title {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      padding: 6px 10px;
+      margin-top: 6px;
+      border-radius: 4px;
+    }
+    .lb-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .lb-table th {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 11px;
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .lb-table th:first-child, .lb-table td:first-child {
+      text-align: left;
+      padding-left: 12px;
+    }
+    .lb-table td {
+      text-align: center;
+      padding: 7px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-weight: 600;
+    }
+    .lb-row-me {
+      background: rgba(255, 204, 0, 0.14) !important;
+      color: #ffe066;
+    }
+    .lb-row-dead {
+      opacity: 0.48;
+    }
+    .lb-status-alive {
+      color: #10b981;
+      font-weight: bold;
+    }
+    .lb-status-dead {
+      color: #ff4655;
+      font-weight: bold;
+    }
+  </style>
+  <div id="tabLeaderboard">
+    <div class="lb-header">
+      <span style="color:#00ffcc; font-size:16px;">MINI-VALO 전황표 (TAB)</span>
+      <span id="lbMatchInfo" style="color:#ffcc00; font-size:13px;">일반전 · 13선승</span>
+    </div>
+    <div id="lbAllyTitle" class="lb-team-title" style="background:rgba(16,185,129,0.18); color:#10b981;">아군 (ALLY)</div>
+    <table class="lb-table">
+      <thead>
+        <tr>
+          <th style="width:34%;">플레이어</th>
+          <th style="width:22%;">K / D / A</th>
+          <th style="width:22%;">보유 크레딧</th>
+          <th style="width:22%;">생존 여부</th>
+        </tr>
+      </thead>
+      <tbody id="lbAllyBody"></tbody>
+    </table>
+    <div id="lbEnemyTitle" class="lb-team-title" style="background:rgba(255,70,85,0.18); color:#ff4655;">적군 (ENEMY)</div>
+    <table class="lb-table" style="margin-bottom:0;">
+      <thead>
+        <tr>
+          <th style="width:34%;">플레이어</th>
+          <th style="width:22%;">K / D / A</th>
+          <th style="width:22%;">보유 크레딧</th>
+          <th style="width:22%;">생존 여부</th>
+        </tr>
+      </thead>
+      <tbody id="lbEnemyBody"></tbody>
+    </table>
+  </div>
+
   <div id="hud">
     <div class="hud-box">
       <span class="hp-val" id="hpText">100</span>
@@ -355,7 +462,7 @@
     </div>
     <div class="hud-box" style="text-align:center;">
       모드: <span id="mapNameText" style="color:#ffcc00;">일반전 (13선승)</span> | 크레딧: <span id="creditText" style="color:#00ffcc;">800</span> ¤<br>
-      <span style="font-size:13px; color:#ccc;">대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span> | 봇(F): <span id="botModeText" style="color:#ffcc00;">고정</span></span>
+      <span style="font-size:13px; color:#ccc;">대시(E): <span id="dashStatus" style="color:#00ffcc;">준비완료</span> | 상호작용(F) · 전황표(TAB)</span>
     </div>
     <div class="hud-box" style="text-align:right;">
       <span id="weaponText" style="color:#ff4655; font-size:18px;">셰리프</span>
@@ -1677,6 +1784,92 @@
     };
 
     let credits = 800;
+    let playerStats = { k: 0, d: 0, a: 0 };
+
+    function renderTabLeaderboard() {
+      const allyBody = document.getElementById('lbAllyBody');
+      const enemyBody = document.getElementById('lbEnemyBody');
+      if (!allyBody || !enemyBody) return;
+
+      const myNick = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+      const allySideName = myTeam === 'red' ? '공격팀 (GREEN)' : '수비팀 (RED)';
+      const enemySideName = myTeam === 'red' ? '수비팀 (RED)' : '공격팀 (GREEN)';
+      document.getElementById('lbAllyTitle').innerText = `아군 · ${allySideName}`;
+      document.getElementById('lbEnemyTitle').innerText = `적군 · ${enemySideName}`;
+      document.getElementById('lbMatchInfo').innerText = currentMap === 'range'
+        ? '사격장 모드'
+        : `ROUND ${roundNumber} · 아군 ${myTeam === 'red' ? redScore : blueScore} : ${myTeam === 'red' ? blueScore : redScore} 적군`;
+
+      const allies = [];
+      const enemies = [];
+
+      allies.push({
+        name: `[나] ${myNick}`,
+        k: playerStats.k,
+        d: playerStats.d,
+        a: playerStats.a,
+        credits: credits,
+        alive: !isDead,
+        isMe: true
+      });
+
+      Object.values(remotePlayers).forEach(rp => {
+        const entry = {
+          name: rp.nick || '플레이어',
+          k: rp.k || 0,
+          d: rp.d || 0,
+          a: rp.a || 0,
+          credits: rp.credits !== undefined ? rp.credits : 800,
+          alive: Boolean(rp.mesh && rp.mesh.visible),
+          isMe: false
+        };
+        if (rp.team === myTeam) allies.push(entry);
+        else enemies.push(entry);
+      });
+
+      for (const bot of brawlBots) {
+        const bd = bot.userData;
+        const botCred = bd.team === myTeam ? (teamRoundCredits[bd.team] || credits) : (teamRoundCredits[bd.team] || 800);
+        const entry = {
+          name: bd.nick,
+          k: bd.k || 0,
+          d: bd.d || 0,
+          a: bd.a || 0,
+          credits: bd.credits !== undefined ? bd.credits : botCred,
+          alive: !bd.dead,
+          isMe: false
+        };
+        if (bd.team === myTeam) allies.push(entry);
+        else enemies.push(entry);
+      }
+
+      while (allies.length < 5) {
+        allies.push({ name: '대기 슬롯', k: 0, d: 0, a: 0, credits: 0, alive: false, isEmpty: true });
+      }
+      while (enemies.length < 5) {
+        enemies.push({ name: '대기 슬롯', k: 0, d: 0, a: 0, credits: 0, alive: false, isEmpty: true });
+      }
+
+      const buildRows = (list) => list.slice(0, 5).map(p => {
+        if (p.isEmpty) {
+          return `<tr class="lb-row-dead"><td>-</td><td>- / - / -</td><td>-</td><td>-</td></tr>`;
+        }
+        const rowCls = `${p.isMe ? 'lb-row-me' : ''} ${!p.alive ? 'lb-row-dead' : ''}`.trim();
+        const statusHtml = p.alive
+          ? `<span class="lb-status-alive">● 생존</span>`
+          : `<span class="lb-status-dead">✕ 사망</span>`;
+        return `<tr class="${rowCls}">
+          <td>${p.name}</td>
+          <td>${p.k} / ${p.d} / ${p.a}</td>
+          <td style="color:#00ffcc;">${p.credits.toLocaleString()} ¤</td>
+          <td>${statusHtml}</td>
+        </tr>`;
+      }).join('');
+
+      allyBody.innerHTML = buildRows(allies);
+      enemyBody.innerHTML = buildRows(enemies);
+    }
+
     const MAX_CREDITS = 9000;
     let roundPurchasedWeapons = { 1: null, 2: null }; // 이번 라운드에 새로 구매한 무기 (재구매/환불 가능)
     let roundPurchasedShield = false;
@@ -1687,7 +1880,7 @@
     let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 5, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
     let isReloading = false, reloadTimer = null;
     let zoomLevel = 0;
-    let botStrafeMode = false, currentMap = 'brawl';
+    let currentMap = 'brawl';
     let currentShieldKey = 'heavy', playerHp = 100, playerShield = 50, shieldReserve = 0, isShopOpen = false;
     let isDead = false, lastDamageTime = 0;
     let swapAnimTimer = 0;
@@ -1884,6 +2077,90 @@
       defuseProgress: 0,
       mesh: null
     };
+
+    let droppedItems = [];
+    let playerHasSpike = true;
+
+    function clearDroppedItems() {
+      droppedItems.forEach(item => scene.remove(item.mesh));
+      droppedItems = [];
+    }
+
+    function spawnDroppedItem(type, key, pos) {
+      const grp = new THREE.Group();
+      if (type === 'weapon') {
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(0.14, 0.14, 0.68),
+          new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.45, metalness: 0.7, roughness: 0.3 })
+        );
+        body.position.y = 0.22;
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.45, 0.56, 24),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.04;
+        grp.add(body, ring);
+      } else if (type === 'spike') {
+        const core = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.26, 0),
+          new THREE.MeshStandardMaterial({ color: 0xff4655, emissive: 0xff1e32, emissiveIntensity: 0.75 })
+        );
+        core.position.y = 0.34;
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.55, 0.68, 28),
+          new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.04;
+        grp.add(core, ring);
+      }
+      const floorH = currentMap === 'brawl' ? getFloorHeightAt(pos.x, pos.z) : 0;
+      grp.position.set(pos.x, floorH, pos.z);
+      scene.add(grp);
+      droppedItems.push({ type, key, mesh: grp });
+    }
+
+    function getNearestDroppedItem(maxDist = 3.4) {
+      let best = null;
+      let bestD = maxDist;
+      for (const item of droppedItems) {
+        const d = Math.hypot(camera.position.x - item.mesh.position.x, camera.position.z - item.mesh.position.z);
+        if (d <= bestD) {
+          bestD = d;
+          best = item;
+        }
+      }
+      return best;
+    }
+
+    function pickupDroppedItem(item) {
+      if (!item) return false;
+      const idx = droppedItems.indexOf(item);
+      if (idx >= 0) droppedItems.splice(idx, 1);
+      scene.remove(item.mesh);
+
+      if (item.type === 'weapon' && WEAPONS[item.key]) {
+        const w = WEAPONS[item.key];
+        const prevKey = slotWeapons[w.slot];
+        if (prevKey && prevKey !== 'classic' && prevKey !== 'melee') {
+          spawnDroppedItem('weapon', prevKey, camera.position);
+        }
+        slotWeapons[w.slot] = item.key;
+        ammoState[item.key] = w.magSize;
+        cancelReload();
+        activeSlot = w.slot;
+        updateGunVisual();
+        updateHUD();
+        addKillFeed(`[상호작용 F] ${w.name} 획득!`, false);
+        return true;
+      } else if (item.type === 'spike') {
+        playerHasSpike = true;
+        addKillFeed(`[상호작용 F] 스파이크를 회수했습니다!`, true);
+        return true;
+      }
+      return false;
+    }
 
     function clearSpikeVisual() {
       if (spikeState.mesh) {
@@ -4630,6 +4907,8 @@
 
     function resetAscentMapGimmicks() {
       clearSpikeVisual();
+      clearDroppedItems();
+      playerHasSpike = (myTeam === 'red');
       ascentDoors.forEach(d => {
         d.destroyed = false;
         d.hp = 400;
@@ -4824,7 +5103,7 @@
         const distToSpike = Math.hypot(camera.position.x - spikeState.pos.x, camera.position.z - spikeState.pos.z);
         if (!isDead && myTeam === 'blue' && distToSpike <= 3.2) {
           if (promptBanner) promptBanner.style.display = 'block';
-          if (keys['Digit4']) {
+          if (keys['Digit4'] || keys['KeyF']) {
             spikeState.defuseProgress += dt;
             const pct = Math.min(100, (spikeState.defuseProgress / 7.0) * 100);
             if (promptTitle) {
@@ -4842,7 +5121,7 @@
           } else {
             spikeState.defuseProgress = 0;
             if (promptTitle) {
-              promptTitle.innerText = '[4] 키를 꾹 눌러 스파이크 해체 (7.0초)';
+              promptTitle.innerText = '[F] 또는 [4] 키를 꾹 눌러 스파이크 해체 (7.0초)';
               promptTitle.style.color = '#38bdf8';
             }
             if (progressBar) progressBar.style.width = '0%';
@@ -4854,9 +5133,9 @@
       }
 
       const nearSite = getNearSpikeSite();
-      if (!isDead && myTeam === 'red' && nearSite) {
+      if (!isDead && myTeam === 'red' && playerHasSpike && nearSite) {
         if (promptBanner) promptBanner.style.display = 'block';
-        if (keys['Digit4']) {
+        if (keys['Digit4'] || keys['KeyF']) {
           spikeState.plantProgress += dt;
           const pct = Math.min(100, (spikeState.plantProgress / 4.0) * 100);
           if (promptTitle) {
@@ -4879,7 +5158,7 @@
         } else {
           spikeState.plantProgress = 0;
           if (promptTitle) {
-            promptTitle.innerText = `[4] 키를 꾹 눌러 ${nearSite} 사이트에 스파이크 설치 (4.0초)`;
+            promptTitle.innerText = `[F] 또는 [4] 키를 꾹 눌러 ${nearSite} 사이트에 스파이크 설치 (4.0초)`;
             promptTitle.style.color = '#00ffcc';
           }
           if (progressBar) progressBar.style.width = '0%';
@@ -4893,7 +5172,16 @@
             break;
           }
         }
-        if (!isDead && nearDoor && promptBanner) {
+        const nearDrop = !isDead ? getNearestDroppedItem(3.4) : null;
+        if (nearDrop && promptBanner) {
+          promptBanner.style.display = 'block';
+          const label = nearDrop.type === 'spike' ? '스파이크' : WEAPONS[nearDrop.key].name;
+          if (promptTitle) {
+            promptTitle.innerText = `[F] 키를 눌러 ${label} 줍기`;
+            promptTitle.style.color = '#38bdf8';
+          }
+          if (progressBar) progressBar.style.width = '100%';
+        } else if (!isDead && nearDoor && promptBanner) {
           promptBanner.style.display = 'block';
           if (promptTitle) {
             promptTitle.innerText = `[F] ${nearDoor.name} ${nearDoor.isOpen ? '닫기' : '열기'} (HP: ${nearDoor.hp})`;
@@ -5019,6 +5307,7 @@
       for (const bot of brawlBots) {
         const bd = bot.userData;
         const teamCred = bd.team === myTeam ? credits : (teamRoundCredits[bd.team] || 800);
+        bd.credits = teamCred;
 
         if (teamCred >= 3900) {
           bd.weaponKey = Math.random() < 0.5 ? 'vandal' : 'phantom';
@@ -5120,6 +5409,10 @@
         team: team,
         hp: 100,
         shield: 0,
+        k: 0,
+        d: 0,
+        a: 0,
+        credits: 800,
         dead: false,
         respawnTimer: 0,
         moveDir: new THREE.Vector3(0, 0, 1),
@@ -5296,6 +5589,9 @@
                 tbd.hp -= rem;
                 if (tbd.hp <= 0 && !tbd.dead) {
                   tbd.dead = true;
+                  bd.k = (bd.k || 0) + 1;
+                  bd.credits = Math.min(MAX_CREDITS, (bd.credits || 800) + 200);
+                  tbd.d = (tbd.d || 0) + 1;
                   bestTarget.bot.visible = false;
                   addKillFeed(`${bd.nick} [${w.name}] ➔ ${tbd.nick}${isHeadHit ? ' [헤드샷]' : ''}`, false);
                 }
@@ -5646,6 +5942,12 @@
       if (playerHp <= 0) {
         playerHp = 0;
         isDead = true;
+        playerStats.d += 1;
+        const killerBot = brawlBots.find(b => b.userData.nick === attackerNick);
+        if (killerBot) {
+          killerBot.userData.k = (killerBot.userData.k || 0) + 1;
+          killerBot.userData.credits = Math.min(MAX_CREDITS, (killerBot.userData.credits || 800) + 200);
+        }
         tagSlowMultiplier = 1.0;
         aimPunchPitch = 0;
         setZoom(0);
@@ -5664,6 +5966,15 @@
           });
         }
 
+        if (currentMap === 'brawl') {
+          if (slotWeapons[1]) {
+            spawnDroppedItem('weapon', slotWeapons[1], camera.position);
+          }
+          if (myTeam === 'red' && playerHasSpike && !spikeState.planted) {
+            playerHasSpike = false;
+            spawnDroppedItem('spike', 'spike', camera.position);
+          }
+        }
         const deathSub = document.querySelector('#deathBanner div:nth-child(2)');
         if (deathSub) deathSub.innerText = '라운드 종료 후 다음 라운드에 부활합니다...';
       }
@@ -5706,6 +6017,7 @@
         bots.forEach(b => { b.visible = false; });
         redScore = 0;
         blueScore = 0;
+        playerStats = { k: 0, d: 0, a: 0 };
         updateScoreboard();
         startBrawlRound(1);
         return;
@@ -5778,10 +6090,100 @@
       clearTimeout(hint._t);
       hint._t = setTimeout(() => {
         hint._t = null;
-        hint.innerText = currentMap === 'range' ? '(사격장 무제한)' : (roundPhase === 'PREP' ? '(준비 시간: 클릭 구매 / 재클릭 환불)' : '(전투 중 구매 불가)');
+        hint.innerText = currentMap === 'range' ? '(사격장 무제한)' : (roundPhase === 'PREP' ? '(준비 시간: 좌클릭 구매 / 우클릭 환불)' : '(전투 중 구매 불가)');
         hint.style.color = '#ffcc00';
       }, 1500);
     }
+
+    window.refundWeapon = function(key) {
+      const w = WEAPONS[key];
+      if (!w) return;
+      if (currentMap === 'range') {
+        if (slotWeapons[w.slot] === key) {
+          if (w.slot === 2) {
+            slotWeapons[2] = 'classic';
+            ammoState['classic'] = WEAPONS.classic.magSize;
+          } else {
+            slotWeapons[1] = null;
+            if (activeSlot === 1) activeSlot = 2;
+          }
+          cancelReload();
+          updateGunVisual();
+          updateHUD();
+        }
+        return;
+      }
+      if (!canBuyInCurrentState()) {
+        showShopNotice('구매 시간(준비 시간)이 종료되었습니다!');
+        return;
+      }
+      if (slotWeapons[w.slot] !== key) return;
+
+      if (roundPurchasedWeapons[w.slot] === key && w.price > 0) {
+        credits = Math.min(MAX_CREDITS, credits + w.price);
+        roundPurchasedWeapons[w.slot] = null;
+        if (w.slot === 2) {
+          slotWeapons[2] = 'classic';
+          ammoState['classic'] = WEAPONS.classic.magSize;
+        } else {
+          slotWeapons[1] = null;
+          if (activeSlot === 1) activeSlot = 2;
+        }
+        cancelReload();
+        if (currentMap === 'brawl' && roundPhase === 'PREP') equipBotsByCredits();
+        updateGunVisual();
+        updateHUD();
+        showShopNotice(`${w.name} 환불 완료 (+${w.price} ¤)`);
+      } else if (w.price > 0) {
+        showShopNotice('이전 라운드에서 보유한 무기는 환불할 수 없습니다!');
+      }
+    };
+
+    window.refundShield = function(key) {
+      const targetShield = SHIELDS[key];
+      if (!targetShield) return;
+      if (currentMap === 'range') {
+        if (currentShieldKey === key) {
+          currentShieldKey = 'none';
+          playerShield = 0;
+          shieldReserve = 0;
+          updateHUD();
+        }
+        return;
+      }
+      if (!canBuyInCurrentState()) {
+        showShopNotice('구매 시간(준비 시간)이 종료되었습니다!');
+        return;
+      }
+      if (currentShieldKey !== key) return;
+
+      if (roundPurchasedShield && targetShield.price > 0) {
+        credits = Math.min(MAX_CREDITS, credits + targetShield.price);
+        roundPurchasedShield = false;
+        currentShieldKey = 'none';
+        playerShield = 0;
+        shieldReserve = 0;
+        updateHUD();
+        showShopNotice(`${targetShield.name} 환불 완료 (+${targetShield.price} ¤)`);
+      } else if (targetShield.price > 0) {
+        showShopNotice('이전 라운드에서 보유한 보호막은 환불할 수 없습니다!');
+      }
+    };
+
+    document.querySelectorAll('#shopModal .shop-item').forEach(el => {
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = el.id || '';
+        if (!id.startsWith('buy-') || id === 'buy-melee-skin') return;
+        const itemKey = id.slice(4);
+        if (SHIELDS[itemKey]) {
+          refundShield(itemKey);
+        } else if (WEAPONS[itemKey]) {
+          refundWeapon(itemKey);
+        }
+      });
+    });
 
     window.buyWeapon = function(key) {
       const w = WEAPONS[key];
@@ -5890,7 +6292,7 @@
       document.getElementById('shopCredits').innerText = credits.toLocaleString();
       const sHint = document.getElementById('shopCreditHint');
       if (sHint && !sHint._t) {
-        sHint.innerText = currentMap === 'range' ? '(사격장 무제한)' : (roundPhase === 'PREP' ? '(준비 시간: 클릭 구매 / 재클릭 환불)' : '(전투 중 구매 불가)');
+        sHint.innerText = currentMap === 'range' ? '(사격장 무제한)' : (roundPhase === 'PREP' ? '(준비 시간: 좌클릭 구매 / 우클릭 환불)' : '(전투 중 구매 불가)');
       }
       const isMeleeChamp = equippedSkins.melee === 'champions2021';
       const isPhantom2024 = equippedSkins.phantom === 'champions2024';
@@ -6048,6 +6450,8 @@
     window.addEventListener('blur', () => {
       Object.keys(keys).forEach(k => keys[k] = false);
       isMouseDown = false;
+      const lb = document.getElementById('tabLeaderboard');
+      if (lb) lb.style.display = 'none';
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -6065,6 +6469,12 @@
     }
 
     document.addEventListener('keydown', (e) => {
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        renderTabLeaderboard();
+        const lb = document.getElementById('tabLeaderboard');
+        if (lb) lb.style.display = 'block';
+      }
       if (e.ctrlKey || e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
       keys[e.code] = true;
 
@@ -6094,19 +6504,21 @@
       }
 
       if (e.code === 'KeyF') {
+        // 1순위: 바닥에 떨어진 총기 또는 스파이크 줍기
+        const nearDrop = getNearestDroppedItem(3.4);
+        if (nearDrop) {
+          pickupDroppedItem(nearDrop);
+          return;
+        }
+        // 2순위: 어센트 방화 철문 스위치 개폐
         if (currentMap === 'brawl') {
           for (const d of ascentDoors) {
             if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.8) {
               toggleAscentDoor(d);
-              addKillFeed(`[스위치] ${d.name} ${d.isOpen ? '개방됨' : '폐쇄됨'}`, false);
+              addKillFeed(`[상호작용 F] ${d.name} ${d.isOpen ? '개방됨' : '폐쇄됨'}`, false);
               break;
             }
           }
-        } else {
-          botStrafeMode = !botStrafeMode;
-          const modeEl = document.getElementById('botModeText');
-          modeEl.innerText = botStrafeMode ? '좌우 무빙' : '고정';
-          modeEl.style.color = botStrafeMode ? '#00ffcc' : '#ffcc00';
         }
       }
 
@@ -6140,7 +6552,13 @@
       }
     });
 
-    document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+    document.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+      if (e.code === 'Tab') {
+        const lb = document.getElementById('tabLeaderboard');
+        if (lb) lb.style.display = 'none';
+      }
+    });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
     function moveWithCollision(dx, dz) {
@@ -6420,9 +6838,14 @@
             if (bd.hp <= 0) {
               bd.dead = true;
               botRoot.visible = false;
+              if (bd.weaponKey && bd.weaponKey !== 'classic') {
+                spawnDroppedItem('weapon', bd.weaponKey, botRoot.position);
+              }
 
               const myNick = document.getElementById('nickInput').value || '플레이어';
               const isHead = part === 'head';
+              playerStats.k += 1;
+              bd.d = (bd.d || 0) + 1;
               credits = Math.min(MAX_CREDITS, credits + 200);
               updateHUD();
               triggerScoreStreak(1, isHead);
@@ -6603,6 +7026,12 @@
     function animate() {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
+
+      for (const item of droppedItems) {
+        if (item.mesh && item.mesh.children[0]) {
+          item.mesh.children[0].rotation.y += dt * 2.2;
+        }
+      }
 
       for (let i = tracers.length - 1; i >= 0; i--) {
         const t = tracers[i];
@@ -7008,19 +7437,6 @@
       updateBrawlRoundPhase(dt);
       updateChampionsFinisher(dt);
       updateBrawlBots(dt);
-
-      if (currentMap === 'range' && botStrafeMode) {
-        bots.forEach(bot => {
-          const bd = bot.userData;
-          bd.strafeTimer -= dt;
-          if (bd.strafeTimer <= 0) {
-            bd.strafeDir *= -1;
-            bd.strafeTimer = 0.7 + Math.random() * 1.4;
-          }
-          bot.position.x += bd.strafeDir * 5.0 * dt;
-          if (Math.abs(bot.position.x - bd.baseX) > 4.5) bd.strafeDir *= -1;
-        });
-      }
 
       netSyncTimer += dt;
       if (netSyncTimer >= 0.033 && Object.keys(connections).length > 0) {
