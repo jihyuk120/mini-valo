@@ -880,8 +880,7 @@
       function tryNextFile() {
         if (idx >= candidates.length) {
           if (isNeoFrontier) {
-            // 네오 프론티어 셰리프는 합성음(땅땅 소리) 없이 제공된 킬사운드 파일만 재생
-            return;
+            playSynthNeoFrontierKillSound(soundTier, isHeadshot);
           } else if (isAraxys) {
             playSynthAraxysKillSound(soundTier, isHeadshot);
           } else {
@@ -892,17 +891,15 @@
         const src = candidates[idx++];
         const audio = new Audio(src);
         audio.volume = 0.92;
-        let failed = false;
-        const onFail = () => {
-          if (failed) return;
-          failed = true;
-          tryNextFile();
-        };
-        audio.onerror = onFail;
         const p = audio.play();
         if (p && typeof p.catch === 'function') {
-          p.catch(onFail);
+          p.catch(() => {
+            tryNextFile();
+          });
         }
+        audio.onerror = () => {
+          tryNextFile();
+        };
       }
       tryNextFile();
     }
@@ -1478,13 +1475,7 @@
         championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
       }
       const champEdition = isNeoFrontierActive ? 'neofrontier' : (isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null)));
-      if (isNeoFrontierActive) {
-        setTimeout(() => {
-          playKillStreakAudio(soundTier, champEdition, isHeadshot);
-        }, 240);
-      } else {
-        playKillStreakAudio(soundTier, champEdition, isHeadshot);
-      }
+      playKillStreakAudio(soundTier, champEdition, isHeadshot);
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
