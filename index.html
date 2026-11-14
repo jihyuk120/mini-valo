@@ -4981,7 +4981,8 @@
       roundPurchasedShield = false;
 
       roundPhase = 'PREP';
-      roundPhaseTimer = 30.0;
+      const prepSeconds = (num === 1 || num === 13) ? 30 : 15;
+      roundPhaseTimer = prepSeconds;
       clearChampionsFinisher();
       resetScoreStreak();
 
@@ -5008,7 +5009,7 @@
       const sideLabel = myTeam === 'red' ? '공격팀(GREEN · 스파이크 보유)' : '수비팀(RED · 사이트 방어)';
       showRoundBanner(
         `ROUND ${roundNumber} · ${halfTag}`,
-        `진영: ${sideLabel} | 구매 시간 30초 · 크레드: ${credits} ¤ (상점: B)${halftimeNotice}`,
+        `진영: ${sideLabel} | 구매 시간 ${prepSeconds}초 · 크레드: ${credits} ¤ (상점: B)${halftimeNotice}`,
         num === 13 ? '#ffcc00' : '#00ffcc',
         3600
       );
@@ -5285,6 +5286,13 @@
         if (roundPhaseTimer <= 0) {
           roundPhase = 'COMBAT';
           clearPrepBarriers();
+          if (isShopOpen) {
+            isShopOpen = false;
+            shopModal.style.display = 'none';
+            if (document.pointerLockElement !== document.body && !isMatchOver) {
+              document.body.requestPointerLock();
+            }
+          }
           showRoundBanner('FIGHT!', '공격(GREEN): A/B 사이트 스파이크 설치 | 수비(RED): 사이트 방어', '#ff4655', 1800);
         }
       } else if (roundPhase === 'COMBAT') {
@@ -6570,13 +6578,15 @@
       keys[e.code] = true;
 
       if (e.code === 'KeyB' && document.activeElement.tagName !== 'INPUT') {
-        if (document.pointerLockElement === document.body) {
-          isShopOpen = true;
-          document.exitPointerLock();
-        } else if (isShopOpen) {
+        if (isShopOpen) {
           isShopOpen = false;
           shopModal.style.display = 'none';
           document.body.requestPointerLock();
+        } else if (document.pointerLockElement === document.body) {
+          if (currentMap === 'range' || roundPhase === 'PREP') {
+            isShopOpen = true;
+            document.exitPointerLock();
+          }
         }
       }
 
