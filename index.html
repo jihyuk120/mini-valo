@@ -6829,7 +6829,19 @@
         playWeaponSound(key, 0);
       }
 
-      const targets = currentMap === 'range' ? botHitboxes : [...remoteHitboxes, ...brawlBotHitboxes, ...destructibleMeshes];
+      const rawTargets = currentMap === 'range'
+        ? botHitboxes
+        : [...remoteHitboxes, ...brawlBotHitboxes, ...destructibleMeshes];
+
+      // 1. 플레이어 자신의 무기(gunGroup) 및 카메라 하위 메쉬 제외
+      const selfMeshes = new Set();
+      camera.traverse((obj) => selfMeshes.add(obj));
+      gunGroup.traverse((obj) => selfMeshes.add(obj));
+
+      const enemyTargets = rawTargets.filter(obj => obj && !selfMeshes.has(obj));
+      const validWalls = wallMeshes.filter(obj => obj && obj.visible && !selfMeshes.has(obj));
+      const combinedTargets = [...enemyTargets, ...validWalls];
+
       const isClassicRightClick = (key === 'classic' && isHeavyAttack);
       const pelletCount = isClassicRightClick ? classicBurstShots : (w.pellets || 1);
       const extraPelletSpread = isClassicRightClick ? 0.065 : (w.pelletSpread || 0);
@@ -6843,23 +6855,37 @@
         const pSpreadY = (Math.random() - 0.5) * (spread + extraPelletSpread);
 
         raycaster.setFromCamera(new THREE.Vector2(pSpreadX, pSpreadY), camera);
-        let hits = raycaster.intersectObjects(targets);
+        let allHits = raycaster.intersectObjects(combinedTargets, false);
 
-        if ((key === 'operator' || key === 'marshal' || key === 'outlaw') && hits.length === 0) {
+        if ((key === 'operator' || key === 'marshal' || key === 'outlaw') && !allHits.some(h => enemyTargets.includes(h.object))) {
           const subOffsets = [
             [0.008, 0], [-0.008, 0], [0, 0.008], [0, -0.008],
             [0.006, 0.006], [-0.006, 0.006], [0.006, -0.006], [-0.006, -0.006]
           ];
           for (const [ox, oy] of subOffsets) {
             raycaster.setFromCamera(new THREE.Vector2(pSpreadX + ox, pSpreadY + oy), camera);
-            const subHits = raycaster.intersectObjects(targets);
-            if (subHits.length > 0) {
-              hits = subHits;
+            const subHits = raycaster.intersectObjects(combinedTargets, false);
+            if (subHits.some(h => enemyTargets.includes(h.object))) {
+              allHits = subHits;
               break;
             }
           }
           raycaster.setFromCamera(new THREE.Vector2(pSpreadX, pSpreadY), camera);
         }
+
+        // 거리순 정렬
+        allHits.sort((a, b) => a.distance - b.distance);
+
+        // 2. 가장 가까운 벽 거리 판별 (적이 벽보다 앞에 있으면 wallbang = false, 벽이 적보다 앞에 있으면 wallbang = true)
+        let nearestWallDist = Infinity;
+        for (const h of allHits) {
+          if (validWalls.includes(h.object)) {
+            nearestWallDist = h.distance;
+            break;
+          }
+        }
+
+        const hits = allHits.filter(h => enemyTargets.includes(h.object));
 
         if (key !== 'melee') {
           const muzzleWorld = new THREE.Vector3();
@@ -6874,11 +6900,11 @@
           }
 
           let tracerEnd = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 120);
-          const wallHits = raycaster.intersectObjects(wallMeshes);
-          if (wallHits.length > 0 && wallHits[0].distance < 120) {
-            tracerEnd = wallHits[0].point;
+          if (nearestWallDist < 120) {
+            const wallHitObj = allHits.find(h => validWalls.includes(h.object));
+            if (wallHitObj) tracerEnd = wallHitObj.point;
           }
-          if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
+          if (hits.length > 0 && hits[0].distance < nearestWallDist && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
           }
           const isNeoSheriff = (key === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
@@ -6891,7 +6917,10 @@
         for (const hit of hits) {
           if (hitTargetsSet.size >= w.penetration) break;
           const hitObj = hit.object;
+          const isWallbang = hit.distance > nearestWallDist;
+
           if (hitObj.userData.targetType === 'ascentDoor') {
+            if (isWallbang) break;
             const dObj = hitObj.userData.doorObj;
             if (dObj && !dObj.destroyed && !dObj.isOpen) {
               dObj.hp -= w.getDamage(hit.distance, 'body');
@@ -6909,6 +6938,7 @@
             break;
           }
           if (hitObj.userData.targetType === 'ascentGlass') {
+            if (isWallbang) continue;
             const gObj = hitObj.userData.glassObj;
             if (gObj && !gObj.destroyed) {
               gObj.hp -= w.getDamage(hit.distance, 'body');
@@ -6922,6 +6952,7 @@
             }
             continue;
           }
+
           const part = hitObj.userData.part;
           const distance = hit.distance;
           const baseDmg = key === 'melee' ? w.getDamage(distance, part, isMeleeHeavySlash) : w.getDamage(distance, part);
@@ -6934,8 +6965,9 @@
 
             const penIndex = hitTargetsSet.size - 1;
             const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-            const dmg = Math.round(baseDmg * penMult);
-            if (pIdx === 0 || pelletCount === 1) spawnHitSpark(hit.point, part === 'head');
+            const wallMult = isWallbang ? 0.5 : 1.0;
+            const dmg = Math.round(baseDmg * penMult * wallMult);
+            if (!isWallbang && (pIdx === 0 || pelletCount === 1)) spawnHitSpark(hit.point, part === 'head');
 
             const bd = botRoot.userData;
             let rem = dmg;
@@ -6956,8 +6988,9 @@
 
             const penIndex = hitTargetsSet.size - 1;
             const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-            const dmg = Math.round(baseDmg * penMult);
-            if (pIdx === 0 || pelletCount === 1) spawnHitSpark(hit.point, part === 'head');
+            const wallMult = isWallbang ? 0.5 : 1.0;
+            const dmg = Math.round(baseDmg * penMult * wallMult);
+            if (!isWallbang && (pIdx === 0 || pelletCount === 1)) spawnHitSpark(hit.point, part === 'head');
 
             const myNick = document.getElementById('nickInput').value || '플레이어';
             const conn = connections[targetPeerId];
@@ -6977,8 +7010,9 @@
 
             const penIndex = hitTargetsSet.size - 1;
             const penMult = penIndex === 0 ? 1.0 : (key === 'operator' ? 1.0 : 0.65);
-            const dmg = Math.round(baseDmg * penMult);
-            if (pIdx === 0 || pelletCount === 1) spawnHitSpark(hit.point, part === 'head');
+            const wallMult = isWallbang ? 0.5 : 1.0;
+            const dmg = Math.round(baseDmg * penMult * wallMult);
+            if (!isWallbang && (pIdx === 0 || pelletCount === 1)) spawnHitSpark(hit.point, part === 'head');
 
             let rem = dmg;
             if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
@@ -7000,7 +7034,7 @@
               credits = Math.min(MAX_CREDITS, credits + 200);
               updateHUD();
               triggerScoreStreak(1, isHead);
-              addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
+              addKillFeed(`${myNick} [${w.name}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}${isWallbang ? ' [월샷]' : ''}`, true);
 
               const { redAlive, blueAlive } = countAliveTeams();
               const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
