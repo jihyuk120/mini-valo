@@ -468,7 +468,7 @@
       <span id="weaponText" style="color:#ff4655; font-size:18px;">셰리프</span>
       <span class="ammo-val" id="ammoText">6 / 6</span>
       <div class="slot-bar">
-        <span id="slot1">[1] 없음</span> | <span id="slot2" class="slot-active">[2] 셰리프</span> | <span id="slot3">[3] 근접</span>
+        <span id="slot1">[1] 없음</span> | <span id="slot2" class="slot-active">[2] 셰리프</span> | <span id="slot3">[3] 근접</span><span id="slot4Wrap" style="display:none;"> | <span id="slot4">[4] 스파이크</span></span>
       </div>
     </div>
   </div>
@@ -1773,6 +1773,12 @@
           if (isHeavy) return part === 'head' ? 150 : 75;
           return part === 'head' ? 100 : 50;
         }
+      },
+      spike: {
+        slot: 4, name: '스파이크', price: 0, auto: false, fireRate: 0.5, zoomType: 'none',
+        magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
+        recoilPitch: 0, recoilYaw: 0, moveSpeed: 8.6,
+        getDamage: () => 0
       }
     };
 
@@ -1899,9 +1905,9 @@
     let roundPurchasedShield = false;
     let lossStreak = { red: 0, blue: 0 };
     let isMatchOver = false;
-    let slotWeapons = { 1: null, 2: 'classic', 3: 'melee' };
+    let slotWeapons = { 1: null, 2: 'classic', 3: 'melee', 4: 'spike' };
     let activeSlot = 2;
-    let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 5, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
+    let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 5, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity, spike: Infinity };
     let isReloading = false, reloadTimer = null;
     let zoomLevel = 0;
     let currentMap = 'brawl';
@@ -2180,7 +2186,8 @@
         return true;
       } else if (item.type === 'spike') {
         playerHasSpike = true;
-        addKillFeed(`[상호작용 F] 스파이크를 회수했습니다!`, true);
+        updateHUD();
+        addKillFeed(`[상호작용 F] 스파이크를 회수했습니다! ([4] 장착 가능)`, true);
         return true;
       }
       return false;
@@ -4967,7 +4974,7 @@
       if (isDead && num !== 1 && num !== 13) {
         slotWeapons[1] = null;
         if (!slotWeapons[2]) slotWeapons[2] = 'classic';
-        if (activeSlot === 1) activeSlot = 2;
+        if (activeSlot === 1 || activeSlot === 4) activeSlot = 2;
         currentShieldKey = 'none';
         playerShield = 0;
         shieldReserve = 0;
@@ -5205,7 +5212,8 @@
       const nearSite = getNearSpikeSite();
       if (!isDead && myTeam === 'red' && playerHasSpike && nearSite) {
         if (promptBanner) promptBanner.style.display = 'block';
-        if (keys['Digit4'] || keys['KeyF']) {
+        const isPlantInput = keys['Digit4'] || keys['KeyF'] || (activeSlot === 4 && isMouseDown);
+        if (isPlantInput) {
           spikeState.plantProgress += dt;
           const pct = Math.min(100, (spikeState.plantProgress / 4.0) * 100);
           if (promptTitle) {
@@ -5220,15 +5228,23 @@
             spikeState.planted = true;
             spikeState.site = nearSite;
             spikeState.timer = 45.0;
+            playerHasSpike = false;
             spikeState.pos.set(camera.position.x, 0, camera.position.z);
             createSpikeMesh(spikeState.pos);
+            if (activeSlot === 4) {
+              activeSlot = slotWeapons[1] ? 1 : 2;
+              updateGunVisual();
+            }
+            updateHUD();
             if (promptBanner) promptBanner.style.display = 'none';
             showRoundBanner(`SPIKE PLANTED (${nearSite} SITE)`, '45초 후 스파이크가 폭발합니다! 사이트를 사수하세요!', '#ff4655', 2600);
           }
         } else {
           spikeState.plantProgress = 0;
           if (promptTitle) {
-            promptTitle.innerText = `[F] 또는 [4] 키를 꾹 눌러 ${nearSite} 사이트에 스파이크 설치 (4.0초)`;
+            promptTitle.innerText = activeSlot === 4
+              ? `[좌클릭] 또는 [F]/[4] 꾹 눌러 ${nearSite} 사이트에 스파이크 설치 (4.0초)`
+              : `[4] 장착 후 [좌클릭] 또는 [F] 꾹 눌러 ${nearSite} 사이트 설치 (4.0초)`;
             promptTitle.style.color = '#00ffcc';
           }
           if (progressBar) progressBar.style.width = '0%';
@@ -6134,6 +6150,7 @@
 
     function switchSlot(slotNum) {
       if (slotNum === 1 && !slotWeapons[1]) return;
+      if (slotNum === 4 && !(currentMap === 'brawl' && myTeam === 'red' && playerHasSpike && !spikeState.planted)) return;
       if (activeSlot === slotNum) return;
       cancelReload();
       activeSlot = slotNum;
@@ -6405,7 +6422,7 @@
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
         (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
         (key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name;
-      document.getElementById('ammoText').innerText = key === 'melee' ? '∞' : `${ammoState[key]} / ${w.magSize}`;
+      document.getElementById('ammoText').innerText = (key === 'melee' || key === 'spike') ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
       const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3');
       s1.innerText = `[1] ${slotWeapons[1] ? WEAPONS[slotWeapons[1]].name : '없음'}`;
@@ -6414,6 +6431,12 @@
       s1.className = activeSlot === 1 ? 'slot-active' : '';
       s2.className = activeSlot === 2 ? 'slot-active' : '';
       s3.className = activeSlot === 3 ? 'slot-active' : '';
+      const s4Wrap = document.getElementById('slot4Wrap'), s4 = document.getElementById('slot4');
+      const canCarrySpike = (currentMap === 'brawl' && myTeam === 'red' && playerHasSpike && !spikeState.planted);
+      if (s4Wrap && s4) {
+        s4Wrap.style.display = canCarrySpike ? 'inline' : 'none';
+        s4.className = activeSlot === 4 ? 'slot-active' : '';
+      }
 
       ['classic', 'shorty', 'frenzy', 'ghost', 'bandit', 'sheriff', 'stinger', 'spectre', 'bucky', 'judge', 'bulldog', 'guardian', 'phantom', 'vandal', 'marshal', 'outlaw', 'operator', 'ares', 'odin'].forEach(k => { const el = document.getElementById('buy-' + k); if (el) el.classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k); });
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
@@ -6595,6 +6618,7 @@
       if (e.code === 'Digit1') switchSlot(1);
       if (e.code === 'Digit2') switchSlot(2);
       if (e.code === 'Digit3') switchSlot(3);
+      if (e.code === 'Digit4') switchSlot(4);
       if (e.code === 'KeyR') startReload();
       if (e.code === 'KeyY' && !isReloading && zoomLevel === 0) {
         isInspecting = !isInspecting;
@@ -6624,6 +6648,17 @@
       }
 
       if (e.code === 'KeyG' && currentMap === 'brawl') {
+        if (activeSlot === 4 && myTeam === 'red' && playerHasSpike && !spikeState.planted) {
+          playerHasSpike = false;
+          const { forward } = getMoveVectors();
+          const dropPos = camera.position.clone().addScaledVector(forward, 1.4);
+          spawnDroppedItem('spike', 'spike', dropPos);
+          activeSlot = slotWeapons[1] ? 1 : 2;
+          updateGunVisual();
+          updateHUD();
+          addKillFeed(`[G] 스파이크를 바닥에 떨어뜨렸습니다.`, false);
+          return;
+        }
         for (const d of ascentDoors) {
           if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.5) {
             toggleAscentDoor(d);
@@ -6665,34 +6700,45 @@
     function moveWithCollision(dx, dz) {
       const feetY = camera.position.y - currentEyeHeight;
       const headY = camera.position.y + 0.15;
+      const totalDist = Math.hypot(dx, dz);
+      const steps = Math.max(1, Math.ceil(totalDist / 0.18));
+      const stepX = dx / steps;
+      const stepZ = dz / steps;
 
-      const nextX = camera.position.x + dx;
-      let blockedX = false;
-      for (const c of wallColliders) {
-        const cMinY = c.minY !== undefined ? c.minY : -2;
-        if (nextX > c.minX && nextX < c.maxX && camera.position.z > c.minZ && camera.position.z < c.maxZ && feetY < c.maxY - 0.45 && headY > cMinY + 0.1) {
-          blockedX = true; break;
+      const collidesAt = (px, pz) => {
+        if (currentMap === 'brawl' && roundPhase === 'PREP') {
+          if (myTeam === 'red' && pz < 38.0) return true;
+          if (myTeam === 'blue' && pz > -38.0) return true;
+        }
+        for (const c of wallColliders) {
+          const cMinY = c.minY !== undefined ? c.minY : -2;
+          if (px > c.minX && px < c.maxX && pz > c.minZ && pz < c.maxZ && feetY < c.maxY - 0.45 && headY > cMinY + 0.1) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      for (let i = 0; i < steps; i++) {
+        const nextX = camera.position.x + stepX;
+        if (!collidesAt(nextX, camera.position.z)) {
+          camera.position.x = nextX;
+        } else if (Math.abs(stepX) > 1e-5) {
+          const nudge = Math.min(0.14, Math.abs(stepX) * 0.75);
+          if (!collidesAt(nextX, camera.position.z + nudge)) { camera.position.x = nextX; camera.position.z += nudge; }
+          else if (!collidesAt(nextX, camera.position.z - nudge)) { camera.position.x = nextX; camera.position.z -= nudge; }
+        }
+
+        const nextZ = camera.position.z + stepZ;
+        if (!collidesAt(camera.position.x, nextZ)) {
+          camera.position.z = nextZ;
+        } else if (Math.abs(stepZ) > 1e-5) {
+          const nudge = Math.min(0.14, Math.abs(stepZ) * 0.75);
+          if (!collidesAt(camera.position.x + nudge, nextZ)) { camera.position.z = nextZ; camera.position.x += nudge; }
+          else if (!collidesAt(camera.position.x - nudge, nextZ)) { camera.position.z = nextZ; camera.position.x -= nudge; }
         }
       }
-      if (!blockedX) camera.position.x = nextX;
-
-      const nextZ = camera.position.z + dz;
-      let blockedZ = false;
-      for (const c of wallColliders) {
-        const cMinY = c.minY !== undefined ? c.minY : -2;
-        if (camera.position.x > c.minX && camera.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ && feetY < c.maxY - 0.45 && headY > cMinY + 0.1) {
-          blockedZ = true; break;
-        }
-      }
-      // 준비 시간(PREP)에는 진영 보호막 밖으로 나갈 수 없음
-      if (currentMap === 'brawl' && roundPhase === 'PREP') {
-        if (myTeam === 'red' && nextZ < 38.0) blockedZ = true;
-        if (myTeam === 'blue' && nextZ > -38.0) blockedZ = true;
-      }
-      if (!blockedZ) camera.position.z = nextZ;
     }
-
-    const raycaster = new THREE.Raycaster();
 
     function fireBurstRounds(count = 3, interval = 0.055) {
       const startKey = getCurrentWeaponKey();
@@ -6729,6 +6775,7 @@
         if (ammoState[key] === 0) startReload();
       }
 
+      if (key === 'spike') return;
       if (key === 'melee') {
         isMeleeHeavySlash = isHeavyAttack;
         if (!isHeavyAttack) {
