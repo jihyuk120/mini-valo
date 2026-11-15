@@ -2201,6 +2201,11 @@
         return true;
       } else if (item.type === 'spike') {
         playerHasSpike = true;
+        brawlBots.forEach(b => { if (b.userData) b.userData.hasSpike = false; });
+        if (Object.keys(connections).length > 0) {
+          broadcastData({ type: 'spikeSync', carrierId: myPeerId || '__local__', hasSpike: true });
+        }
+        updateHUD();
         addKillFeed(`[상호작용 F] 스파이크를 회수했습니다!`, true);
         return true;
       }
@@ -4052,11 +4057,12 @@
 
     function buildSpikeHeldModel() {
       const grp = new THREE.Group();
-      const spikeModel = buildValorantSpikeMesh(false, 0.42);
-      spikeModel.position.set(0, -0.08, -0.15);
-      spikeModel.rotation.set(0.18, 0.38, -0.12);
+      const spikeModel = buildValorantSpikeMesh(false, 0.48);
+      spikeModel.position.set(-0.02, -0.13, -0.08);
+      spikeModel.rotation.set(0.22, 0.45, -0.14);
       grp.add(spikeModel);
       grp.userData.core = spikeModel.userData.core;
+      grp.userData.spikeBody = spikeModel;
       return grp;
     }
 
@@ -4091,6 +4097,9 @@
     };
 
     function getActiveModelForWeapon(wKey) {
+      if (wKey === 'spike' || activeSlot === 4) {
+        return models.spike;
+      }
       if (wKey === 'sheriff' && equippedSkins.sheriff === 'neofrontier') {
         return models.sheriff_neofrontier;
       }
@@ -5069,7 +5078,7 @@
     function resetLoadoutToPistolRound() {
       credits = 800;
       teamRoundCredits = { red: 800, blue: 800 };
-      slotWeapons = { 1: null, 2: 'classic', 3: 'melee' };
+      slotWeapons = { 1: null, 2: 'classic', 3: 'melee', 4: 'spike' };
       activeSlot = 2;
       currentShieldKey = 'none';
       playerShield = 0;
@@ -5103,10 +5112,36 @@
       return null;
     }
 
+    function assignSingleAttackerSpike() {
+      playerHasSpike = false;
+      brawlBots.forEach(b => { if (b.userData) b.userData.hasSpike = false; });
+      if (currentMap !== 'brawl') return;
+
+      const redHumanIds = [];
+      if (myTeam === 'red') redHumanIds.push(myPeerId || '__local__');
+      Object.entries(remotePlayers).forEach(([pid, rp]) => {
+        if (rp.team === 'red') redHumanIds.push(pid);
+      });
+      redHumanIds.sort();
+
+      if (redHumanIds.length > 0) {
+        const chosenId = redHumanIds[0];
+        playerHasSpike = (myTeam === 'red' && (myPeerId || '__local__') === chosenId);
+        if (Object.keys(connections).length > 0 && (isHost || (myPeerId || '__local__') === chosenId)) {
+          broadcastData({ type: 'spikeSync', carrierId: chosenId, hasSpike: true });
+        }
+      } else {
+        const redBots = brawlBots.filter(b => b.userData && b.userData.team === 'red');
+        if (redBots.length > 0) {
+          redBots[0].userData.hasSpike = true;
+        }
+      }
+    }
+
     function resetAscentMapGimmicks() {
       clearSpikeVisual();
       clearDroppedItems();
-      playerHasSpike = (myTeam === 'red');
+      assignSingleAttackerSpike();
       ascentDoors.forEach(d => {
         d.destroyed = false;
         d.hp = 400;
@@ -5176,6 +5211,7 @@
 
       syncBrawlRoster();
       equipBotsByCredits();
+      assignSingleAttackerSpike();
 
       createPrepBarriers();
       const halfTag = roundNumber <= 12 ? `전반전 (${roundNumber}/12)` : `후반전 (${roundNumber - 12}/12)`;
@@ -5822,7 +5858,11 @@
           // 공격팀: 사이트 도착 시 스파이크 설치, 아니면 경유지 전진
           const siteCenter = bd.targetSite === 'A' ? new THREE.Vector3(30, 0, 0) : new THREE.Vector3(-32, 0, -2);
           const distSite = Math.hypot(bot.position.x - siteCenter.x, bot.position.z - siteCenter.z);
-          if (!spikeState.planted && distSite < 5.5) {
+          const anyBotHasSpike = brawlBots.some(ob => ob.userData && !ob.userData.dead && ob.userData.hasSpike);
+          if (!bd.hasSpike && !playerHasSpike && !anyBotHasSpike && !spikeState.planted && droppedItems.every(it => it.type !== 'spike')) {
+            bd.hasSpike = true;
+          }
+          if (!spikeState.planted && bd.hasSpike && !playerHasSpike && distSite < 5.5) {
             bd.fsmState = 'PLANT';
           } else if (spikeState.planted) {
             bd.fsmState = 'GUARD_SPIKE';
@@ -5897,7 +5937,8 @@
 
         if (bd.fsmState === 'PLANT') {
           bd.plantTimer += dt;
-          if (bd.plantTimer >= 4.0 && !spikeState.planted) {
+          if (bd.plantTimer >= 4.0 && !spikeState.planted && bd.hasSpike) {
+            bd.hasSpike = false;
             spikeState.planted = true;
             spikeState.site = bd.targetSite;
             spikeState.timer = 45.0;
@@ -6105,6 +6146,18 @@
           credits = Math.min(MAX_CREDITS, credits + 200);
           updateHUD();
           triggerScoreStreak(1, Boolean(msg.isHead));
+        } else if (msg.type === 'spikeSync') {
+          const myId = myPeerId || '__local__';
+          if (msg.hasSpike) {
+            playerHasSpike = (myTeam === 'red' && msg.carrierId === myId);
+            if (!playerHasSpike && activeSlot === 4) {
+              activeSlot = slotWeapons[1] ? 1 : 2;
+              updateGunVisual();
+            }
+          } else if (msg.carrierId === myId) {
+            playerHasSpike = false;
+          }
+          updateHUD();
         }
       });
 
@@ -7820,6 +7873,12 @@
       if (karambitModel && karambitModel.userData.bladeAuraMat) {
         karambitModel.userData.bladeAuraMat.opacity = isAuraOn ? (0.38 + Math.sin(performance.now() * 0.015) * 0.16) : 0.0;
         karambitModel.userData.blackCarbonMat.emissiveIntensity = isAuraOn ? 0.48 : 0.06;
+      }
+
+      if (curKey === 'spike' && models.spike && models.spike.userData.core) {
+        models.spike.userData.core.rotation.y += dt * 3.8;
+        const heldPulse = 1.0 + Math.sin(performance.now() * 0.01) * 0.14;
+        models.spike.userData.core.scale.setScalar(heldPulse);
       }
 
       updateBrawlRoundPhase(dt);
