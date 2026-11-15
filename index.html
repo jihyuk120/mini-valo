@@ -468,7 +468,7 @@
       <span id="weaponText" style="color:#ff4655; font-size:18px;">셰리프</span>
       <span class="ammo-val" id="ammoText">6 / 6</span>
       <div class="slot-bar">
-        <span id="slot1">[1] 없음</span> | <span id="slot2" class="slot-active">[2] 셰리프</span> | <span id="slot3">[3] 근접</span>
+        <span id="slot1">[1] 없음</span> | <span id="slot2" class="slot-active">[2] 셰리프</span> | <span id="slot3">[3] 근접</span> | <span id="slot4" style="display:none;">[4] 스파이크</span>
       </div>
     </div>
   </div>
@@ -1764,6 +1764,12 @@
       },
 
       // === 근접무기 [3번 슬롯] ===
+      spike: {
+        slot: 4, name: '스파이크', price: 0, auto: false, fireRate: 0.5, zoomType: 'none',
+        magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
+        recoilPitch: 0, recoilYaw: 0, moveSpeed: 7.8,
+        getDamage: () => 0
+      },
       melee: {
         slot: 3, name: '전술 나이프', price: 0, auto: false, fireRate: 0.4, zoomType: 'none',
         magSize: Infinity, reloadTime: 0, penetration: 1, jumpSpread: 0, noScopeSpread: 0,
@@ -1899,7 +1905,7 @@
     let roundPurchasedShield = false;
     let lossStreak = { red: 0, blue: 0 };
     let isMatchOver = false;
-    let slotWeapons = { 1: null, 2: 'classic', 3: 'melee' };
+    let slotWeapons = { 1: null, 2: 'classic', 3: 'melee', 4: 'spike' };
     let activeSlot = 2;
     let ammoState = { classic: 12, shorty: 2, frenzy: 13, ghost: 15, bandit: 8, sheriff: 6, stinger: 20, spectre: 30, bucky: 5, judge: 5, bulldog: 24, guardian: 12, phantom: 30, vandal: 25, marshal: 5, outlaw: 2, operator: 5, ares: 50, odin: 100, melee: Infinity };
     let isReloading = false, reloadTimer = null;
@@ -3887,6 +3893,40 @@
       return group;
     }
 
+    function buildSpikeHeldModel() {
+      const grp = new THREE.Group();
+      const darkBodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.78, roughness: 0.28 });
+      const goldTrimMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.85, roughness: 0.25 });
+      const coreGlowMat = new THREE.MeshBasicMaterial({ color: 0xff2a3c });
+      const cyanGlowMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.085, 0.14, 12), darkBodyMat);
+      base.position.set(0, -0.02, -0.14);
+
+      const midRing = new THREE.Mesh(new THREE.CylinderGeometry(0.074, 0.074, 0.022, 12), goldTrimMat);
+      midRing.position.set(0, 0.02, -0.14);
+
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.052, 0), coreGlowMat);
+      core.position.set(0, 0.085, -0.14);
+
+      const topCap = new THREE.Mesh(new THREE.ConeGeometry(0.042, 0.055, 8), darkBodyMat);
+      topCap.position.set(0, 0.155, -0.14);
+
+      for (let i = 0; i < 3; i++) {
+        const ang = (i * Math.PI * 2) / 3;
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.13, 0.042), goldTrimMat);
+        fin.position.set(Math.cos(ang) * 0.072, 0.03, -0.14 + Math.sin(ang) * 0.072);
+        fin.rotation.y = -ang;
+        const led = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.06, 0.008), cyanGlowMat);
+        led.position.set(Math.cos(ang) * 0.082, 0.04, -0.14 + Math.sin(ang) * 0.082);
+        grp.add(fin, led);
+      }
+
+      grp.add(base, midRing, core, topCap);
+      grp.userData.core = core;
+      return grp;
+    }
+
     const models = {
       classic: buildCompactPistolModel({ slideLen: 0.21, slideColor: 0x353940 }),
       shorty: buildShotgunModel({ short: true, bodyColor: 0x3a322d }),
@@ -3912,6 +3952,7 @@
       operator_araxys: buildAraxysOperatorModel(),
       ares: buildLmgModel({ bodyColor: 0x2c3138 }),
       odin: buildLmgModel({ bodyColor: 0x22252b }),
+      spike: buildSpikeHeldModel(),
       melee: buildMeleeModel(),
       melee_champions2021: buildChampions2021KarambitModel()
     };
@@ -5220,8 +5261,15 @@
             spikeState.planted = true;
             spikeState.site = nearSite;
             spikeState.timer = 45.0;
+            spikeState.plantProgress = 0;
+            playerHasSpike = false;
             spikeState.pos.set(camera.position.x, 0, camera.position.z);
             createSpikeMesh(spikeState.pos);
+            if (activeSlot === 4) {
+              activeSlot = slotWeapons[1] ? 1 : 2;
+              updateGunVisual();
+            }
+            updateHUD();
             if (promptBanner) promptBanner.style.display = 'none';
             showRoundBanner(`SPIKE PLANTED (${nearSite} SITE)`, '45초 후 스파이크가 폭발합니다! 사이트를 사수하세요!', '#ff4655', 2600);
           }
@@ -6134,6 +6182,9 @@
 
     function switchSlot(slotNum) {
       if (slotNum === 1 && !slotWeapons[1]) return;
+      if (slotNum === 4) {
+        if (currentMap !== 'brawl' || myTeam !== 'red' || !playerHasSpike || spikeState.planted) return;
+      }
       if (activeSlot === slotNum) return;
       cancelReload();
       activeSlot = slotNum;
@@ -6405,15 +6456,20 @@
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
         (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
         (key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name;
-      document.getElementById('ammoText').innerText = key === 'melee' ? '∞' : `${ammoState[key]} / ${w.magSize}`;
+      document.getElementById('ammoText').innerText = (key === 'melee' || key === 'spike') ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
-      const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3');
+      const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3'), s4 = document.getElementById('slot4');
       s1.innerText = `[1] ${slotWeapons[1] ? WEAPONS[slotWeapons[1]].name : '없음'}`;
       s2.innerText = `[2] ${WEAPONS[slotWeapons[2]].name}`;
       s3.innerText = isMeleeChamp ? `[3] 카람빗` : `[3] 근접`;
       s1.className = activeSlot === 1 ? 'slot-active' : '';
       s2.className = activeSlot === 2 ? 'slot-active' : '';
       s3.className = activeSlot === 3 ? 'slot-active' : '';
+      if (s4) {
+        const showSpikeSlot = (currentMap === 'brawl' && myTeam === 'red' && playerHasSpike && !spikeState.planted);
+        s4.style.display = showSpikeSlot ? 'inline' : 'none';
+        s4.className = activeSlot === 4 ? 'slot-active' : '';
+      }
 
       ['classic', 'shorty', 'frenzy', 'ghost', 'bandit', 'sheriff', 'stinger', 'spectre', 'bucky', 'judge', 'bulldog', 'guardian', 'phantom', 'vandal', 'marshal', 'outlaw', 'operator', 'ares', 'odin'].forEach(k => { const el = document.getElementById('buy-' + k); if (el) el.classList.toggle('equipped', slotWeapons[WEAPONS[k].slot] === k); });
       ['light', 'regen', 'heavy'].forEach(k => document.getElementById('buy-' + k).classList.toggle('equipped', currentShieldKey === k));
@@ -6595,6 +6651,7 @@
       if (e.code === 'Digit1') switchSlot(1);
       if (e.code === 'Digit2') switchSlot(2);
       if (e.code === 'Digit3') switchSlot(3);
+      if (e.code === 'Digit4') switchSlot(4);
       if (e.code === 'KeyR') startReload();
       if (e.code === 'KeyY' && !isReloading && zoomLevel === 0) {
         isInspecting = !isInspecting;
@@ -6624,6 +6681,20 @@
       }
 
       if (e.code === 'KeyG' && currentMap === 'brawl') {
+        if (myTeam === 'red' && playerHasSpike && !spikeState.planted && (activeSlot === 4 || spikeState.plantProgress === 0)) {
+          playerHasSpike = false;
+          spikeState.plantProgress = 0;
+          const forwardDrop = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(1.3);
+          const dropPos = camera.position.clone().add(forwardDrop);
+          spawnDroppedItem('spike', 'spike', dropPos);
+          if (activeSlot === 4) {
+            activeSlot = slotWeapons[1] ? 1 : 2;
+            updateGunVisual();
+          }
+          updateHUD();
+          addKillFeed('[스파이크] G키로 스파이크를 바닥에 버렸습니다.', false);
+          return;
+        }
         for (const d of ascentDoors) {
           if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.5) {
             toggleAscentDoor(d);
@@ -6638,7 +6709,7 @@
         isGrounded = false;
       }
 
-      if (e.code === 'KeyE' && dashCooldown <= 0) {
+      if (e.code === 'KeyE' && dashCooldown <= 0 && spikeState.plantProgress === 0 && spikeState.defuseProgress === 0) {
         const { forward, right } = getMoveVectors();
         const dir = new THREE.Vector3(0, 0, 0);
         if (keys['KeyW']) dir.add(forward);
@@ -6663,6 +6734,7 @@
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
     function moveWithCollision(dx, dz) {
+      if (currentMap === 'brawl' && (spikeState.plantProgress > 0 || spikeState.defuseProgress > 0)) return;
       const feetY = camera.position.y - currentEyeHeight;
       const headY = camera.position.y + 0.15;
 
