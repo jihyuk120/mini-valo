@@ -2064,13 +2064,16 @@
       mapGroup.add(mesh);
       wallMeshes.push(mesh);
       if (addCollider) {
+        const cMinY = y - h / 2;
+        const cMaxY = y + h / 2;
         wallColliders.push({
           minX: x - w / 2 - 0.45,
           maxX: x + w / 2 + 0.45,
           minZ: z - d / 2 - 0.45,
           maxZ: z + d / 2 + 0.45,
-          minY: y - h / 2,
-          maxY: y + h / 2
+          minY: cMinY,
+          maxY: cMaxY,
+          isLowWoodCrate: (texType === 'woodCrate' && cMaxY <= 1.65)
         });
       }
       return mesh;
@@ -2396,7 +2399,7 @@
     }
 
     let floorZones = [];
-    function getFloorHeightAt(x, z) {
+    function getFloorHeightAt(x, z, feetY = null) {
       let h = 0;
       for (const fz of floorZones) {
         if (x >= fz.minX && x <= fz.maxX && z >= fz.minZ && z <= fz.maxZ) {
@@ -2408,6 +2411,15 @@
             h = fz.hStart + (fz.hEnd - fz.hStart) * t;
           } else {
             h = fz.y;
+          }
+        }
+      }
+      for (const c of wallColliders) {
+        if (c.isLowWoodCrate && c.maxY <= 1.65) {
+          if (x > c.minX && x < c.maxX && z > c.minZ && z < c.maxZ) {
+            if (feetY === null || feetY >= c.maxY - 0.3) {
+              if (c.maxY > h) h = c.maxY;
+            }
           }
         }
       }
@@ -2587,12 +2599,11 @@
       addBlock(0.8, 1.2, 4.2, 20.0, 0.6, 2.5, italianBeige, true, 'italianWall');
       createBreakableGlass(20.0, 2.8, 2.5, 0.25, 3.2, 4.0);
 
-      // (4) 끊기지 않는 헤븐(2층): X: +20 ~ +42, Z: -22 ~ -12, 높이 Y: 3.5
-      //     그 바로 아래(Y: 0 ~ 3.4)는 뚫려 있는 헬(언더) 공간!
-      addFloorZone(22, 10, 31.0, 3.5, -17.0, asphaltDark);
-      // 2층 바닥 슬래브: Y = 3.5 ~ 3.9 (center y = 3.7, h = 0.4 -> minY = 3.5, maxY = 3.9)
-      // 플레이어 눈높이 Y = 2.0 (머리 Y = 2.15) < minY(3.5) 이므로 아래쪽 헬(Y = 0 ~ 3.4)을 튕김 없이 자유롭게 걸어다님!
-      addBlock(22, 0.4, 10, 31.0, 3.7, -17.0, italianBeige, true, 'italianWall');
+      // (4) 끊기지 않는 헤븐(2층): X: +20 ~ +42, Z: -22 ~ -12, 높이 Y: 3.8
+      //     그 바로 아래(Y: 0 ~ 3.2)는 뚫려 있는 헬(언더) 공간!
+      addFloorZone(22, 10, 31.0, 3.8, -17.0, asphaltDark);
+      // 2층 바닥 슬래브: Y = 3.2 ~ 3.8 (center y = 3.5, h = 0.6 -> minY = 3.2, maxY = 3.8)
+      addBlock(22, 0.6, 10, 31.0, 3.5, -17.0, italianBeige, true, 'italianWall');
       // 2층 헤븐 앞쪽(Z = -12) 발코니 난간 (Y = 3.9 ~ 4.9 -> minY = 3.9, 1층 헬 입구를 전혀 막지 않음!)
       addBlock(22, 1.0, 0.6, 31.0, 4.4, -12.3, terracottaOrange, true, 'terracotta');
       // 2층 헤븐 뒤쪽(Z = -22) & 우측(X = +42) 외벽 (2층 높이 Y = 3.5 ~ 8.5)
@@ -2606,8 +2617,8 @@
       // 1층 헬(Hell) 내부 엄폐 상자 (Y = 0 ~ 1.4)
       addBlock(2.2, 1.4, 2.2, 33.5, 0.7, -19.5, woodCrateBrown, true, 'woodCrate');
 
-      // 수비 스폰 쪽에서 2층 헤븐으로 올라가는 경사로 (X: +22 ~ +28, Z: -32 ~ -22, Y: 0 -> 3.5)
-      addFloorZone(6.0, 10.0, 25.0, 3.5, -27.0, asphaltDark, true, 0, 3.5);
+      // 수비 스폰 쪽에서 2층 헤븐으로 올라가는 경사로 (X: +22 ~ +28, Z: -32 ~ -22, Y: 0 -> 3.8)
+      addFloorZone(6.0, 10.0, 25.0, 3.8, -27.0, asphaltDark, true, 0, 3.8);
       const rampMesh = new THREE.Mesh(
         new THREE.BoxGeometry(6.0, 0.45, 10.6),
         new THREE.MeshStandardMaterial({ map: getMapTexture('asphalt'), roughness: 0.88 })
@@ -5629,10 +5640,20 @@
     function hasLineOfSight(fromPos, toPos) {
       const dir = new THREE.Vector3().subVectors(toPos, fromPos);
       const dist = dir.length();
+      if (dist <= 0.001) return true;
       dir.normalize();
       aiRaycaster.set(fromPos, dir);
-      const hits = aiRaycaster.intersectObjects(wallMeshes);
-      return !(hits.length > 0 && hits[0].distance < dist);
+      aiRaycaster.near = 0;
+      aiRaycaster.far = dist;
+      const blockers = [...wallMeshes];
+      for (const dObj of ascentDoors) {
+        if (!dObj.isOpen && !dObj.destroyed && dObj.panel) blockers.push(dObj.panel);
+      }
+      for (const gObj of ascentGlassPanes) {
+        if (!gObj.destroyed && gObj.mesh) blockers.push(gObj.mesh);
+      }
+      const hits = aiRaycaster.intersectObjects(blockers, false);
+      return !(hits.length > 0 && hits[0].distance < dist - 0.05);
     }
 
     function moveBrawlBotWithCollision(bot, dx, dz) {
@@ -5740,13 +5761,14 @@
         }
 
         // 3. FSM 상태별 행동 실행
-        if (bd.fsmState === 'COMBAT' && bestTarget) {
+        if (bd.fsmState === 'COMBAT' && bestTarget && hasLineOfSight(botEyePos, bestTarget.pos)) {
           // 시야 내 적 발견 시 멈춰서 정밀 조준 및 사격! (왔다갔다 배회 제거)
           const toTarget = new THREE.Vector3().subVectors(bestTarget.pos, botEyePos);
           bot.rotation.y = Math.atan2(toTarget.x, toTarget.z);
 
           bd.fireCooldown -= dt;
           if (bd.fireCooldown <= 0) {
+            if (!hasLineOfSight(botEyePos, bestTarget.pos)) continue;
             const w = WEAPONS[bd.weaponKey] || WEAPONS.classic;
             bd.fireCooldown = (bd.weaponKey === 'sheriff' || bd.weaponKey === 'guardian' ? 0.58 : 0.32) + Math.random() * 0.22;
             playWeaponSound(bd.weaponKey, distToLocalPlayer);
@@ -6788,12 +6810,27 @@
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+    function shouldIgnoreCollider(c, feetY, headY, stepHeight = 0.45) {
+      const cMinY = c.minY !== undefined ? c.minY : -2;
+      // 낮은 나무 상자(box.maxY <= 1.65)에 한해 발 높이가 상자 윗면(box.maxY - 0.3)보다 높으면 옆면 충돌 무시
+      if (c.isLowWoodCrate && c.maxY <= 1.65 && feetY >= c.maxY - 0.3) {
+        return true;
+      }
+      // 2층 헤븐 바닥(minY = 3.2) 아래 언더(헬) 진입 시 머리 높이(playerY + 1.8)가 3.2보다 낮으면 충돌 무시
+      if (cMinY >= 3.2 && headY < cMinY) {
+        return true;
+      }
+      if (feetY >= c.maxY - stepHeight) return true;
+      if (headY <= cMinY) return true;
+      return false;
+    }
+
     function resolveWallOverlap(posObj, feetY, headY, stepHeight = 0.45, eps = 0.025) {
       for (let iter = 0; iter < 3; iter++) {
         let pushed = false;
         for (const c of wallColliders) {
-          const cMinY = c.minY !== undefined ? c.minY : -2;
-          if (posObj.x > c.minX && posObj.x < c.maxX && posObj.z > c.minZ && posObj.z < c.maxZ && feetY < c.maxY - stepHeight && headY > cMinY + 0.1) {
+          if (shouldIgnoreCollider(c, feetY, headY, stepHeight)) continue;
+          if (posObj.x > c.minX && posObj.x < c.maxX && posObj.z > c.minZ && posObj.z < c.maxZ) {
             const penLeft = posObj.x - c.minX;
             const penRight = c.maxX - posObj.x;
             const penTop = posObj.z - c.minZ;
@@ -6813,7 +6850,7 @@
     function moveWithCollision(dx, dz) {
       if (currentMap === 'brawl' && (spikeState.plantProgress > 0 || spikeState.defuseProgress > 0)) return;
       const feetY = camera.position.y - currentEyeHeight;
-      const headY = camera.position.y + 0.15;
+      const headY = feetY + 1.8;
 
       // 이동 전 지형물 내부에 겹쳐 있다면 최소 침투 방향으로 즉시 탈출 보정
       resolveWallOverlap(camera.position, feetY, headY, 0.45, 0.025);
@@ -6821,8 +6858,8 @@
       const nextX = camera.position.x + dx;
       let blockedX = false;
       for (const c of wallColliders) {
-        const cMinY = c.minY !== undefined ? c.minY : -2;
-        if (nextX > c.minX && nextX < c.maxX && camera.position.z > c.minZ && camera.position.z < c.maxZ && feetY < c.maxY - 0.45 && headY > cMinY + 0.1) {
+        if (shouldIgnoreCollider(c, feetY, headY, 0.45)) continue;
+        if (nextX > c.minX && nextX < c.maxX && camera.position.z > c.minZ && camera.position.z < c.maxZ) {
           blockedX = true; break;
         }
       }
@@ -6831,8 +6868,8 @@
       const nextZ = camera.position.z + dz;
       let blockedZ = false;
       for (const c of wallColliders) {
-        const cMinY = c.minY !== undefined ? c.minY : -2;
-        if (camera.position.x > c.minX && camera.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ && feetY < c.maxY - 0.45 && headY > cMinY + 0.1) {
+        if (shouldIgnoreCollider(c, feetY, headY, 0.45)) continue;
+        if (camera.position.x > c.minX && camera.position.x < c.maxX && nextZ > c.minZ && nextZ < c.maxZ) {
           blockedZ = true; break;
         }
       }
@@ -7401,15 +7438,22 @@
       } else if (!isGrounded) {
         velY -= 20.5 * dt;
         camera.position.y += velY * dt;
-        const gFloorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
+        const curFeetY = camera.position.y - currentEyeHeight;
+        const gFloorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z, curFeetY) : 0;
         if (camera.position.y <= gFloorY + currentEyeHeight) {
           camera.position.y = gFloorY + currentEyeHeight;
           velY = 0;
           isGrounded = true;
         }
       } else {
-        const floorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z) : 0;
-        camera.position.y = floorY + currentEyeHeight;
+        const curFeetY = camera.position.y - currentEyeHeight;
+        const floorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z, curFeetY) : 0;
+        if (curFeetY > floorY + 0.35) {
+          isGrounded = false;
+          velY = 0;
+        } else {
+          camera.position.y = floorY + currentEyeHeight;
+        }
       }
 
       const karambitModel = models.melee_champions2021;
