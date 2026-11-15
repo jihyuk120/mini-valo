@@ -1810,7 +1810,20 @@
       const tryPlay = () => {
         if (idx >= candidates.length) return;
         const audio = new Audio(encodeURI(candidates[idx++]));
-        audio.volume = 0.9;
+        audio.volume = 1.0;
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) {
+            const ctx = new AudioCtx();
+            if (ctx.state === 'suspended') ctx.resume();
+            const source = ctx.createMediaElementSource(audio);
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = 2.5;
+            source.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            audio.addEventListener('ended', () => { ctx.close().catch(() => {}); }, { once: true });
+          }
+        } catch (e) {}
         audio.play().catch(() => tryPlay());
       };
       tryPlay();
@@ -2396,7 +2409,7 @@
     }
 
     function updateAscentDoors(dt) {
-      const duration = 1.75;
+      const duration = 5.0;
       const step = dt / duration;
       for (const d of ascentDoors) {
         if (d.destroyed) continue;
