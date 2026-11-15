@@ -118,6 +118,7 @@
         <span style="color:#666;">|</span>
         <input type="text" id="joinCodeInput" placeholder="친구 방 코드 입력">
         <button id="btnJoinRoom" class="btn-secondary">방 참가하기</button>
+        <button id="btnLeaveRoomLobby" class="btn-secondary" style="display:none; border-color:#ff4655; color:#ff4655;" onclick="leaveRoomAndReturnToTitle()">방 나가기</button>
       </div>
       <div id="roomStatusBox" style="margin-top:10px; text-align:center; font-size:14px; color:#ffcc00;">
         현재 상태: 솔로 모드 (방 만들기 또는 코드 입력으로 친구와 연결 가능)
@@ -127,6 +128,7 @@
 
     <div class="row" style="margin-top:10px;">
       <button id="btnResumeGame" class="btn-secondary" style="font-size:17px; padding:14px 26px; display:none; border-color:#ffcc00; color:#ffcc00;">↩ 게임으로 돌아가기 (뒤로 가기)</button>
+      <button id="btnLeaveRoomEsc" class="btn-secondary" style="font-size:17px; padding:14px 24px; display:none; border-color:#ff4655; color:#ff4655;" onclick="leaveRoomAndReturnToTitle()">🚪 방 나가기 (메인 타이틀)</button>
       <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:14px 32px;">일반전 새 게임 시작 (13선승)</button>
       <button id="btnStartRange" class="btn-secondary" style="font-size:17px; padding:14px 28px;">사격장 (훈련봇 연습)</button>
     </div>
@@ -5070,6 +5072,8 @@
       }
     }
 
+    let isSpectating = false;
+    let spectateTarget = null;
     let spectateTargetIndex = 0;
 
     function syncBrawlRoster() {
@@ -5214,13 +5218,32 @@
       resetScoreStreak();
 
       isDead = false;
+      isSpectating = false;
+      spectateTarget = null;
+      if (currentSpectatedMesh) {
+        currentSpectatedMesh.visible = true;
+        currentSpectatedMesh = null;
+      }
+      if (currentSpectatedWeaponKey !== null) {
+        currentSpectatedWeaponKey = null;
+        updateGunVisual();
+      }
       playerHp = 100;
       tagSlowMultiplier = 1.0;
       aimPunchPitch = 0;
       setZoom(0);
       gunGroup.visible = true;
-      document.getElementById('deathBanner').style.display = 'none';
-      document.getElementById('deathBanner').style.background = 'rgba(180, 20, 35, 0.45)';
+      const dBanner = document.getElementById('deathBanner');
+      if (dBanner) {
+        dBanner.style.display = 'none';
+        dBanner.style.background = 'rgba(180, 20, 35, 0.45)';
+      }
+      Object.values(remotePlayers).forEach(rp => {
+        if (rp) {
+          rp.isDead = false;
+          if (rp.mesh) rp.mesh.visible = true;
+        }
+      });
 
       Object.keys(ammoState).forEach(k => {
         if (WEAPONS[k] && WEAPONS[k].magSize !== Infinity) ammoState[k] = WEAPONS[k].magSize;
@@ -5553,11 +5576,7 @@
       updateSpikeAndGimmicks(dt);
 
       if (roundPhase === 'PREP') {
-        if (isAuthoritative) {
-          roundPhaseTimer = Math.max(0, roundPhaseTimer - dt);
-        } else {
-          roundPhaseTimer = Math.max(0, roundPhaseTimer - dt);
-        }
+        roundPhaseTimer = Math.max(0, roundPhaseTimer - dt);
         const sec = Math.max(0, Math.ceil(roundPhaseTimer));
         if (timerEl) {
           timerEl.innerText = `구매 ${sec}s`;
@@ -5568,6 +5587,7 @@
 
         if (isAuthoritative && roundPhaseTimer <= 0) {
           roundPhase = 'COMBAT';
+          roundPhaseTimer = 100.0;
           clearPrepBarriers();
           if (isShopOpen) {
             isShopOpen = false;
@@ -5580,6 +5600,9 @@
           if (hasPeers) sendHostRoundSync();
         }
       } else if (roundPhase === 'COMBAT') {
+        if (!spikeState.planted) {
+          roundPhaseTimer = Math.max(0, roundPhaseTimer - dt);
+        }
         const halfStrC = roundNumber <= 12 ? '전반' : '후반';
         if (spikeState.planted) {
           const sSec = Math.max(0, spikeState.timer).toFixed(1);
@@ -5589,9 +5612,12 @@
           }
           if (subEl) subEl.innerText = `${spikeState.site} 사이트 스파이크 가동 중! | 생존 공격(GREEN) ${redAlive} vs 수비(RED) ${blueAlive}`;
         } else {
+          const cSec = Math.max(0, Math.ceil(roundPhaseTimer));
+          const cMin = Math.floor(cSec / 60);
+          const cRem = String(cSec % 60).padStart(2, '0');
           if (timerEl) {
-            timerEl.innerText = `R${roundNumber} 전투`;
-            timerEl.style.color = '#00ffcc';
+            timerEl.innerText = `${cMin}:${cRem}`;
+            timerEl.style.color = cSec <= 15 ? '#ff4655' : '#00ffcc';
           }
           if (subEl) subEl.innerText = `R${roundNumber}(${halfStrC}) · 5v5 | 생존 공격(GREEN) ${redAlive} vs 수비(RED) ${blueAlive} | [4]설치/해체 [G]철문`;
         }
@@ -5601,6 +5627,8 @@
             endBrawlRound('red', null, false, '수비팀 전멸');
           } else if (redAlive === 0 && !spikeState.planted) {
             endBrawlRound('blue', null, false, '공격팀 전멸');
+          } else if (!spikeState.planted && roundPhaseTimer <= 0) {
+            endBrawlRound('blue', null, false, '라운드 시간 초과 (수비 승리)');
           }
         }
       } else if (roundPhase === 'END') {
@@ -6199,6 +6227,7 @@
         type: 'roundSync',
         roundNumber,
         roundPhase,
+        roundTimer: roundPhaseTimer,
         roundPhaseTimer,
         redScore,
         blueScore,
@@ -6207,7 +6236,8 @@
         spikeSite: spikeState.site,
         spikeTimer: spikeState.timer,
         spikePos: { x: spikeState.pos.x, y: spikeState.pos.y, z: spikeState.pos.z },
-        aliveStates
+        aliveStates,
+        hostSentAt: Date.now()
       };
       if (targetConn && targetConn.open) {
         targetConn.send(payload);
@@ -6227,14 +6257,18 @@
       }
       const prevPhase = roundPhase;
       const prevRound = roundNumber;
+      const isNewRoundStarted = Boolean(msg.roundNumber && msg.roundNumber !== prevRound);
 
-      if (msg.roundNumber && msg.roundNumber !== prevRound) {
+      if (isNewRoundStarted) {
         startBrawlRound(msg.roundNumber, true);
       }
 
       roundNumber = msg.roundNumber || roundNumber;
       roundPhase = msg.roundPhase || roundPhase;
-      roundPhaseTimer = typeof msg.roundPhaseTimer === 'number' ? msg.roundPhaseTimer : roundPhaseTimer;
+      const incomingTimer = typeof msg.roundTimer === 'number' ? msg.roundTimer : msg.roundPhaseTimer;
+      if (typeof incomingTimer === 'number') {
+        roundPhaseTimer = incomingTimer;
+      }
       redScore = typeof msg.redScore === 'number' ? msg.redScore : redScore;
       blueScore = typeof msg.blueScore === 'number' ? msg.blueScore : blueScore;
       isMatchOver = Boolean(msg.isMatchOver);
@@ -6251,6 +6285,16 @@
         }
         showRoundBanner('FIGHT!', '공격(GREEN): A/B 사이트 스파이크 설치 | 수비(RED): 사이트 방어', '#ff4655', 1800);
       } else if (roundPhase === 'PREP' && prevPhase !== 'PREP') {
+        if (!isNewRoundStarted) {
+          isDead = false;
+          isSpectating = false;
+          spectateTarget = null;
+          playerHp = 100;
+          const dBanner = document.getElementById('deathBanner');
+          if (dBanner) dBanner.style.display = 'none';
+          updateHUD();
+          spawnMyPlayer();
+        }
         createPrepBarriers();
       }
 
@@ -6266,7 +6310,7 @@
         spikeState.timer = msg.spikeTimer;
       }
 
-      if (msg.aliveStates) {
+      if (msg.aliveStates && !isNewRoundStarted && roundPhase !== 'PREP') {
         Object.entries(msg.aliveStates).forEach(([pid, deadFlag]) => {
           if (pid === myPeerId) {
             if (deadFlag && !isDead) {
@@ -6418,20 +6462,113 @@
       });
     }
 
+    function updateLeaveRoomButtonsVisibility() {
+      const inRoomOrMatch = Boolean(peer || Object.keys(connections).length > 0 || hasEnteredGame);
+      const lobbyLeaveBtn = document.getElementById('btnLeaveRoomLobby');
+      const escLeaveBtn = document.getElementById('btnLeaveRoomEsc');
+      if (lobbyLeaveBtn) lobbyLeaveBtn.style.display = (peer || Object.keys(connections).length > 0) ? 'inline-block' : 'none';
+      if (escLeaveBtn) escLeaveBtn.style.display = inRoomOrMatch ? 'inline-block' : 'none';
+    }
+
+    window.leaveRoomAndReturnToTitle = function() {
+      try {
+        Object.values(connections).forEach(conn => {
+          try { conn.close(); } catch (e) {}
+        });
+      } catch (e) {}
+      Object.keys(connections).forEach(k => delete connections[k]);
+
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+        peer = null;
+      }
+      myPeerId = '';
+      isHost = false;
+
+      Object.keys(remotePlayers).forEach(pid => removeRemoteAvatar(pid));
+
+      cancelReload();
+      clearPrepBarriers();
+      clearChampionsFinisher();
+      clearSpikeVisual();
+      clearDroppedItems();
+      clearBrawlBots();
+
+      isDead = false;
+      isSpectating = false;
+      spectateTarget = null;
+      if (currentSpectatedMesh) {
+        currentSpectatedMesh.visible = true;
+        currentSpectatedMesh = null;
+      }
+      if (currentSpectatedWeaponKey !== null) {
+        currentSpectatedWeaponKey = null;
+        updateGunVisual();
+      }
+      playerHp = 100;
+      roundNumber = 1;
+      roundPhase = 'PREP';
+      roundPhaseTimer = 30.0;
+      hostSyncAccumulator = 0;
+      netSyncTimer = 0;
+      redScore = 0;
+      blueScore = 0;
+      isMatchOver = false;
+      hasEnteredGame = false;
+      isShopOpen = false;
+      isMouseDown = false;
+      setZoom(0);
+      Object.keys(keys).forEach(k => keys[k] = false);
+
+      const dBanner = document.getElementById('deathBanner');
+      if (dBanner) {
+        dBanner.style.display = 'none';
+        dBanner.style.background = 'rgba(180, 20, 35, 0.45)';
+      }
+      const cBanner = document.getElementById('roundCenterBanner');
+      if (cBanner) cBanner.style.display = 'none';
+      if (shopModal) shopModal.style.display = 'none';
+      const lb = document.getElementById('tabLeaderboard');
+      if (lb) lb.style.display = 'none';
+
+      document.getElementById('roomStatusBox').innerText = '현재 상태: 솔로 모드 (방 만들기 또는 코드 입력으로 친구와 연결 가능)';
+      document.getElementById('playerListBox').innerText = '';
+      const joinInput = document.getElementById('joinCodeInput');
+      if (joinInput) joinInput.value = '';
+
+      const resumeBtn = document.getElementById('btnResumeGame');
+      if (resumeBtn) resumeBtn.style.display = 'none';
+
+      if (document.pointerLockElement === document.body) {
+        try { document.exitPointerLock(); } catch (e) {}
+      }
+
+      loadMap('range');
+      updateScoreboard();
+      updateHUD();
+      updateLeaveRoomButtonsVisibility();
+      if (overlay) overlay.style.display = 'flex';
+    };
+
     document.getElementById('btnCreateRoom').addEventListener('click', () => {
       if (typeof Peer === 'undefined') {
         alert('네트워크 모듈 로딩 중입니다. 잠시 후 다시 눌러주세요.');
         return;
       }
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
       isHost = true;
       const randomCode = 'valo-' + Math.floor(1000 + Math.random() * 9000);
       peer = new Peer(randomCode);
       document.getElementById('roomStatusBox').innerText = '방 생성 중...';
+      updateLeaveRoomButtonsVisibility();
 
       peer.on('open', (id) => {
         myPeerId = id;
         document.getElementById('roomStatusBox').innerHTML = `방 생성 완료! 친구에게 알려줄 코드: <span style="color:#00ffcc; font-size:18px; user-select:all;">${id}</span>`;
         updatePlayerListUI();
+        updateLeaveRoomButtonsVisibility();
       });
 
       peer.on('connection', (conn) => {
@@ -6440,15 +6577,20 @@
           return;
         }
         setupConnection(conn);
+        updateLeaveRoomButtonsVisibility();
       });
     });
 
     document.getElementById('btnJoinRoom').addEventListener('click', () => {
       const code = document.getElementById('joinCodeInput').value.trim();
       if (!code) { alert('친구의 방 코드를 입력하세요!'); return; }
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
       isHost = false;
       peer = new Peer();
       document.getElementById('roomStatusBox').innerText = '방 접속 중...';
+      updateLeaveRoomButtonsVisibility();
 
       peer.on('open', (id) => {
         myPeerId = id;
@@ -6456,10 +6598,12 @@
         setupConnection(conn);
         document.getElementById('roomStatusBox').innerHTML = `방(${code})에 연결되었습니다!`;
         updatePlayerListUI();
+        updateLeaveRoomButtonsVisibility();
       });
 
       peer.on('connection', (conn) => {
         setupConnection(conn);
+        updateLeaveRoomButtonsVisibility();
       });
     });
 
@@ -7090,6 +7234,7 @@
         } else {
           const resumeBtn = document.getElementById('btnResumeGame');
           if (resumeBtn) resumeBtn.style.display = hasEnteredGame ? 'inline-block' : 'none';
+          updateLeaveRoomButtonsVisibility();
           overlay.style.display = 'flex';
         }
       }
@@ -7676,8 +7821,10 @@
     let currentSpectatedMesh = null;
     let currentSpectatedWeaponKey = null;
 
-    function updateSpectatorCamera() {
-      if (!isDead || currentMap !== 'brawl') {
+    function updateSpectatorCamera(dt = 0.016) {
+      if ((!isDead && !isSpectating) || currentMap !== 'brawl' || roundPhase === 'PREP') {
+        isSpectating = false;
+        spectateTarget = null;
         if (currentSpectatedMesh) {
           currentSpectatedMesh.visible = true;
           currentSpectatedMesh = null;
@@ -7689,10 +7836,17 @@
         return;
       }
       const targets = getSpectatableTargets();
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        isSpectating = false;
+        spectateTarget = null;
+        return;
+      }
 
+      isSpectating = true;
       spectateTargetIndex = spectateTargetIndex % targets.length;
       const target = targets[spectateTargetIndex];
+      const isTargetChanged = (spectateTarget !== target.mesh);
+      spectateTarget = target.mesh || target;
 
       // 이전에 관전하던 대상 메쉬 복구 후 현재 대상 메쉬는 1인칭 시야 방해 안 되게 숨김
       if (currentSpectatedMesh && currentSpectatedMesh !== target.mesh) {
@@ -7703,7 +7857,7 @@
         currentSpectatedMesh = target.mesh;
       }
 
-      // 관전 대상이 들고 있는 총기 모델로 1인칭 뷰모델 교체 (칼 들고 있는 버그 수정)
+      // 관전 대상이 들고 있는 총기 모델로 1인칭 뷰모델 교체
       const specWKey = target.weaponKey || 'vandal';
       if (currentSpectatedWeaponKey !== specWKey) {
         currentSpectatedWeaponKey = specWKey;
@@ -7713,19 +7867,36 @@
         gunGroup.rotation.set(0, 0, 0);
       }
       gunGroup.visible = true;
-      document.getElementById('deathBanner').style.background = 'rgba(15, 25, 35, 0.08)';
+      const dBanner = document.getElementById('deathBanner');
+      if (dBanner) {
+        dBanner.style.display = 'flex';
+        dBanner.style.background = 'rgba(15, 25, 35, 0.08)';
+      }
       const titleEl = document.querySelector('#deathBanner div:nth-child(1)');
       const subEl = document.querySelector('#deathBanner div:nth-child(2)');
       if (titleEl) titleEl.innerText = `1인칭 관전 중: ${target.name}`;
       if (subEl) subEl.innerText = '좌클릭: 다음 플레이어 관전 | 라운드 종료 후 부활';
 
-      // 1인칭 눈 위치 및 정면 시선 방향 동기화
-      camera.position.set(target.pos.x, 1.92, target.pos.z);
-      // 봇/아바타는 +Z가 정면(rotation.y = 0일 때 +Z를 봄), 카메라는 -Z가 정면이므로 + Math.PI 보정
+      // 관전 대상의 눈 높이 좌표와 시선 회전값만 부드럽게 추적 (본인 좌표와 완전히 분리)
+      const eyeY = (typeof target.pos.y === 'number' ? target.pos.y : 0) + 1.92;
+      const desiredPos = new THREE.Vector3(target.pos.x, eyeY, target.pos.z);
       const viewYaw = target.isRemote ? target.yaw : (target.yaw + Math.PI);
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = viewYaw;
-      camera.rotation.x = 0;
+
+      if (isTargetChanged || camera.position.distanceToSquared(desiredPos) > 400) {
+        camera.position.copy(desiredPos);
+        camera.rotation.order = 'YXZ';
+        camera.rotation.y = viewYaw;
+        camera.rotation.x = 0;
+      } else {
+        const smoothAlpha = 1 - Math.exp(-28 * Math.min(dt, 0.05));
+        camera.position.lerp(desiredPos, smoothAlpha);
+        camera.rotation.order = 'YXZ';
+        let diffY = viewYaw - camera.rotation.y;
+        while (diffY > Math.PI) diffY -= Math.PI * 2;
+        while (diffY < -Math.PI) diffY += Math.PI * 2;
+        camera.rotation.y += diffY * smoothAlpha;
+        camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, 0, smoothAlpha);
+      }
     }
 
     document.addEventListener('mousedown', (e) => {
@@ -7827,10 +7998,6 @@
       aimPunchPitch = THREE.MathUtils.lerp(aimPunchPitch, 0, 7.5 * dt);
       tagSlowMultiplier = THREE.MathUtils.lerp(tagSlowMultiplier, 1.0, 2.2 * dt);
 
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = yaw + recoilYawOffset;
-      camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset + aimPunchPitch));
-
       const isCrouching = Boolean(keys['ControlLeft'] || keys['ControlRight']);
       const isWalking = Boolean(keys['ShiftLeft'] || keys['ShiftRight']);
       const isMoving = Boolean(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
@@ -7840,74 +8007,84 @@
       const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isCrouching ? (isMoving ? 0.85 : 0.75) : (isMoving && !isWalking ? 1.5 : 1.0)));
       crosshairEl.style.transform = `translate(-50%, -50%) scale(${spreadScale})`;
 
-      const targetEyeHeight = isCrouching ? 1.25 : 2.0;
-      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 16 * dt);
-
       if (dashCooldown > 0) dashCooldown -= dt;
       const dashEl = document.getElementById('dashStatus');
       dashEl.innerText = dashCooldown > 0 ? dashCooldown.toFixed(1) + '초' : '준비완료';
       dashEl.style.color = dashCooldown > 0 ? '#ff4655' : '#00ffcc';
 
       let targetFov = 75;
-      if (dashTime > 0) targetFov = 96;
-      else if (zoomLevel === 1) targetFov = curWeapon.zoomType === 'sniper' ? 35 : 55;
-      else if (zoomLevel === 2) targetFov = 18;
+      if (!isDead && !isSpectating) {
+        if (dashTime > 0) targetFov = 96;
+        else if (zoomLevel === 1) targetFov = curWeapon.zoomType === 'sniper' ? 35 : 55;
+        else if (zoomLevel === 2) targetFov = 18;
+      }
 
-      if (!isDead) {
-        if (dashTime > 0) {
-          dashTime -= dt;
-          moveWithCollision(dashDir.x * 50 * dt, dashDir.z * 50 * dt);
-        } else if (document.pointerLockElement === document.body) {
-          const { forward, right } = getMoveVectors();
-          const move = new THREE.Vector3();
-          if (keys['KeyW']) move.add(forward);
-          if (keys['KeyS']) move.sub(forward);
-          if (keys['KeyD']) move.add(right);
-          if (keys['KeyA']) move.sub(right);
-          if (move.lengthSq() > 0) move.normalize();
+      if ((isDead || isSpectating) && currentMap === 'brawl') {
+        camera.fov = THREE.MathUtils.lerp(camera.fov, 75, 0.22);
+        camera.updateProjectionMatrix();
+        updateSpectatorCamera(dt);
+      } else {
+        camera.rotation.order = 'YXZ';
+        camera.rotation.y = yaw + recoilYawOffset;
+        camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset + aimPunchPitch));
 
-          let moveSpeed = curWeapon.moveSpeed || 7.4;
-          if (isCrouching) moveSpeed = Math.min(3.4, moveSpeed * 0.48);
-          else if (isWalking || zoomLevel > 0) moveSpeed = Math.min(4.4, moveSpeed * 0.62);
-          moveSpeed *= tagSlowMultiplier;
+        const targetEyeHeight = isCrouching ? 1.25 : 2.0;
+        currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 16 * dt);
 
-          moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
+        if (!isDead) {
+          if (dashTime > 0) {
+            dashTime -= dt;
+            moveWithCollision(dashDir.x * 50 * dt, dashDir.z * 50 * dt);
+          } else if (document.pointerLockElement === document.body) {
+            const { forward, right } = getMoveVectors();
+            const move = new THREE.Vector3();
+            if (keys['KeyW']) move.add(forward);
+            if (keys['KeyS']) move.sub(forward);
+            if (keys['KeyD']) move.add(right);
+            if (keys['KeyA']) move.sub(right);
+            if (move.lengthSq() > 0) move.normalize();
 
-          // 플레이어 발소리 (Shift 걷기 시 발소리 무음, 뛰거나 앉아 걸을 때 발소리 재생)
-          if (move.lengthSq() > 0 && isGrounded && !isWalking) {
-            window._playerStepTimer = (window._playerStepTimer || 0) + dt * (isCrouching ? 0.65 : 1.0);
-            if (window._playerStepTimer >= 0.36) {
-              window._playerStepTimer = 0;
-              playFootstepSound(isCrouching, 0);
+            let moveSpeed = curWeapon.moveSpeed || 7.4;
+            if (isCrouching) moveSpeed = Math.min(3.4, moveSpeed * 0.48);
+            else if (isWalking || zoomLevel > 0) moveSpeed = Math.min(4.4, moveSpeed * 0.62);
+            moveSpeed *= tagSlowMultiplier;
+
+            moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
+
+            // 플레이어 발소리 (Shift 걷기 시 발소리 무음, 뛰거나 앉아 걸을 때 발소리 재생)
+            if (move.lengthSq() > 0 && isGrounded && !isWalking) {
+              window._playerStepTimer = (window._playerStepTimer || 0) + dt * (isCrouching ? 0.65 : 1.0);
+              if (window._playerStepTimer >= 0.36) {
+                window._playerStepTimer = 0;
+                playFootstepSound(isCrouching, 0);
+              }
+            } else {
+              window._playerStepTimer = 0.25;
             }
-          } else {
-            window._playerStepTimer = 0.25;
           }
         }
-      }
-      camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.22);
-      camera.updateProjectionMatrix();
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.22);
+        camera.updateProjectionMatrix();
 
-      if (isDead && currentMap === 'brawl') {
-        updateSpectatorCamera();
-      } else if (!isGrounded) {
-        velY -= 20.5 * dt;
-        camera.position.y += velY * dt;
-        const curFeetY = camera.position.y - currentEyeHeight;
-        const gFloorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z, curFeetY) : 0;
-        if (camera.position.y <= gFloorY + currentEyeHeight) {
-          camera.position.y = gFloorY + currentEyeHeight;
-          velY = 0;
-          isGrounded = true;
-        }
-      } else {
-        const curFeetY = camera.position.y - currentEyeHeight;
-        const floorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z, curFeetY) : 0;
-        if (curFeetY > floorY + 0.35) {
-          isGrounded = false;
-          velY = 0;
+        if (!isGrounded) {
+          velY -= 20.5 * dt;
+          camera.position.y += velY * dt;
+          const curFeetY = camera.position.y - currentEyeHeight;
+          const gFloorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z, curFeetY) : 0;
+          if (camera.position.y <= gFloorY + currentEyeHeight) {
+            camera.position.y = gFloorY + currentEyeHeight;
+            velY = 0;
+            isGrounded = true;
+          }
         } else {
-          camera.position.y = floorY + currentEyeHeight;
+          const curFeetY = camera.position.y - currentEyeHeight;
+          const floorY = currentMap === 'brawl' ? getFloorHeightAt(camera.position.x, camera.position.z, curFeetY) : 0;
+          if (curFeetY > floorY + 0.35) {
+            isGrounded = false;
+            velY = 0;
+          } else {
+            camera.position.y = floorY + currentEyeHeight;
+          }
         }
       }
 
