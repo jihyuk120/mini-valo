@@ -2166,14 +2166,28 @@
       droppedItems.push({ type, key, mesh: grp });
     }
 
-    function getNearestDroppedItem(maxDist = 3.4) {
+    function getAimedDroppedItem(maxDist = 4.2) {
+      const camDir = new THREE.Vector3();
+      camera.getWorldDirection(camDir);
       let best = null;
-      let bestD = maxDist;
+      let bestScore = -1;
       for (const item of droppedItems) {
-        const d = Math.hypot(camera.position.x - item.mesh.position.x, camera.position.z - item.mesh.position.z);
-        if (d <= bestD) {
-          bestD = d;
-          best = item;
+        const toItem = new THREE.Vector3(
+          item.mesh.position.x - camera.position.x,
+          (item.mesh.position.y + 0.22) - camera.position.y,
+          item.mesh.position.z - camera.position.z
+        );
+        const dist = toItem.length();
+        if (dist > maxDist || dist < 0.05) continue;
+        toItem.normalize();
+        const dot = camDir.dot(toItem);
+        const minDot = dist < 1.6 ? 0.72 : 0.90;
+        if (dot >= minDot) {
+          const score = dot * 10 - dist * 0.35;
+          if (score > bestScore) {
+            bestScore = score;
+            best = item;
+          }
         }
       }
       return best;
@@ -2189,7 +2203,9 @@
         const w = WEAPONS[item.key];
         const prevKey = slotWeapons[w.slot];
         if (prevKey && prevKey !== 'classic' && prevKey !== 'melee') {
-          spawnDroppedItem('weapon', prevKey, camera.position);
+          const forwardDrop = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(1.1);
+          spawnDroppedItem('weapon', prevKey, camera.position.clone().add(forwardDrop));
+          if (roundPurchasedWeapons[w.slot] === prevKey) roundPurchasedWeapons[w.slot] = null;
         }
         slotWeapons[w.slot] = item.key;
         ammoState[item.key] = w.magSize;
@@ -5469,12 +5485,13 @@
             break;
           }
         }
-        const nearDrop = !isDead ? getNearestDroppedItem(3.4) : null;
-        if (nearDrop && promptBanner) {
+        const aimedDrop = !isDead ? getAimedDroppedItem(4.2) : null;
+        if (aimedDrop && promptBanner) {
           promptBanner.style.display = 'block';
-          const label = nearDrop.type === 'spike' ? '스파이크' : WEAPONS[nearDrop.key].name;
+          const label = aimedDrop.type === 'spike' ? '스파이크' : WEAPONS[aimedDrop.key].name;
+          const isSwap = aimedDrop.type === 'weapon' && WEAPONS[aimedDrop.key] && slotWeapons[WEAPONS[aimedDrop.key].slot] && slotWeapons[WEAPONS[aimedDrop.key].slot] !== 'classic';
           if (promptTitle) {
-            promptTitle.innerText = `[F] 키를 눌러 ${label} 줍기`;
+            promptTitle.innerText = isSwap ? `[F] 키를 눌러 ${label} 교체 줍기` : `[F] 키를 눌러 ${label} 줍기`;
             promptTitle.style.color = '#38bdf8';
           }
           if (progressBar) progressBar.style.width = '100%';
@@ -5926,6 +5943,9 @@
                   atkStat.roundKills += 1;
                   getBotStat(tbd.nick).d += 1;
                   bestTarget.bot.visible = false;
+                  if (tbd.weaponKey && WEAPONS[tbd.weaponKey] && WEAPONS[tbd.weaponKey].slot === 1) {
+                    spawnDroppedItem('weapon', tbd.weaponKey, bestTarget.bot.position);
+                  }
                   addKillFeed(`${bd.nick} [${w.name}] ➔ ${tbd.nick}${isHeadHit ? ' [헤드샷]' : ''}`, false);
                   if (document.getElementById('tabLeaderboard').style.display === 'block') renderTabLeaderboard();
                 }
@@ -6874,13 +6894,11 @@
       }
 
       if (e.code === 'KeyF') {
-        // 1순위: 바닥에 떨어진 총기 또는 스파이크 줍기
-        const nearDrop = getNearestDroppedItem(3.4);
-        if (nearDrop) {
-          pickupDroppedItem(nearDrop);
+        const aimedDrop = getAimedDroppedItem(4.2);
+        if (aimedDrop) {
+          pickupDroppedItem(aimedDrop);
           return;
         }
-        // 2순위: 어센트 방화 철문 스위치 개폐
         if (currentMap === 'brawl') {
           for (const d of ascentDoors) {
             if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.8) {
@@ -6892,26 +6910,54 @@
         }
       }
 
-      if (e.code === 'KeyG' && currentMap === 'brawl') {
-        if (myTeam === 'red' && playerHasSpike && !spikeState.planted && (activeSlot === 4 || spikeState.plantProgress === 0)) {
+      if (e.code === 'KeyG') {
+        if (currentMap === 'brawl' && myTeam === 'red' && playerHasSpike && !spikeState.planted && activeSlot === 4) {
           playerHasSpike = false;
           spikeState.plantProgress = 0;
           const forwardDrop = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(1.3);
           const dropPos = camera.position.clone().add(forwardDrop);
           spawnDroppedItem('spike', 'spike', dropPos);
-          if (activeSlot === 4) {
-            activeSlot = slotWeapons[1] ? 1 : 2;
-            updateGunVisual();
-          }
+          activeSlot = slotWeapons[1] ? 1 : 2;
+          updateGunVisual();
           updateHUD();
           addKillFeed('[스파이크] G키로 스파이크를 바닥에 버렸습니다.', false);
           return;
         }
-        for (const d of ascentDoors) {
-          if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.5) {
-            toggleAscentDoor(d);
-            addKillFeed(`[기믹] ${d.name} ${d.isOpen ? '개방됨' : '폐쇄됨'}`, false);
-            break;
+        if (activeSlot === 1 && slotWeapons[1]) {
+          const droppedKey = slotWeapons[1];
+          const wName = WEAPONS[droppedKey].name;
+          const forwardDrop = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(1.4);
+          spawnDroppedItem('weapon', droppedKey, camera.position.clone().add(forwardDrop));
+          slotWeapons[1] = null;
+          if (roundPurchasedWeapons[1] === droppedKey) roundPurchasedWeapons[1] = null;
+          cancelReload();
+          activeSlot = 2;
+          updateGunVisual();
+          updateHUD();
+          addKillFeed(`[무기 버리기 G] 주무기(${wName})를 바닥에 버렸습니다.`, false);
+          return;
+        }
+        if (activeSlot === 2 && slotWeapons[2] && slotWeapons[2] !== 'classic') {
+          const droppedKey = slotWeapons[2];
+          const wName = WEAPONS[droppedKey].name;
+          const forwardDrop = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).multiplyScalar(1.4);
+          spawnDroppedItem('weapon', droppedKey, camera.position.clone().add(forwardDrop));
+          slotWeapons[2] = 'classic';
+          ammoState['classic'] = WEAPONS.classic.magSize;
+          if (roundPurchasedWeapons[2] === droppedKey) roundPurchasedWeapons[2] = null;
+          cancelReload();
+          updateGunVisual();
+          updateHUD();
+          addKillFeed(`[무기 버리기 G] 보조무기(${wName})를 바닥에 버렸습니다.`, false);
+          return;
+        }
+        if (currentMap === 'brawl') {
+          for (const d of ascentDoors) {
+            if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.5) {
+              toggleAscentDoor(d);
+              addKillFeed(`[기믹] ${d.name} ${d.isOpen ? '개방됨' : '폐쇄됨'}`, false);
+              break;
+            }
           }
         }
       }
