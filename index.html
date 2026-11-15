@@ -2146,7 +2146,7 @@
         ring.position.y = 0.04;
         grp.add(spikeModel, ring);
       }
-      const floorH = currentMap === 'brawl' ? getFloorHeightAt(pos.x, pos.z) : 0;
+      const floorH = currentMap === 'brawl' ? getFloorHeightAt(pos.x, pos.z, pos.y !== undefined ? pos.y : null) : 0;
       grp.position.set(pos.x, floorH, pos.z);
       scene.add(grp);
       droppedItems.push({ type, key, mesh: grp });
@@ -2293,7 +2293,7 @@
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.03;
       grp.add(ring);
-      const floorH = currentMap === 'brawl' ? getFloorHeightAt(pos.x, pos.z) : 0;
+      const floorH = currentMap === 'brawl' ? getFloorHeightAt(pos.x, pos.z, pos.y !== undefined ? pos.y : null) : 0;
       grp.position.set(pos.x, floorH, pos.z);
       scene.add(grp);
       spikeState.mesh = grp;
@@ -2403,14 +2403,16 @@
       let h = 0;
       for (const fz of floorZones) {
         if (x >= fz.minX && x <= fz.maxX && z >= fz.minZ && z <= fz.maxZ) {
+          let zoneY = fz.y;
           if (fz.slopeZ) {
             const t = Math.max(0, Math.min(1, (z - fz.minZ) / (fz.maxZ - fz.minZ)));
-            h = fz.hStart + (fz.hEnd - fz.hStart) * t;
+            zoneY = fz.hStart + (fz.hEnd - fz.hStart) * t;
           } else if (fz.slopeX) {
             const t = Math.max(0, Math.min(1, (x - fz.minX) / (fz.maxX - fz.minX)));
-            h = fz.hStart + (fz.hEnd - fz.hStart) * t;
-          } else {
-            h = fz.y;
+            zoneY = fz.hStart + (fz.hEnd - fz.hStart) * t;
+          }
+          if (feetY === null || zoneY <= feetY + 0.5) {
+            if (zoneY > h) h = zoneY;
           }
         }
       }
@@ -5691,7 +5693,7 @@
 
       resolveWallOverlap(bot.position, feetY, headY, 0.55, 0.03);
 
-      const fY = getFloorHeightAt(bot.position.x, bot.position.z);
+      const fY = getFloorHeightAt(bot.position.x, bot.position.z, bot.position.y);
       bot.position.y = fY;
       return hitWall;
     }
