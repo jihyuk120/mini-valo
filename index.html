@@ -2411,7 +2411,7 @@
             const t = Math.max(0, Math.min(1, (x - fz.minX) / (fz.maxX - fz.minX)));
             zoneY = fz.hStart + (fz.hEnd - fz.hStart) * t;
           }
-          if (feetY === null || zoneY <= feetY + 0.5) {
+          if (feetY === null || zoneY <= feetY + 0.65) {
             if (zoneY > h) h = zoneY;
           }
         }
@@ -2609,29 +2609,33 @@
       // 2층 헤븐 앞쪽(Z = -12) 발코니 난간 (Y = 3.9 ~ 4.9 -> minY = 3.9, 1층 헬 입구를 전혀 막지 않음!)
       addBlock(22, 1.0, 0.6, 31.0, 4.4, -12.3, terracottaOrange, true, 'terracotta');
       // 2층 헤븐 뒤쪽(Z = -22) & 우측(X = +42) 외벽 (2층 높이 Y = 3.5 ~ 8.5)
-      addBlock(22, 5.0, 0.8, 31.0, 6.0, -22.0, italianBeige, true, 'italianWall');
+      // 경사로 연결부(X: +22 ~ +28)는 개방하여 자연스럽게 2층 헤븐으로 진입 가능
+      addBlock(14, 5.0, 0.8, 35.0, 6.0, -22.0, italianBeige, true, 'italianWall');
+      addBlock(2.0, 5.0, 0.8, 21.0, 6.0, -22.0, italianBeige, true, 'italianWall');
       addBlock(0.8, 8.5, 10, 42.0, 4.25, -17.0, italianBeige, true, 'italianWall');
       // 2층 헤븐 지붕 캐노피 & 엄폐 상자 (Y = 3.9 위)
       addBlock(22.6, 0.6, 10.6, 31.0, 8.8, -17.0, terracottaOrange, false, 'terracotta');
       addBlock(2.2, 1.4, 2.2, 36.5, 4.6, -17.5, woodCrateBrown, true, 'woodCrate');
       addBlock(2.0, 1.3, 2.0, 25.0, 4.55, -16.5, radianiteGreen, true, 'greenCrate');
 
-      // 1층 헬(Hell) 내부 엄폐 상자 (Y = 0 ~ 1.4)
+      // 1. 언더(헬) 입구 절반 정도를 가리는 1층 높이(Y: 0 ~ 3.2) 세로 엄폐 가벽 + 내부 엄폐 상자
+      addBlock(9.2, 3.2, 0.9, 32.0, 1.6, -12.6, italianBeige, true, 'italianWall');
       addBlock(2.2, 1.4, 2.2, 33.5, 0.7, -19.5, woodCrateBrown, true, 'woodCrate');
 
-      // 수비 스폰 쪽에서 2층 헤븐으로 올라가는 경사로 (X: +22 ~ +28, Z: -32 ~ -22, Y: 0 -> 3.8)
-      addFloorZone(6.0, 10.0, 25.0, 3.8, -27.0, asphaltDark, true, 0, 3.8);
+      // 2. 수비 스폰 쪽(Z = -32, Y = 0)에서 2층 헤븐(Z = -22, Y = 3.8)으로 올라가는 경사로
+      addFloorZone(6.0, 10.4, 25.0, 3.8, -27.0, asphaltDark, true, 0, 3.8);
       const rampMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(6.0, 0.45, 10.6),
+        new THREE.BoxGeometry(6.0, 0.45, 10.7),
         new THREE.MeshStandardMaterial({ map: getMapTexture('asphalt'), roughness: 0.88 })
       );
       rampMesh.position.set(25.0, 1.72, -27.0);
-      rampMesh.rotation.x = Math.atan2(3.5, 10.0);
+      rampMesh.rotation.x = -Math.atan2(3.8, 10.0);
       rampMesh.castShadow = true;
       rampMesh.receiveShadow = true;
       mapGroup.add(rampMesh);
-      // 경사로 좌측 난간벽 (X = 21.6)
+      // 경사로 좌·우측 난간벽 (X = 21.6, X = 28.4)
       addBlock(0.8, 4.8, 10.0, 21.6, 2.4, -27.0, italianBeige, true, 'italianWall');
+      addBlock(0.8, 4.8, 10.0, 28.4, 2.4, -27.0, italianBeige, true, 'italianWall');
 
       // =========================================================
       // 5. 서쪽 B 사이트 구역 (X: -45 ~ -20)
