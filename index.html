@@ -2438,7 +2438,7 @@
       destructibleMeshes = [];
       floorZones = [];
 
-      // 눈부심을 제거한 차분한 황혼빛 이탈리아 베네치아 하늘 및 안개
+      // 차분한 황혼빛 이탈리아 베네치아 하늘 및 안개
       scene.background = new THREE.Color(0x527996);
       scene.fog = new THREE.Fog(0x527996, 65, 200);
 
@@ -2452,8 +2452,33 @@
       const atkZoneColor = 0x10b981;     // 공격팀(초록) 스폰 표시
       const defZoneColor = 0xff4655;     // 수비팀(빨강) 스폰 표시
 
+      // 원통형 엄폐물(발전기 등) 메쉬 + 충돌 박스 동기화 헬퍼
+      function addCylinderProp(rTop, rBottom, h, x, y, z, color, addCollider = true, roughness = 0.45, metalness = 0.65) {
+        const mesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(rTop, rBottom, h, 24),
+          new THREE.MeshStandardMaterial({ color, roughness, metalness })
+        );
+        mesh.position.set(x, y, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mapGroup.add(mesh);
+        wallMeshes.push(mesh);
+        if (addCollider) {
+          const r = Math.max(rTop, rBottom);
+          wallColliders.push({
+            minX: x - r - 0.55,
+            maxX: x + r + 0.55,
+            minZ: z - r - 0.55,
+            maxZ: z + r + 0.55,
+            minY: y - h / 2,
+            maxY: y + h / 2
+          });
+        }
+        return mesh;
+      }
+
       // =========================================================
-      // 1. 기본 아스팔트 돌바닥 (B 사이트 구역 x:-54~-23, z:-25~2 부분은 아래로 꺼진 지하 바닥으로 분리)
+      // 1. 기본 아스팔트 돌바닥 & 외곽 성벽
       // =========================================================
       // 동쪽 + 중앙 기본 바닥 (x: -23 ~ +54, z: -62 ~ +62)
       addBlock(77, 1.2, 124, 15.5, -0.6, 0, asphaltDark, false, 'asphalt');
@@ -2464,7 +2489,7 @@
       // 외곽 베네치아 운하 수면
       addBlock(260, 0.5, 260, 0, -3.2, 0, canalDeepBlue, false);
 
-      // 외곽 성벽 (테라코타 트림이 있는 이탈리아풍 외벽)
+      // 외곽 성벽
       addBlock(110, 10.0, 2, 0, 5.0, -62, italianBeige, true, 'italianWall');
       addBlock(110, 10.0, 2, 0, 5.0, 62, italianBeige, true, 'italianWall');
       addBlock(2, 10.0, 124, -54, 5.0, 0, italianBeige, true, 'italianWall');
@@ -2497,48 +2522,57 @@
       // 미드 중앙 분수대 & 테라코타 기둥 + 엄폐 상자
       addBlock(4.4, 1.3, 4.4, -2, 0.65, 6, italianBeige, true, 'italianWall');
       addBlock(2.0, 3.0, 2.0, -2, 1.5, 6, terracottaOrange, true, 'terracotta');
-      addBlock(2.2, 1.5, 2.2, -7, 0.75, -3, woodCrateBrown, true, 'woodCrate');   // 갈색 상자
-      addBlock(2.2, 1.5, 2.2, 5, 0.75, 11, radianiteGreen, true, 'greenCrate');   // 초록 상자
+      addBlock(2.2, 1.5, 2.2, -7, 0.75, -3, woodCrateBrown, true, 'woodCrate');   // 미드 중앙 나무 상자
+      addBlock(2.2, 1.5, 2.2, 5, 0.75, 11, radianiteGreen, true, 'greenCrate');   // 미드 탑 초록 상자
 
-      // 미드 동측: 한 단 높은 캣워크(Mid Catwalk) & A 쇼트 연결 통로
+      // 미드 동측: 한 단 높은 '캣워크(Catwalk)' 통로 (A 트리/쇼트 방면으로 연결)
       addFloorZone(7, 22, 11, 0.55, -6, asphaltDark);
       addBlock(7, 0.55, 22, 11, 0.275, -6, asphaltDark, false, 'asphalt');
       addBlock(7, 0.28, 2.5, 11, 0.14, 6.2, asphaltDark, false, 'asphalt');
       addBlock(7, 0.28, 2.5, 11, 0.14, -18.2, asphaltDark, false, 'asphalt');
+      // 캣워크 서쪽 난간벽 & 엄폐 상자 (미드 광장과 명확히 구획)
       addBlock(0.8, 1.35, 16, 7.4, 0.68, -6, italianBeige, true, 'italianWall');
       addBlock(2.2, 1.8, 2.2, 9.5, 1.45, -12, radianiteGreen, true, 'greenCrate');
+      // 캣워크 동쪽 외벽 (z=-17~-10 구간만 트리 입구로 개방)
+      addBlock(1.4, 8.5, 14, 14.8, 4.25, -1.5, italianBeige, true, 'italianWall');
+      addBlock(1.4, 8.5, 6, 14.8, 4.25, -20.5, italianBeige, true, 'italianWall');
 
-      // 미드 서측: 미드 마켓(Mid Market) 건물 (B 사이트와 벽으로 명확히 분리, 철문 통로만 개방)
-      addBlock(2.2, 8.5, 18, -14, 4.25, -16, italianBeige, true, 'italianWall'); // 마켓 동쪽 외벽
-      addBlock(12, 8.5, 2.2, -19, 4.25, -6, italianBeige, true, 'italianWall');  // 마켓 남쪽 벽
-      addBlock(12, 8.5, 2.2, -19, 4.25, -25, italianBeige, true, 'italianWall'); // 마켓 북쪽 벽
-      // B 사이트와 미드 마켓 사이 분리벽 (중앙 z=-16 부근에 철문 통로만 개방!)
+      // 미드 서측: '미드 마켓(Mid Market)' 방 (벽으로 명확히 구획 + B 사이트 연결 철문)
+      addBlock(2.2, 8.5, 8.5, -14, 4.25, -10.2, italianBeige, true, 'italianWall'); // 마켓 동쪽 벽(남)
+      addBlock(2.2, 8.5, 5.5, -14, 4.25, -22.2, italianBeige, true, 'italianWall'); // 마켓 동쪽 벽(북) - z=-17 부근 미드 출입구 개방
+      addBlock(12, 8.5, 2.2, -19, 4.25, -6, italianBeige, true, 'italianWall');    // 마켓 남쪽 벽
+      addBlock(12, 8.5, 2.2, -19, 4.25, -25, italianBeige, true, 'italianWall');   // 마켓 북쪽 벽
+      // B 사이트와 미드 마켓 사이 분리벽 (중앙 z=-16 부근에 방화 철문 통로 개방)
       addBlock(2.2, 8.5, 6.5, -23.5, 4.25, -9.8, italianBeige, true, 'italianWall');
       addBlock(2.2, 8.5, 6.5, -23.5, 4.25, -21.8, italianBeige, true, 'italianWall');
       addBlock(13, 0.8, 20, -19, 8.7, -15.5, terracottaOrange, false, 'terracotta'); // 마켓 테라코타 지붕
-      addBlock(2.2, 1.5, 2.2, -18, 0.75, -11, woodCrateBrown, true, 'woodCrate');    // 마켓 내부 갈색 상자
+      addBlock(2.2, 1.5, 2.2, -18, 0.75, -11, woodCrateBrown, true, 'woodCrate');    // 마켓 내부 엄폐 상자
 
       // 미드 플라자 북쪽 수비 스폰 분리벽
       addBlock(11, 8.5, 2.2, -9, 4.25, -31, italianBeige, true, 'italianWall');
       addBlock(11, 8.5, 2.2, 11, 4.25, -31, italianBeige, true, 'italianWall');
 
       // =========================================================
-      // 4. B 사이트 구역: 좁고 긴 'B 메인' + 한 층 낮게 꺼진 지하 느낌 'B 사이트' + 지붕 있는 '보트하우스'
+      // 4. B 사이트 & B 메인 상세 구조물
       // =========================================================
-      // 좁고 긴 'B 메인' 골목 통로 (서쪽 외벽 x=-53 과 B 메인 동쪽 건물벽 x=-41 사이 폭 11m 좁은 골목)
-      addBlock(16, 8.5, 24, -33, 4.25, 16, italianBeige, true, 'italianWall'); // B 메인과 미드를 완전히 갈라놓는 거대 건물 블록
+      // 좁고 긴 'B 메인(B Main)' 복도 통로 + 창문(B Main Window) 구역
+      addBlock(16, 8.5, 24, -33, 4.25, 16, italianBeige, true, 'italianWall'); // B 메인과 미드를 갈라놓는 거대 건물 블록
       addBlock(16.4, 0.7, 24.4, -33, 8.7, 16, terracottaOrange, false, 'terracotta');
-      // B 메인 골목 내부 엄폐 상자 (갈색/초록 구분)
-      addBlock(2.2, 1.6, 2.2, -50.5, 0.8, 18, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.2, 1.6, 2.2, -43.5, 0.8, 8, radianiteGreen, true, 'greenCrate');
+      // B 메인 초입 좁은 골목 코너 엄폐물 및 창문 구역 (x: -44 ~ -40, z: 3~7)
+      addBlock(3.2, 8.5, 2.0, -42.5, 4.25, 4.0, italianBeige, true, 'italianWall');  // B 메인 출구 우측 벽기둥
+      addBlock(3.5, 1.15, 1.2, -45.8, 0.58, 3.6, italianBeige, true, 'italianWall'); // B 메인 창문 하단 난간벽
+      addBlock(3.5, 2.2, 1.2, -45.8, 6.2, 3.6, italianBeige, true, 'italianWall');   // B 메인 창문 상단 인방보
+      createBreakableGlass(-45.8, 2.5, 3.6, 3.3, 2.7, 0.25);                         // B 메인 파괴 가능 창문 유리
+      addBlock(2.2, 1.6, 2.2, -50.5, 0.8, 18, woodCrateBrown, true, 'woodCrate');    // B 메인 내부 갈색 상자
+      addBlock(2.2, 1.6, 2.2, -42.8, 0.8, 10, radianiteGreen, true, 'greenCrate');   // B 메인 내부 초록 상자
 
       // 한 층 낮게 꺼진 지하 느낌 'B 사이트' 바닥 (y = -1.15m, x: -53 ~ -24.5, z: -24.5 ~ +1.5)
       addFloorZone(28.5, 26, -38.75, -1.15, -11.5, sunkenAsphalt);
       addBlock(28.5, 0.6, 26, -38.75, -1.45, -11.5, sunkenAsphalt, false, 'sunkenAsphalt');
 
-      // B 사이트 지하 단차 옹벽 테두리 (꺼진 지형을 시각적으로 선명하게 표현)
-      addBlock(15, 1.2, 1.2, -32, -0.6, 2.0, italianBeige, true, 'italianWall');  // B 메인 동측 단차 옹벽
-      addBlock(28.5, 1.2, 1.2, -38.75, -0.6, -24.8, italianBeige, false, 'italianWall'); // 북쪽 단차 벽
+      // B 사이트 지하 단차 옹벽 테두리
+      addBlock(15, 1.2, 1.2, -32, -0.6, 2.0, italianBeige, true, 'italianWall');
+      addBlock(28.5, 1.2, 1.2, -38.75, -0.6, -24.8, italianBeige, false, 'italianWall');
 
       // B 메인 → B 사이트로 내려가는 계단 경사로 (x: -52 ~ -42, z: -2 ~ +2)
       addFloorZone(10, 4.5, -47, -1.15, 0, sunkenAsphalt, true, 0, -1.15);
@@ -2562,45 +2596,59 @@
       bMarketRamp.receiveShadow = true;
       mapGroup.add(bMarketRamp);
 
-      // B 사이트 스파이크 설치 구역 표시 링 (지하 바닥 y = -1.13)
+      // B 사이트 스파이크 설치 구역 표시 링
       const siteRingMat = new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.48 });
       const siteBRing = new THREE.Mesh(new THREE.RingGeometry(6.5, 7.1, 48), siteRingMat);
       siteBRing.rotation.x = -Math.PI / 2;
       siteBRing.position.set(-37, -1.13, -10);
       mapGroup.add(siteBRing);
 
-      // B 사이트 중앙: 지붕이 있는 '보트하우스(Boat House)' 건물 배치!
-      // 보트하우스 좌/우/뒤 기둥 및 벽체 + 테라코타 박공/평지붕 + 내부 엄폐 상자
+      // B 사이트 안쪽: 지붕이 덮인 '보트하우스(Boathouse)' 건물 & 뒤쪽 '레인(Lane)' 통로 배치
       addBlock(1.4, 5.2, 11.5, -34.5, 1.45, -11.5, italianBeige, true, 'italianWall'); // 보트하우스 우측(동쪽) 벽
       addBlock(9.5, 5.2, 1.4, -39.2, 1.45, -17.0, italianBeige, true, 'italianWall');  // 보트하우스 북쪽 벽
       addBlock(1.4, 5.2, 3.5, -43.5, 1.45, -15.2, italianBeige, true, 'italianWall');  // 보트하우스 좌측 기둥벽
       addBlock(1.4, 5.2, 3.0, -43.5, 1.45, -7.2, italianBeige, true, 'italianWall');   // 보트하우스 좌측 입구 기둥
-      // 보트하우스 지붕 (명확한 테라코타 지붕 구조)
+      // 보트하우스 지붕 (2단 테라코타 박공/평지붕)
       addBlock(11.6, 0.75, 13.2, -39.0, 4.35, -11.5, terracottaOrange, false, 'terracotta');
       addBlock(9.2, 0.65, 10.8, -39.0, 4.95, -11.5, terracottaOrange, false, 'terracotta');
-      // 보트하우스 내부 및 외곽 엄폐 상자 (초록/갈색 명확히 구분)
+      // B 레인(Lane) 통로 구획 벽 & 엄폐물 (보트하우스 서측 통로 x: -53 ~ -44)
+      addBlock(2.2, 2.0, 2.2, -51.5, -0.15, -6.5, woodCrateBrown, true, 'woodCrate');   // 레인 초입 엄폐 상자
+      addBlock(2.4, 2.2, 2.4, -48.5, -0.05, -13.5, radianiteGreen, true, 'greenCrate'); // 레인 안쪽 초록 더블박스
+      // 보트하우스 내부 및 외곽 엄폐 상자
       addBlock(2.4, 1.6, 2.6, -38.5, -0.35, -12.0, radianiteGreen, true, 'greenCrate'); // 보트하우스 중앙 초록 상자
       addBlock(2.2, 1.5, 2.2, -36.5, -0.40, -8.5, woodCrateBrown, true, 'woodCrate');   // 보트하우스 입구 갈색 상자
-      addBlock(2.4, 2.2, 2.4, -48.5, -0.05, -12.5, radianiteGreen, true, 'greenCrate'); // B 백사이트 초록 더블박스
       addBlock(2.2, 1.5, 2.2, -29.0, -0.40, -6.5, woodCrateBrown, true, 'woodCrate');   // B 계단 앞 갈색 상자
 
       // =========================================================
-      // 5. A 사이트 구역: 좁은 진입로 'A 메인' + 정원 'A 쇼트(Garden)' + 2층 언덕 '헤븐(Heaven)' & '헬(Hell)'
+      // 5. A 사이트 상세 구조물:
+      //    - A 메인 (A Main) 좁고 긴 복도 통로 & 와인(Wine) 코너 엄폐물
+      //    - 트리 (Tree / A 쇼트) 방 및 문틀 구조물 (미드 캣워크와 연결)
+      //    - 발전기 (Generator / 검은색·회색 원통형 배터리) & 다이스 (Dice / 네모 상자)
+      //    - 헤븐 (Heaven) 2층 발코니 & 경사로 + 헬 (Hell) 1층 구멍 엄폐 구역
       // =========================================================
-      // A 메인(동측 좁은 골목 x=41~53)과 A 쇼트 정원(중앙 x=15~32)을 가르는 대형 이탈리아 건물 블록
-      addBlock(12, 8.5, 24, 34, 4.25, 16, italianBeige, true, 'italianWall');
-      addBlock(12.4, 0.7, 24.4, 34, 8.7, 16, terracottaOrange, false, 'terracotta');
-      // A 메인 좁은 골목 진입로 엄폐물 (초록/갈색 상자)
-      addBlock(2.2, 1.6, 2.2, 50.5, 0.8, 19, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.2, 1.6, 2.2, 42.5, 0.8, 9, radianiteGreen, true, 'greenCrate');
+      // A 메인(동측 좁은 복도 x=42~53)과 중앙을 가르는 대형 이탈리아 건물 블록
+      addBlock(13, 8.5, 26, 34.5, 4.25, 17, italianBeige, true, 'italianWall');
+      addBlock(13.4, 0.7, 26.4, 34.5, 8.7, 17, terracottaOrange, false, 'terracotta');
 
-      // 정원(A 쇼트 / A Garden) 구역 (x: 15~26, z: -18~-2)
-      addBlock(2.2, 8.5, 11, 22, 4.25, -15, italianBeige, true, 'italianWall'); // 정원 서쪽 아치벽
-      // 정원 화단 및 초록 나무 수관 + 갈색 나무 줄기 (정원 분위기 연출)
-      addBlock(3.4, 0.7, 3.4, 17.5, 0.35, -12.5, terracottaOrange, true, 'terracotta'); // 테라코타 화단
-      addBlock(0.9, 3.6, 0.9, 17.5, 1.8, -12.5, woodCrateBrown, true, 'woodCrate');     // 나무 줄기
-      addBlock(4.2, 2.4, 4.2, 17.5, 4.2, -12.5, radianiteGreen, false, 'greenCrate');   // 정원 나무 수관
-      addBlock(2.0, 1.4, 2.0, 25.5, 0.7, -11.5, woodCrateBrown, true, 'woodCrate');     // 정원 엄폐 상자
+      // A 메인 좁은 복도 외벽 & 와인(Wine) 코너 엄폐물 (z=1~5 서측 깊이 파인 코너 엄폐 구역)
+      addBlock(4.5, 8.5, 2.0, 42.2, 4.25, 4.8, italianBeige, true, 'italianWall');   // 와인 코너 남측 차폐벽
+      addBlock(2.2, 1.7, 2.2, 42.2, 0.85, 2.2, woodCrateBrown, true, 'woodCrate');   // 와인 코너 내부 엄폐 상자
+      addBlock(2.2, 1.6, 2.2, 50.5, 0.8, 21, woodCrateBrown, true, 'woodCrate');     // A 메인 복도 우측 상자
+      addBlock(2.2, 1.6, 2.2, 43.2, 0.8, 12, radianiteGreen, true, 'greenCrate');    // A 메인 복도 좌측 상자
+
+      // 트리(Tree / A 쇼트) 방 및 문틀 구조물 (A 사이트 왼쪽 x=15~26, z=-18~-2, 미드 캣워크 연결)
+      // 트리 방 남측 벽 (캣워크에서 진입하는 출입구 확보)
+      addBlock(6.5, 8.5, 1.6, 18.8, 4.25, -2.0, italianBeige, true, 'italianWall');
+      // 트리 방 북측 벽 & 문틀(Doorway Frame) 구조물
+      addBlock(3.8, 8.5, 1.6, 17.5, 4.25, -18.0, italianBeige, true, 'italianWall');
+      addBlock(5.0, 2.8, 1.6, 20.5, 7.1, -18.0, italianBeige, true, 'italianWall');  // 트리 문틀 상단 인방보
+      addBlock(0.7, 5.7, 1.8, 19.3, 2.85, -18.0, terracottaOrange, true, 'terracotta'); // 트리 좌측 문틀 기둥
+      addBlock(0.7, 5.7, 1.8, 22.3, 2.85, -18.0, terracottaOrange, true, 'terracotta'); // 트리 우측 문틀 기둥
+      // 트리 방 중앙 화단 & 나무(Tree) 구조물 (줄기 충돌 박스 동기화)
+      addBlock(3.2, 0.7, 3.2, 18.2, 0.35, -10.5, terracottaOrange, true, 'terracotta');
+      addCylinderProp(0.55, 0.65, 3.8, 18.2, 1.9, -10.5, woodCrateBrown, true, 0.85, 0.05); // 나무 줄기
+      addBlock(4.4, 2.4, 4.4, 18.2, 4.4, -10.5, radianiteGreen, false, 'greenCrate');       // 나무 수관
+      addBlock(2.0, 1.4, 2.0, 25.0, 0.7, -12.5, woodCrateBrown, true, 'woodCrate');        // 트리 내부 엄폐 상자
 
       // A 사이트 스파이크 설치 구역 표시 링
       const siteARing = new THREE.Mesh(new THREE.RingGeometry(6.5, 7.1, 48), siteRingMat);
@@ -2608,26 +2656,33 @@
       siteARing.position.set(37, 0.02, -6);
       mapGroup.add(siteARing);
 
-      // A 사이트 중앙 엄폐물 (초록 레디어나이트 발전기 + 갈색 나무 상자)
-      addBlock(4.2, 2.6, 2.8, 36, 1.3, -5, radianiteGreen, true, 'greenCrate'); // 중앙 초록 발전기
-      addBlock(2.2, 1.6, 2.2, 33.5, 0.8, -3, woodCrateBrown, true, 'woodCrate'); // 발전기 옆 갈색 상자
-      addBlock(2.6, 2.4, 2.6, 49.5, 1.2, 2, woodCrateBrown, true, 'woodCrate');   // A 메인 우측 갈색 상자
-      addBlock(2.4, 1.6, 2.4, 42.5, 0.8, 2, radianiteGreen, true, 'greenCrate'); // A 메인 좌측 초록 상자
+      // A 사이트 중앙 엄폐물:
+      // 1) 높고 둥근 검은색/회색 원통형 '발전기(Generator / 배터리)' 엄폐물 (충돌 박스 동기화)
+      addCylinderProp(1.45, 1.55, 3.1, 36.8, 1.55, -5.8, 0x1c2026, true, 0.35, 0.75); // 검은색 본체 원통
+      addCylinderProp(1.58, 1.58, 0.32, 36.8, 2.55, -5.8, 0x6b7280, false, 0.3, 0.85); // 상단 회색 금속 밴드
+      addCylinderProp(1.58, 1.58, 0.32, 36.8, 0.55, -5.8, 0x6b7280, false, 0.3, 0.85); // 하단 회색 금속 밴드
+      addCylinderProp(1.15, 1.15, 0.28, 36.8, 3.22, -5.8, 0x4b5563, false, 0.35, 0.8); // 최상단 회색 배터리 캡
+      // 2) 발전기 옆 네모 상자 엄폐물 '다이스(Dice)' 및 사이트 외곽 상자
+      addBlock(2.1, 1.65, 2.1, 33.4, 0.825, -4.4, woodCrateBrown, true, 'woodCrate'); // 다이스(Dice) 네모 상자
+      addBlock(2.6, 2.4, 2.6, 49.5, 1.2, 2, woodCrateBrown, true, 'woodCrate');      // A 메인 우측 갈색 더블 상자
+      addBlock(2.2, 1.6, 2.2, 41.5, 0.8, -1.5, radianiteGreen, true, 'greenCrate');   // 테트리스/사이트 우측 초록 상자
 
-      // 높은 2층 언덕 '헤븐(Heaven)'과 1층 아래 '헬(Hell)' 구역 (y = 3.5m 고저차!)
+      // 수비팀 쪽 2층 높이 '헤븐(Heaven)' 발코니 & 바로 아래 1층 구멍 형태 '헬(Hell)' 구역 (y = 3.5m)
       addFloorZone(23, 11, 41.5, 3.5, -22, asphaltDark);
-      addBlock(23, 0.65, 11, 41.5, 3.18, -22, italianBeige, true, 'italianWall'); // 2층 바닥 겸 1층 헬 천장 (아래로 걸어 들어갈 수 있음)
-      // 2층 헤븐 테라코타 난간 & 지붕 캐노피 & 엄폐 상자
+      // 2층 바닥 겸 1층 헬 천장 (y: 3.18 ~ 3.50, 아래 y < 2.85는 헬 공간으로 통행 가능!)
+      addBlock(23, 0.65, 11, 41.5, 3.18, -22, italianBeige, true, 'italianWall');
+      // 2층 헤븐 테라코타 발코니 난간 & 지붕 캐노피 & 엄폐 상자
       addBlock(23, 1.15, 0.7, 41.5, 4.08, -16.8, terracottaOrange, true, 'terracotta');
       addBlock(23.5, 0.6, 11.5, 41.5, 8.8, -22, terracottaOrange, false, 'terracotta');
       addBlock(2.4, 1.5, 2.4, 46.5, 4.25, -21, woodCrateBrown, true, 'woodCrate');  // 헤븐 위 갈색 엄폐 상자
       addBlock(2.0, 1.4, 2.0, 35.5, 4.20, -21, radianiteGreen, true, 'greenCrate');  // 헤븐 위 초록 엄폐 상자
 
-      // 1층 헬(Hell) 내부 기둥 & 갈색 엄폐 상자
-      addBlock(1.4, 2.9, 1.4, 34, 1.45, -17.5, italianBeige, true, 'italianWall');
-      addBlock(2.2, 1.5, 2.2, 44, 0.75, -23.5, woodCrateBrown, true, 'woodCrate');
+      // 1층 헬(Hell) 1층 구멍 형태 입구 양측 기둥 및 내부 엄폐 상자
+      addBlock(1.4, 2.9, 1.4, 32.5, 1.45, -17.5, italianBeige, true, 'italianWall'); // 헬 좌측 기둥
+      addBlock(1.4, 2.9, 1.4, 47.5, 1.45, -17.5, italianBeige, true, 'italianWall'); // 헬 우측 기둥
+      addBlock(2.2, 1.5, 2.2, 42.5, 0.75, -23.5, woodCrateBrown, true, 'woodCrate'); // 헬 내부 엄폐 상자
 
-      // 수비 스폰에서 2층 헤븐으로 올라가는 경사로/계단 (x: 24~30, z: -34~-25)
+      // 수비 스폰에서 2층 헤븐으로 올라가는 계단/경사로 (x: 24~30.5, z: -34.5~-24.5)
       addFloorZone(6.5, 10, 27.2, 3.5, -29.5, asphaltDark, true, 0, 3.5);
       const rampGeo = new THREE.BoxGeometry(6.5, 0.55, 10.6);
       const rampMesh = new THREE.Mesh(
@@ -2645,10 +2700,10 @@
       // =========================================================
       // 6. 핵심 기믹: 스위치(F키) 개폐 & 총격 파괴 가능한 방화 철문 2개
       // =========================================================
-      createAscentBlastDoor('A 쇼트 방화 철문', 22, -6, Math.PI / 2);
+      createAscentBlastDoor('A 쇼트(트리) 방화 철문', 22, -6, Math.PI / 2);
       createAscentBlastDoor('B 마켓 방화 철문', -23.5, -16, Math.PI / 2);
 
-      // A 쇼트 정원 쪽 파괴 가능한 유리창 (A Window)
+      // A 트리(A 쇼트) 쪽 파괴 가능한 유리창 (A Window)
       addBlock(0.8, 1.2, 5, 22, 0.6, -11, italianBeige, true, 'italianWall');
       createBreakableGlass(22, 2.8, -11, 0.25, 3.2, 4.8);
     }
