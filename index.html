@@ -183,8 +183,14 @@
       <div class="shop-col" style="padding:12px;">
         <h2 style="font-size:15px;">기관단총 & 산탄총 [1번]</h2>
         <div class="shop-item" id="buy-stinger" onclick="buyWeapon('stinger')" style="padding:7px 10px;">
-          <div><div class="item-title" style="font-size:13px;">스팅어 (Stinger)</div><div class="item-desc" style="font-size:11px;">20발 | 초고속 연사 (우클릭 3점사)</div></div>
-          <div class="item-price" style="font-size:12px;">1,100 ¤</div>
+          <div>
+            <div class="item-title" style="font-size:13px;">스팅어 (Stinger) <span id="stingerSkinBadge" style="font-size:10px; background:#581c87; color:#f5d0fe; padding:1px 5px; border-radius:3px;">혼돈의 서막</span></div>
+            <div class="item-desc" style="font-size:11px;">20발 | 초고속 연사 (우클릭 3점사)</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+            <div class="item-price" style="font-size:12px;">1,100 ¤</div>
+            <button id="toggleStingerSkinBtn" onclick="event.stopPropagation(); toggleWeaponSkin('stinger');" style="background:#2e1065; border:1px solid #c084fc; color:#f5d0fe; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:3px; cursor:pointer;">기본 스킨으로 변경</button>
+          </div>
         </div>
         <div class="shop-item" id="buy-spectre" onclick="buyWeapon('spectre')" style="padding:7px 10px;">
           <div><div class="item-title" style="font-size:13px;">스펙터 (Spectre)</div><div class="item-desc" style="font-size:11px;">30발 | 소음기 SMG (헤드78)</div></div>
@@ -1087,6 +1093,7 @@
     // 무기별 장착 스킨 상태
     const equippedSkins = {
       vandal: 'chaos',
+      stinger: 'chaos',
       phantom: 'champions2024',
       sheriff: 'neofrontier', // 네오 프론티어 셰리프 기본 장착
       outlaw: 'araxys', // 아락시스 아웃로 (블랙/레드 크로마) 기본 장착
@@ -1692,7 +1699,7 @@
 
       const soundTier = Math.min(5, currentStreak);
       const curW = getCurrentWeaponKey();
-      const isChaosActive = (curW === 'vandal' && equippedSkins.vandal === 'chaos');
+      const isChaosActive = (curW === 'vandal' && equippedSkins.vandal === 'chaos') || (curW === 'stinger' && equippedSkins.stinger === 'chaos');
       const isNeoFrontierActive = (curW === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
       const isAraxysActive = (curW === 'operator' && equippedSkins.operator === 'araxys') || (curW === 'outlaw' && equippedSkins.outlaw === 'araxys');
       const isChamp2024Active = (curW === 'phantom' && equippedSkins.phantom === 'champions2024');
@@ -3680,151 +3687,291 @@
       const group = new THREE.Group();
       group.add(buildFirstPersonHandModel('gun'));
 
+      // 무광 다크 건메탈 / 블랙 갑옷 프레임 (#14151c, #222530) + 구리·청동빛 금속 파츠 (#b45309, #d97706)
+      const matteBlackArmorMat = new THREE.MeshStandardMaterial({
+        color: 0x14151c,
+        metalness: 0.78,
+        roughness: 0.42
+      });
       const darkGunmetalMat = new THREE.MeshStandardMaterial({
-        color: 0x1c1e26,
-        metalness: 0.88,
+        color: 0x222530,
+        metalness: 0.85,
         roughness: 0.34
       });
-      const charcoalArmorMat = new THREE.MeshStandardMaterial({
-        color: 0x2d313e,
-        metalness: 0.82,
-        roughness: 0.38
-      });
-      const bronzeFrameMat = new THREE.MeshStandardMaterial({
+      const bronzeTrimMat = new THREE.MeshStandardMaterial({
         color: 0xb45309,
-        metalness: 0.90,
+        metalness: 0.92,
         roughness: 0.24,
         emissive: new THREE.Color(0x78350f),
-        emissiveIntensity: 0.18
+        emissiveIntensity: 0.16
       });
-      const seamEnergyRedMat = new THREE.MeshBasicMaterial({ color: 0xff2a55 });
-      const seamEnergyVioletMat = new THREE.MeshBasicMaterial({ color: 0xc026d3 });
-
-      const rearReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.088, 0.16), darkGunmetalMat);
-      rearReceiver.position.set(0, 0.012, 0.075);
-
-      const upperCharcoalPlate = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.022, 0.45), charcoalArmorMat);
-      upperCharcoalPlate.position.set(0, 0.052, -0.14);
-
-      const bronzeTopSpine = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.012, 0.43), bronzeFrameMat);
-      bronzeTopSpine.position.set(0, 0.064, -0.14);
-
-      const bronzeSideTrimL = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.016, 0.36), bronzeFrameMat);
-      bronzeSideTrimL.position.set(-0.033, 0.036, -0.12);
-      const bronzeSideTrimR = bronzeSideTrimL.clone();
-      bronzeSideTrimR.position.x = 0.033;
-
-      const bottomKeel = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.024, 0.36), darkGunmetalMat);
-      bottomKeel.position.set(0, -0.028, -0.13);
-
-      const leftChamberWall = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.038, 0.24), charcoalArmorMat);
-      leftChamberWall.position.set(-0.030, -0.008, -0.12);
-      const rightChamberWall = leftChamberWall.clone();
-      rightChamberWall.position.x = 0.030;
-
-      const chamberGroup = new THREE.Group();
-      chamberGroup.position.set(0, 0.014, -0.11);
-
-      const chaosCoreMat = new THREE.MeshStandardMaterial({
-        color: 0xff5500,
-        emissive: new THREE.Color(0xd946ef),
-        emissiveIntensity: 2.1,
-        roughness: 0.14,
-        metalness: 0.15
+      const brightCopperMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        metalness: 0.94,
+        roughness: 0.20,
+        emissive: new THREE.Color(0x92400e),
+        emissiveIntensity: 0.22
       });
-      const chaosCoreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.023, 22, 22), chaosCoreMat);
+      const silverRailMat = new THREE.MeshStandardMaterial({
+        color: 0xcbd5e1,
+        metalness: 0.95,
+        roughness: 0.18
+      });
 
-      const chaosInnerFlameMat = new THREE.MeshBasicMaterial({
-        color: 0xff6b00,
+      // 플라즈마 & 코어 발광 머티리얼
+      const plasmaIndigoMat = new THREE.MeshBasicMaterial({
+        color: 0x6366f1,
         transparent: true,
-        opacity: 0.88,
+        opacity: 0.92
+      });
+      const plasmaVioletMat = new THREE.MeshBasicMaterial({
+        color: 0xa855f7,
+        transparent: true,
+        opacity: 0.94
+      });
+      const chaosCoreMat = new THREE.MeshStandardMaterial({
+        color: 0xa855f7,
+        emissive: new THREE.Color(0xe879f9),
+        emissiveIntensity: 2.3,
+        roughness: 0.12,
+        metalness: 0.10
+      });
+      const chaosInnerFlameMat = new THREE.MeshBasicMaterial({
+        color: 0xf0abfc,
+        transparent: true,
+        opacity: 0.90,
         wireframe: true
       });
-      const chaosInnerFlame = new THREE.Mesh(new THREE.IcosahedronGeometry(0.026, 1), chaosInnerFlameMat);
+
+      // 1. 개머리판 및 후방 리시버 (각진 다크 건메탈/블랙 갑옷)
+      const stockRear = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.082, 0.12), matteBlackArmorMat);
+      stockRear.position.set(0, 0.008, 0.11);
+
+      const receiverMain = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.076, 0.22), darkGunmetalMat);
+      receiverMain.position.set(0, 0.014, -0.04);
+
+      // 측면 각진 블랙 아머 플레이트
+      const sideArmorL = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.046, 0.34), matteBlackArmorMat);
+      sideArmorL.position.set(-0.034, 0.016, -0.11);
+      const sideArmorR = sideArmorL.clone();
+      sideArmorR.position.x = 0.034;
+
+      // 구리·청동빛 모서리 장식 트림
+      const bronzeEdgeL = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.012, 0.32), bronzeTrimMat);
+      bronzeEdgeL.position.set(-0.036, 0.040, -0.11);
+      const bronzeEdgeR = bronzeEdgeL.clone();
+      bronzeEdgeR.position.x = 0.036;
+
+      const bronzeLowerEdgeL = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.010, 0.28), brightCopperMat);
+      bronzeLowerEdgeL.position.set(-0.035, -0.010, -0.10);
+      const bronzeLowerEdgeR = bronzeLowerEdgeL.clone();
+      bronzeLowerEdgeR.position.x = 0.035;
+
+      // 하부 용골 프레임
+      const bottomChassis = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.022, 0.34), matteBlackArmorMat);
+      bottomChassis.position.set(0, -0.026, -0.12);
+
+      // 2. [핵심 보라빛 에너지 코어 ①] 총몸 뒤쪽(개머리판 앞 상단) 반구형 보라·마젠타 네온 코어 + 청동 발톱 프레임 4개
+      const chamberGroup = new THREE.Group();
+      chamberGroup.position.set(0, 0.054, 0.035);
+
+      const coreBaseRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.027, 0.0045, 12, 28),
+        bronzeTrimMat
+      );
+      coreBaseRing.rotation.x = Math.PI / 2;
+
+      const chaosCoreSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.022, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.62),
+        chaosCoreMat
+      );
+      chaosCoreSphere.position.y = -0.002;
+
+      const chaosInnerFlame = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.0235, 1),
+        chaosInnerFlameMat
+      );
+      chaosInnerFlame.position.y = 0.001;
 
       const chaosRing1 = new THREE.Mesh(
-        new THREE.TorusGeometry(0.033, 0.0032, 10, 28),
+        new THREE.TorusGeometry(0.028, 0.0022, 10, 28),
         new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: 0.92 })
       );
-      chaosRing1.rotation.set(0.55, 0.35, 0);
+      chaosRing1.rotation.set(Math.PI / 2 + 0.18, 0.12, 0);
+      chaosRing1.position.y = 0.004;
 
       const chaosRing2 = new THREE.Mesh(
-        new THREE.TorusGeometry(0.037, 0.0028, 10, 28),
-        new THREE.MeshBasicMaterial({ color: 0xff6b2b, transparent: true, opacity: 0.92 })
+        new THREE.TorusGeometry(0.031, 0.0018, 10, 28),
+        new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.85 })
       );
-      chaosRing2.rotation.set(-0.65, -0.45, 0.4);
+      chaosRing2.rotation.set(Math.PI / 2 - 0.18, -0.12, 0);
+      chaosRing2.position.y = 0.006;
 
+      // 청동색 발톱 프레임 4개 (반구형 코어를 사방에서 감싸는 클로)
       for (let i = 0; i < 4; i++) {
         const angle = (i * Math.PI) / 2 + Math.PI / 4;
-        const claw = new THREE.Mesh(new THREE.ConeGeometry(0.0085, 0.058, 4), darkGunmetalMat);
-        claw.position.set(Math.cos(angle) * 0.031, Math.sin(angle) * 0.031, -0.006);
-        claw.rotation.z = angle - Math.PI / 2;
-        claw.rotation.x = 0.38;
-        chamberGroup.add(claw);
+        const clawPivot = new THREE.Group();
+        clawPivot.rotation.y = angle;
+        const clawBody = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.018, 0.014), brightCopperMat);
+        clawBody.position.set(0.026, 0.008, 0);
+        clawBody.rotation.z = 0.42;
+        const clawTip = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.016, 4), bronzeTrimMat);
+        clawTip.position.set(0.018, 0.017, 0);
+        clawTip.rotation.z = 0.92;
+        clawPivot.add(clawBody, clawTip);
+        chamberGroup.add(clawPivot);
       }
-      chamberGroup.add(chaosCoreSphere, chaosInnerFlame, chaosRing1, chaosRing2);
+      chamberGroup.add(coreBaseRing, chaosCoreSphere, chaosInnerFlame, chaosRing1, chaosRing2);
 
-      const barrelEnergySeamL = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.008, 0.36), seamEnergyRedMat);
-      barrelEnergySeamL.position.set(-0.026, 0.022, -0.24);
-      const barrelEnergySeamR = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.008, 0.36), seamEnergyVioletMat);
-      barrelEnergySeamR.position.set(0.026, 0.022, -0.24);
-
-      const barrelPlasmaBeam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.006, 0.006, 0.36, 10),
-        seamEnergyVioletMat
+      // 3. 상단 금속 브릿지 레일 (얇은 은색 원통 파이프 레일 + 앞뒤 청동색 가늠쇠/가늠자 브릿지)
+      const topPipeRail = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0042, 0.0042, 0.36, 14),
+        silverRailMat
       );
-      barrelPlasmaBeam.rotation.x = Math.PI / 2;
-      barrelPlasmaBeam.position.set(0, 0.016, -0.26);
+      topPipeRail.rotation.x = Math.PI / 2;
+      topPipeRail.position.set(0, 0.072, -0.16);
 
-      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.048, 0.17), charcoalArmorMat);
-      handguard.position.set(0, 0.012, -0.31);
+      // 후방 가늠자 브릿지 (청동 아치형 프레임)
+      const rearBridgeGroup = new THREE.Group();
+      rearBridgeGroup.position.set(0, 0.062, -0.02);
+      const rearBridgeBase = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.012, 0.028), matteBlackArmorMat);
+      const rearBridgeArchL = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.022), brightCopperMat);
+      rearBridgeArchL.position.set(-0.015, 0.012, 0);
+      rearBridgeArchL.rotation.z = -0.22;
+      const rearBridgeArchR = rearBridgeArchL.clone();
+      rearBridgeArchR.position.x = 0.015;
+      rearBridgeArchR.rotation.z = 0.22;
+      const rearBridgeCap = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.005, 0.020), bronzeTrimMat);
+      rearBridgeCap.position.set(0, 0.022, 0);
+      rearBridgeGroup.add(rearBridgeBase, rearBridgeArchL, rearBridgeArchR, rearBridgeCap);
 
-      const handguardBronzeBand = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.022, 0.045), bronzeFrameMat);
-      handguardBronzeBand.position.set(0, 0.012, -0.27);
+      // 중간 지지 브릿지
+      const midBridge = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.016, 0.018), bronzeTrimMat);
+      midBridge.position.set(0, 0.063, -0.17);
 
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.016, 0.19, 8), darkGunmetalMat);
+      // 전방 가늠쇠 브릿지 (청동 링/아치형 프론트 사이트)
+      const frontBridgeGroup = new THREE.Group();
+      frontBridgeGroup.position.set(0, 0.062, -0.32);
+      const frontBridgeBase = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.012, 0.024), matteBlackArmorMat);
+      const frontSightHornL = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.020, 0.016), brightCopperMat);
+      frontSightHornL.position.set(-0.011, 0.013, 0);
+      frontSightHornL.rotation.z = -0.18;
+      const frontSightHornR = frontSightHornL.clone();
+      frontSightHornR.position.x = 0.011;
+      frontSightHornR.rotation.z = 0.18;
+      const frontSightPin = new THREE.Mesh(new THREE.CylinderGeometry(0.0018, 0.0018, 0.012, 8), plasmaVioletMat);
+      frontSightPin.position.set(0, 0.013, 0);
+      frontBridgeGroup.add(frontBridgeBase, frontSightHornL, frontSightHornR, frontSightPin);
+
+      // 4. [핵심 보라빛 에너지 코어 ②] 총열 안쪽 틈새에서 새어 나오는 푸른빛·보라빛 플라즈마 에너지 빛줄기 (#6366f1, #a855f7)
+      const upperShroud = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.018, 0.28), darkGunmetalMat);
+      upperShroud.position.set(0, 0.046, -0.22);
+
+      const lowerShroud = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.020, 0.27), matteBlackArmorMat);
+      lowerShroud.position.set(0, -0.004, -0.22);
+
+      // 총열 내부 중앙 푸른빛·보라빛 플라즈마 코어 빔
+      const innerPlasmaCore = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0085, 0.0085, 0.30, 12),
+        plasmaIndigoMat
+      );
+      innerPlasmaCore.rotation.x = Math.PI / 2;
+      innerPlasmaCore.position.set(0, 0.021, -0.22);
+
+      // 좌우 틈새 플라즈마 라이트 스트립
+      const plasmaSlitL = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.011, 0.27), plasmaIndigoMat);
+      plasmaSlitL.position.set(-0.022, 0.022, -0.22);
+      const plasmaSlitR = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.011, 0.27), plasmaVioletMat);
+      plasmaSlitR.position.set(0.022, 0.022, -0.22);
+
+      // 총열 틈새를 가로지르는 청동 리브(갈비뼈) 4쌍
+      for (let i = 0; i < 4; i++) {
+        const zPos = -0.12 - i * 0.062;
+        const ribL = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.026, 0.012), bronzeTrimMat);
+        ribL.position.set(-0.024, 0.022, zPos);
+        const ribR = ribL.clone();
+        ribR.position.x = 0.024;
+        group.add(ribL, ribR);
+      }
+
+      // 5. 전방 총열 및 청동 총구 머즐 브레이크
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.014, 0.16, 12), matteBlackArmorMat);
       barrel.rotation.x = Math.PI / 2;
-      barrel.position.set(0, 0.018, -0.46);
+      barrel.position.set(0, 0.022, -0.42);
 
-      const muzzleCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.014, 0.038, 6), bronzeFrameMat);
-      muzzleCrown.rotation.x = Math.PI / 2;
-      muzzleCrown.position.set(0, 0.018, -0.54);
+      const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.013, 0.042, 8), brightCopperMat);
+      muzzleBrake.rotation.x = Math.PI / 2;
+      muzzleBrake.position.set(0, 0.022, -0.49);
 
-      const muzzleFlashMat = new THREE.MeshBasicMaterial({ color: 0xd946ef, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
-      const muzzleFlashInnerMat = new THREE.MeshBasicMaterial({ color: 0xff2a5f, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
+      const muzzleTipRing = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0025, 8, 16), matteBlackArmorMat);
+      muzzleTipRing.position.set(0, 0.022, -0.51);
+
+      // 총구 화염 (보라·인디고·마젠타)
+      const muzzleFlashMat = new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
+      const muzzleFlashInnerMat = new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
       const muzzleFlashGroup = new THREE.Group();
-      muzzleFlashGroup.position.set(0, 0.018, -0.58);
-      const flashPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), muzzleFlashMat);
-      const flashPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), muzzleFlashMat);
+      muzzleFlashGroup.position.set(0, 0.022, -0.54);
+      const flashPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), muzzleFlashMat);
+      const flashPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), muzzleFlashMat);
       flashPlane2.rotation.z = Math.PI / 4;
-      const flashCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.036, 0), muzzleFlashInnerMat);
+      const flashCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.032, 0), muzzleFlashInnerMat);
       muzzleFlashGroup.add(flashPlane1, flashPlane2, flashCore);
 
-      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.068), charcoalArmorMat);
-      magUpper.rotation.x = -0.22;
-      magUpper.position.set(0, -0.072, -0.10);
+      // 6. 날렵한 곡선형 무광 블랙(#111217) 탄창 + 측면 청동색 볼트 디테일
+      const curvedMagMat = new THREE.MeshStandardMaterial({
+        color: 0x111217,
+        metalness: 0.82,
+        roughness: 0.36
+      });
+      const magGroup = new THREE.Group();
+      magGroup.position.set(0, -0.034, -0.105);
 
-      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.064), darkGunmetalMat);
-      magLower.rotation.x = -0.48;
-      magLower.position.set(0, -0.156, -0.138);
+      const magSeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.072, 0.056), curvedMagMat);
+      magSeg1.rotation.x = -0.18;
+      magSeg1.position.set(0, -0.032, -0.006);
 
-      const magGlowStrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.15, 0.012), seamEnergyRedMat);
-      magGlowStrip.rotation.x = -0.34;
-      magGlowStrip.position.set(0, -0.112, -0.118);
+      const magSeg2 = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.072, 0.052), curvedMagMat);
+      magSeg2.rotation.x = -0.36;
+      magSeg2.position.set(0, -0.094, -0.024);
 
-      const magClawTip = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 5), bronzeFrameMat);
-      magClawTip.rotation.x = Math.PI - 0.48;
-      magClawTip.position.set(0, -0.215, -0.166);
+      const magSeg3 = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.064, 0.048), curvedMagMat);
+      magSeg3.rotation.x = -0.54;
+      magSeg3.position.set(0, -0.148, -0.052);
 
-      const sight = buildHoloSight();
-      sight.position.set(0, 0.066, -0.02);
+      // 탄창 전면 청동 척추 라인 & 하단 베이스 플레이트
+      const magSpine = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.175, 0.008), bronzeTrimMat);
+      magSpine.rotation.x = -0.35;
+      magSpine.position.set(0, -0.092, -0.050);
+
+      const magBasePlate = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.012, 0.054), brightCopperMat);
+      magBasePlate.rotation.x = -0.54;
+      magBasePlate.position.set(0, -0.176, -0.068);
+
+      // 탄창 측면 청동색 볼트(리벳) 디테일 6개
+      const boltGeo = new THREE.CylinderGeometry(0.0032, 0.0032, 0.034, 8);
+      boltGeo.rotateZ(Math.PI / 2);
+      const boltPositions = [
+        [0, -0.030, 0.006],
+        [0, -0.030, -0.018],
+        [0, -0.090, -0.012],
+        [0, -0.090, -0.034],
+        [0, -0.142, -0.040],
+        [0, -0.142, -0.060]
+      ];
+      boltPositions.forEach(([bx, by, bz]) => {
+        const bolt = new THREE.Mesh(boltGeo, brightCopperMat);
+        bolt.position.set(bx, by, bz);
+        magGroup.add(bolt);
+      });
+
+      magGroup.add(magSeg1, magSeg2, magSeg3, magSpine, magBasePlate);
 
       group.add(
-        rearReceiver, upperCharcoalPlate, bronzeTopSpine, bronzeSideTrimL, bronzeSideTrimR, bottomKeel,
-        leftChamberWall, rightChamberWall, chamberGroup,
-        barrelEnergySeamL, barrelEnergySeamR, barrelPlasmaBeam,
-        handguard, handguardBronzeBand, barrel, muzzleCrown, muzzleFlashGroup,
-        magUpper, magLower, magGlowStrip, magClawTip, sight
+        stockRear, receiverMain, sideArmorL, sideArmorR, bronzeEdgeL, bronzeEdgeR,
+        bronzeLowerEdgeL, bronzeLowerEdgeR, bottomChassis,
+        chamberGroup, topPipeRail, rearBridgeGroup, midBridge, frontBridgeGroup,
+        upperShroud, lowerShroud, innerPlasmaCore, plasmaSlitL, plasmaSlitR,
+        barrel, muzzleBrake, muzzleTipRing, muzzleFlashGroup, magGroup
       );
 
       group.userData = {
@@ -3834,6 +3981,248 @@
         chaosRing2,
         chaosCoreMat,
         chaosInnerFlameMat,
+        plasmaIndigoMat,
+        plasmaVioletMat,
+        muzzleFlashGroup,
+        muzzleFlashMat,
+        muzzleFlashInnerMat,
+        muzzleFlashTimer: 0
+      };
+      return group;
+    }
+
+    function buildPreludeOfChaosStingerModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+
+      // 혼돈의 서막 스팅어: 무광 블랙 기계 갑옷 + 청동색 코어 링 프레임 + 상단 브릿지 레일 + 길고 얇은 수직형 블랙 탄창
+      const matteBlackArmorMat = new THREE.MeshStandardMaterial({
+        color: 0x14151c,
+        metalness: 0.80,
+        roughness: 0.40
+      });
+      const darkGunmetalMat = new THREE.MeshStandardMaterial({
+        color: 0x222530,
+        metalness: 0.86,
+        roughness: 0.32
+      });
+      const bronzeTrimMat = new THREE.MeshStandardMaterial({
+        color: 0xb45309,
+        metalness: 0.92,
+        roughness: 0.24,
+        emissive: new THREE.Color(0x78350f),
+        emissiveIntensity: 0.16
+      });
+      const brightCopperMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        metalness: 0.94,
+        roughness: 0.20,
+        emissive: new THREE.Color(0x92400e),
+        emissiveIntensity: 0.22
+      });
+      const silverRailMat = new THREE.MeshStandardMaterial({
+        color: 0xcbd5e1,
+        metalness: 0.95,
+        roughness: 0.18
+      });
+      const curvedMagMat = new THREE.MeshStandardMaterial({
+        color: 0x111217,
+        metalness: 0.84,
+        roughness: 0.35
+      });
+
+      const plasmaIndigoMat = new THREE.MeshBasicMaterial({
+        color: 0x6366f1,
+        transparent: true,
+        opacity: 0.92
+      });
+      const plasmaVioletMat = new THREE.MeshBasicMaterial({
+        color: 0xa855f7,
+        transparent: true,
+        opacity: 0.94
+      });
+      const chaosCoreMat = new THREE.MeshStandardMaterial({
+        color: 0xa855f7,
+        emissive: new THREE.Color(0xe879f9),
+        emissiveIntensity: 2.3,
+        roughness: 0.12,
+        metalness: 0.10
+      });
+      const chaosInnerFlameMat = new THREE.MeshBasicMaterial({
+        color: 0xf0abfc,
+        transparent: true,
+        opacity: 0.90,
+        wireframe: true
+      });
+
+      // 컴팩트 SMG 리시버 & 개머리판 프레임
+      const rearStock = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.066, 0.11), matteBlackArmorMat);
+      rearStock.position.set(0, 0.010, 0.09);
+
+      const smgReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.064, 0.24), darkGunmetalMat);
+      smgReceiver.position.set(0, 0.014, -0.05);
+
+      const sidePlateL = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.038, 0.23), matteBlackArmorMat);
+      sidePlateL.position.set(-0.029, 0.016, -0.06);
+      const sidePlateR = sidePlateL.clone();
+      sidePlateR.position.x = 0.029;
+
+      // 청동색 측면 코어 링 프레임 & 장식 트림
+      const bronzeSideTrimL = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.010, 0.22), bronzeTrimMat);
+      bronzeSideTrimL.position.set(-0.031, 0.034, -0.06);
+      const bronzeSideTrimR = bronzeSideTrimL.clone();
+      bronzeSideTrimR.position.x = 0.031;
+
+      const sideBronzeRingL = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 10, 22), brightCopperMat);
+      sideBronzeRingL.rotation.y = Math.PI / 2;
+      sideBronzeRingL.position.set(-0.031, 0.014, -0.06);
+      const sideBronzeRingR = sideBronzeRingL.clone();
+      sideBronzeRingR.position.x = 0.031;
+
+      // 상단 후방 보라빛 에너지 코어 + 청동 4발톱 프레임
+      const chamberGroup = new THREE.Group();
+      chamberGroup.position.set(0, 0.048, 0.02);
+
+      const coreBaseRing = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0038, 12, 24), bronzeTrimMat);
+      coreBaseRing.rotation.x = Math.PI / 2;
+
+      const chaosCoreSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
+        chaosCoreMat
+      );
+      chaosCoreSphere.position.y = -0.001;
+
+      const chaosInnerFlame = new THREE.Mesh(new THREE.IcosahedronGeometry(0.0195, 1), chaosInnerFlameMat);
+      chaosInnerFlame.position.y = 0.001;
+
+      const chaosRing1 = new THREE.Mesh(
+        new THREE.TorusGeometry(0.023, 0.0020, 10, 24),
+        new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: 0.92 })
+      );
+      chaosRing1.rotation.set(Math.PI / 2 + 0.16, 0.10, 0);
+      chaosRing1.position.y = 0.003;
+
+      const chaosRing2 = new THREE.Mesh(
+        new THREE.TorusGeometry(0.026, 0.0016, 10, 24),
+        new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.85 })
+      );
+      chaosRing2.rotation.set(Math.PI / 2 - 0.16, -0.10, 0);
+      chaosRing2.position.y = 0.005;
+
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI) / 2 + Math.PI / 4;
+        const clawPivot = new THREE.Group();
+        clawPivot.rotation.y = angle;
+        const clawBody = new THREE.Mesh(new THREE.BoxGeometry(0.0055, 0.015, 0.011), brightCopperMat);
+        clawBody.position.set(0.021, 0.007, 0);
+        clawBody.rotation.z = 0.42;
+        const clawTip = new THREE.Mesh(new THREE.ConeGeometry(0.0038, 0.013, 4), bronzeTrimMat);
+        clawTip.position.set(0.014, 0.014, 0);
+        clawTip.rotation.z = 0.92;
+        clawPivot.add(clawBody, clawTip);
+        chamberGroup.add(clawPivot);
+      }
+      chamberGroup.add(coreBaseRing, chaosCoreSphere, chaosInnerFlame, chaosRing1, chaosRing2);
+
+      // 상단 은색 파이프 브릿지 레일 + 앞뒤 청동 브릿지
+      const topPipeRail = new THREE.Mesh(new THREE.CylinderGeometry(0.0036, 0.0036, 0.24, 12), silverRailMat);
+      topPipeRail.rotation.x = Math.PI / 2;
+      topPipeRail.position.set(0, 0.063, -0.11);
+
+      const rearBridge = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.016, 0.022), brightCopperMat);
+      rearBridge.position.set(0, 0.054, -0.02);
+
+      const frontBridge = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.016, 0.020), brightCopperMat);
+      frontBridge.position.set(0, 0.054, -0.21);
+
+      // 총열 틈새 플라즈마 빛줄기
+      const upperShroud = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.015, 0.16), darkGunmetalMat);
+      upperShroud.position.set(0, 0.040, -0.16);
+
+      const lowerShroud = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.016, 0.16), matteBlackArmorMat);
+      lowerShroud.position.set(0, -0.002, -0.16);
+
+      const innerPlasmaCore = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.18, 12), plasmaIndigoMat);
+      innerPlasmaCore.rotation.x = Math.PI / 2;
+      innerPlasmaCore.position.set(0, 0.019, -0.16);
+
+      const plasmaSlitL = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.009, 0.16), plasmaIndigoMat);
+      plasmaSlitL.position.set(-0.019, 0.019, -0.16);
+      const plasmaSlitR = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.009, 0.16), plasmaVioletMat);
+      plasmaSlitR.position.set(0.019, 0.019, -0.16);
+
+      // 짧은 기관단총 총열 & 청동 머즐
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.10, 12), matteBlackArmorMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.019, -0.27);
+
+      const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.011, 0.032, 8), brightCopperMat);
+      muzzleBrake.rotation.x = Math.PI / 2;
+      muzzleBrake.position.set(0, 0.019, -0.32);
+
+      // 총구 화염
+      const muzzleFlashMat = new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
+      const muzzleFlashInnerMat = new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
+      const muzzleFlashGroup = new THREE.Group();
+      muzzleFlashGroup.position.set(0, 0.019, -0.35);
+      const flashPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), muzzleFlashMat);
+      const flashPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), muzzleFlashMat);
+      flashPlane2.rotation.z = Math.PI / 4;
+      const flashCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.025, 0), muzzleFlashInnerMat);
+      muzzleFlashGroup.add(flashPlane1, flashPlane2, flashCore);
+
+      // 길고 얇은 수직형 무광 블랙 탄창 + 측면 청동 볼트 & 보라빛 잔탄 표시 슬롯
+      const stingerMagGroup = new THREE.Group();
+      stingerMagGroup.position.set(0, -0.022, -0.085);
+
+      const magBody = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.21, 0.038), curvedMagMat);
+      magBody.rotation.x = -0.08;
+      magBody.position.set(0, -0.102, -0.008);
+
+      const magFrontTrim = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.205, 0.006), bronzeTrimMat);
+      magFrontTrim.rotation.x = -0.08;
+      magFrontTrim.position.set(0, -0.102, -0.028);
+
+      const magBottomCap = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.012, 0.042), brightCopperMat);
+      magBottomCap.rotation.x = -0.08;
+      magBottomCap.position.set(0, -0.208, -0.016);
+
+      // 측면 보라색 플라즈마 인디케이터 4칸 & 청동 볼트
+      for (let i = 0; i < 4; i++) {
+        const yOff = -0.045 - i * 0.036;
+        const zOff = -0.004 - i * 0.003;
+        const indicator = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.010, 0.008), plasmaVioletMat);
+        indicator.rotation.x = -0.08;
+        indicator.position.set(0, yOff, zOff);
+        stingerMagGroup.add(indicator);
+      }
+
+      const boltGeo = new THREE.CylinderGeometry(0.0026, 0.0026, 0.026, 8);
+      boltGeo.rotateZ(Math.PI / 2);
+      [[-0.035, 0.006], [-0.035, -0.018], [-0.175, -0.005], [-0.175, -0.026]].forEach(([by, bz]) => {
+        const bolt = new THREE.Mesh(boltGeo, brightCopperMat);
+        bolt.position.set(0, by, bz);
+        stingerMagGroup.add(bolt);
+      });
+
+      stingerMagGroup.add(magBody, magFrontTrim, magBottomCap);
+
+      group.add(
+        rearStock, smgReceiver, sidePlateL, sidePlateR, bronzeSideTrimL, bronzeSideTrimR,
+        sideBronzeRingL, sideBronzeRingR, chamberGroup, topPipeRail, rearBridge, frontBridge,
+        upperShroud, lowerShroud, innerPlasmaCore, plasmaSlitL, plasmaSlitR,
+        barrel, muzzleBrake, muzzleFlashGroup, stingerMagGroup
+      );
+
+      group.userData = {
+        chaosCoreSphere,
+        chaosInnerFlame,
+        chaosRing1,
+        chaosRing2,
+        chaosCoreMat,
+        chaosInnerFlameMat,
+        plasmaIndigoMat,
+        plasmaVioletMat,
         muzzleFlashGroup,
         muzzleFlashMat,
         muzzleFlashInnerMat,
@@ -4385,6 +4774,7 @@
       sheriff: buildSheriffModel(),
       sheriff_neofrontier: buildNeoFrontierSheriffModel(),
       stinger: buildSmgModel({ angledMag: true, bodyColor: 0x2b3038 }),
+      stinger_chaos: buildPreludeOfChaosStingerModel(),
       spectre: buildSmgModel({ suppressor: true, bodyColor: 0x23272e }),
       bucky: buildShotgunModel({ short: false, bodyColor: 0x2d3238 }),
       judge: buildShotgunModel({ short: false, drumMag: true, bodyColor: 0x252930 }),
@@ -4423,6 +4813,9 @@
       if (wKey === 'phantom' && equippedSkins.phantom === 'champions2024') {
         return models.phantom_champions2024;
       }
+      if (wKey === 'stinger' && equippedSkins.stinger === 'chaos') {
+        return models.stinger_chaos;
+      }
       if (wKey === 'vandal' && equippedSkins.vandal === 'chaos') {
         return models.vandal_chaos;
       }
@@ -4452,6 +4845,10 @@
         equippedSkins.phantom = equippedSkins.phantom === 'champions2024' ? 'standard' : 'champions2024';
         updateHUD();
         if (getCurrentWeaponKey() === 'phantom') updateGunVisual();
+      } else if (wKey === 'stinger') {
+        equippedSkins.stinger = equippedSkins.stinger === 'chaos' ? 'standard' : 'chaos';
+        updateHUD();
+        if (getCurrentWeaponKey() === 'stinger') updateGunVisual();
       } else if (wKey === 'vandal') {
         equippedSkins.vandal = equippedSkins.vandal === 'chaos' ? 'champions2021' : (equippedSkins.vandal === 'champions2021' ? 'standard' : 'chaos');
         updateHUD();
@@ -7605,6 +8002,7 @@
         (key === 'operator' && isOperatorAraxys) ? '아락시스 오퍼레이터' :
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
         (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
+        (key === 'stinger' && equippedSkins.stinger === 'chaos') ? '혼돈의 서막 스팅어' :
         (key === 'vandal' && equippedSkins.vandal === 'chaos') ? '혼돈의 서막 밴달' : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name);
       document.getElementById('ammoText').innerText = (key === 'melee' || key === 'spike') ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
@@ -7658,6 +8056,16 @@
         pBadge.style.color = isPhantom2024 ? '#e0aaff' : '#ccc';
       }
       if (pBtn) pBtn.innerText = isPhantom2024 ? '기본 스킨으로 변경' : '2024 챔피언스 장착';
+
+      const isStingerChaos = equippedSkins.stinger === 'chaos';
+      const stBadge = document.getElementById('stingerSkinBadge');
+      const stBtn = document.getElementById('toggleStingerSkinBtn');
+      if (stBadge) {
+        stBadge.innerText = isStingerChaos ? '혼돈의 서막' : '기본 스킨';
+        stBadge.style.background = isStingerChaos ? '#581c87' : '#333';
+        stBadge.style.color = isStingerChaos ? '#f5d0fe' : '#ccc';
+      }
+      if (stBtn) stBtn.innerText = isStingerChaos ? '기본 스킨으로 변경' : '혼돈의 서막 장착';
 
       const vSkin = equippedSkins.vandal;
       const badge = document.getElementById('vandalSkinBadge');
@@ -8128,14 +8536,15 @@
           if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
           }
-          const isChaosVandal = (key === 'vandal' && equippedSkins.vandal === 'chaos');
+          const isChaosVandal = (key === 'vandal' && equippedSkins.vandal === 'chaos') || (key === 'stinger' && equippedSkins.stinger === 'chaos');
           const isNeoSheriff = (key === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
           const isAraxysOp = (key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys');
           const isChampSkin = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'phantom' && equippedSkins.phantom === 'champions2024');
-          if (isChaosVandal && models.vandal_chaos && models.vandal_chaos.userData) {
-            models.vandal_chaos.userData.muzzleFlashTimer = 0.075;
-            if (models.vandal_chaos.userData.muzzleFlashGroup) {
-              models.vandal_chaos.userData.muzzleFlashGroup.rotation.z = Math.random() * Math.PI * 2;
+          const activeChaosModel = key === 'stinger' ? models.stinger_chaos : models.vandal_chaos;
+          if (isChaosVandal && activeChaosModel && activeChaosModel.userData) {
+            activeChaosModel.userData.muzzleFlashTimer = 0.075;
+            if (activeChaosModel.userData.muzzleFlashGroup) {
+              activeChaosModel.userData.muzzleFlashGroup.rotation.z = Math.random() * Math.PI * 2;
             }
           }
           spawnBulletTracer(muzzleWorld, tracerEnd, isChaosVandal ? 'chaos' : (isNeoSheriff ? 'neofrontier' : (isAraxysOp ? 'araxys' : (key === 'operator' || isChampSkin))));
@@ -8274,7 +8683,7 @@
                   ? 'araxys'
                   : ((key === 'phantom' && equippedSkins.phantom === 'champions2024')
                     ? '2024'
-                    : ((key === 'vandal' && equippedSkins.vandal === 'chaos') ? 'chaos' : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false)));
+                    : (((key === 'vandal' && equippedSkins.vandal === 'chaos') || (key === 'stinger' && equippedSkins.stinger === 'chaos')) ? 'chaos' : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false)));
                 endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
               }
             }
@@ -8293,7 +8702,7 @@
             triggerAraxysFinisher(finPos);
           } else if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
             triggerChampions2024Finisher(finPos);
-          } else if (key === 'vandal' && equippedSkins.vandal === 'chaos') {
+          } else if ((key === 'vandal' && equippedSkins.vandal === 'chaos') || (key === 'stinger' && equippedSkins.stinger === 'chaos')) {
             triggerChaosFinisher(finPos);
           } else if (key === 'vandal' && equippedSkins.vandal === 'champions2021') {
             triggerChampions2021Finisher(finPos);
@@ -8875,46 +9284,49 @@
         }
       }
 
-      // 혼돈의 서막(Prelude of Chaos) 밴달 에너지 코어, 회전 링 & 총구 화염 애니메이션
+      // 혼돈의 서막(Prelude of Chaos) 밴달 & 스팅어 에너지 코어, 회전 링 & 총구 화염 애니메이션
       if (chaosAuraTimer > 0) chaosAuraTimer -= dt;
-      const chaosModel = models.vandal_chaos;
-      if (chaosModel && chaosModel.userData) {
-        const cu = chaosModel.userData;
-        const isChaosBoost = chaosAuraTimer > 0 || (isInspecting && curKey === 'vandal' && equippedSkins.vandal === 'chaos');
-        const rotSpeed = isChaosBoost ? 4.8 : 1.9;
-        if (cu.chaosCoreSphere) {
-          cu.chaosCoreSphere.rotation.y += dt * rotSpeed;
-          cu.chaosCoreSphere.rotation.x += dt * (rotSpeed * 0.6);
-          const pulseScale = 1.0 + Math.sin(performance.now() * 0.015) * (isChaosBoost ? 0.16 : 0.08);
-          cu.chaosCoreSphere.scale.setScalar(pulseScale);
+      [
+        { m: models.vandal_chaos, wKey: 'vandal', sKey: equippedSkins.vandal },
+        { m: models.stinger_chaos, wKey: 'stinger', sKey: equippedSkins.stinger }
+      ].forEach(({ m: chaosModel, wKey, sKey }) => {
+        if (chaosModel && chaosModel.userData) {
+          const cu = chaosModel.userData;
+          const isChaosBoost = chaosAuraTimer > 0 || (isInspecting && curKey === wKey && sKey === 'chaos');
+          const rotSpeed = isChaosBoost ? 4.8 : 1.9;
+          if (cu.chaosCoreSphere) {
+            cu.chaosCoreSphere.rotation.y += dt * rotSpeed;
+            const pulseScale = 1.0 + Math.sin(performance.now() * 0.015) * (isChaosBoost ? 0.14 : 0.07);
+            cu.chaosCoreSphere.scale.setScalar(pulseScale);
+          }
+          if (cu.chaosInnerFlame) {
+            cu.chaosInnerFlame.rotation.y -= dt * (rotSpeed * 1.4);
+          }
+          if (cu.chaosRing1) {
+            cu.chaosRing1.rotation.z += dt * (rotSpeed * 1.6);
+          }
+          if (cu.chaosRing2) {
+            cu.chaosRing2.rotation.z -= dt * (rotSpeed * 1.8);
+          }
+          if (cu.chaosCoreMat) {
+            const colorShift = 0.5 + 0.5 * Math.sin(performance.now() * 0.008);
+            cu.chaosCoreMat.emissive.setRGB(0.66 + colorShift * 0.25, 0.33 + colorShift * 0.14, 0.97);
+            cu.chaosCoreMat.emissiveIntensity = isChaosBoost ? 2.6 : 1.95;
+          }
+          if (cu.plasmaIndigoMat) {
+            cu.plasmaIndigoMat.opacity = 0.78 + 0.20 * Math.sin(performance.now() * 0.018);
+          }
+          if (cu.muzzleFlashTimer > 0) {
+            cu.muzzleFlashTimer -= dt;
+            const flashAlpha = Math.max(0, cu.muzzleFlashTimer / 0.075);
+            cu.muzzleFlashMat.opacity = flashAlpha * 0.95;
+            cu.muzzleFlashInnerMat.opacity = flashAlpha;
+          } else if (cu.muzzleFlashMat) {
+            cu.muzzleFlashMat.opacity = 0;
+            cu.muzzleFlashInnerMat.opacity = 0;
+          }
         }
-        if (cu.chaosInnerFlame) {
-          cu.chaosInnerFlame.rotation.y -= dt * (rotSpeed * 1.4);
-          cu.chaosInnerFlame.rotation.z += dt * (rotSpeed * 1.1);
-        }
-        if (cu.chaosRing1) {
-          cu.chaosRing1.rotation.z += dt * (rotSpeed * 1.6);
-          cu.chaosRing1.rotation.x += dt * (rotSpeed * 0.7);
-        }
-        if (cu.chaosRing2) {
-          cu.chaosRing2.rotation.y -= dt * (rotSpeed * 1.8);
-          cu.chaosRing2.rotation.z -= dt * (rotSpeed * 0.9);
-        }
-        if (cu.chaosCoreMat) {
-          const colorShift = 0.5 + 0.5 * Math.sin(performance.now() * 0.008);
-          cu.chaosCoreMat.emissive.setRGB(0.75 + colorShift * 0.25, 0.15 + colorShift * 0.28, 0.85 - colorShift * 0.45);
-          cu.chaosCoreMat.emissiveIntensity = isChaosBoost ? 2.4 : 1.75;
-        }
-        if (cu.muzzleFlashTimer > 0) {
-          cu.muzzleFlashTimer -= dt;
-          const flashAlpha = Math.max(0, cu.muzzleFlashTimer / 0.075);
-          cu.muzzleFlashMat.opacity = flashAlpha * 0.95;
-          cu.muzzleFlashInnerMat.opacity = flashAlpha;
-        } else if (cu.muzzleFlashMat) {
-          cu.muzzleFlashMat.opacity = 0;
-          cu.muzzleFlashInnerMat.opacity = 0;
-        }
-      }
+      });
 
       // 2021 챔피언스 밴달 & 카람빗 오라 및 총기 장식 애니메이션
       if (championsAuraTimer > 0) championsAuraTimer -= dt;
