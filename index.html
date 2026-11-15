@@ -1636,7 +1636,6 @@
 
     function buildChaosEmblemSVG(count, isHeadshot = false) {
       const tier = Math.min(6, Math.max(1, count));
-      const killLabel = tier >= 5 ? (tier === 6 ? '6 KILLS · HEXA' : 'ACE · 5 KILLS') : `${tier} KILL${tier > 1 ? 'S' : ''}`;
       const nodes = [
         [100, 34], [156, 68], [156, 132], [100, 166], [44, 132], [44, 68]
       ];
@@ -1645,7 +1644,7 @@
       `).join('');
 
       return `
-      <div style="position:relative; width:190px; height:176px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+      <div style="position:relative; width:190px; height:150px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
         <img src="chaos_banner.png" alt="Chaos Kill Banner"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
              style="width:154px; height:136px; object-fit:contain; filter: drop-shadow(0 0 14px rgba(217,70,239,0.85));" />
@@ -1685,9 +1684,6 @@
           ${activeNodesHtml}
           ${isHeadshot ? `<g stroke="#ff6b2b" stroke-width="2.4"><line x1="91" y1="62" x2="109" y2="76"/><line x1="109" y1="62" x2="91" y2="76"/></g>` : ''}
         </svg>
-        <div style="margin-top:2px; padding:2px 12px; border-radius:4px; background:linear-gradient(90deg, rgba(24,24,27,0.92), rgba(88,28,135,0.92), rgba(24,24,27,0.92)); border:1px solid #d946ef; color:#fdf4ff; font-size:13px; font-weight:900; letter-spacing:1.5px; text-shadow:0 0 8px #d946ef; box-shadow:0 0 12px rgba(217,70,239,0.55);">
-          ${killLabel}${isHeadshot ? ' · HEADSHOT' : ''}
-        </div>
       </div>`;
     }
 
@@ -3684,149 +3680,118 @@
       const group = new THREE.Group();
       group.add(buildFirstPersonHandModel('gun'));
 
-      // 1. 어두운 다크 메탈(#18181b) & 외계 기계 갑옷 + 청록/보라/구릿빛 엣지 트림
-      const darkMetalMat = new THREE.MeshStandardMaterial({
-        color: 0x18181b,
+      const darkGunmetalMat = new THREE.MeshStandardMaterial({
+        color: 0x1c1e26,
         metalness: 0.88,
-        roughness: 0.24
+        roughness: 0.34
       });
-      const obsidianPlateMat = new THREE.MeshStandardMaterial({
-        color: 0x0f0f12,
-        metalness: 0.92,
-        roughness: 0.20
+      const charcoalArmorMat = new THREE.MeshStandardMaterial({
+        color: 0x2d313e,
+        metalness: 0.82,
+        roughness: 0.38
       });
-      const tealArmorMat = new THREE.MeshStandardMaterial({
-        color: 0x164e63,
-        metalness: 0.78,
-        roughness: 0.28,
-        emissive: new THREE.Color(0x0e7490),
+      const bronzeFrameMat = new THREE.MeshStandardMaterial({
+        color: 0xb45309,
+        metalness: 0.90,
+        roughness: 0.24,
+        emissive: new THREE.Color(0x78350f),
         emissiveIntensity: 0.18
       });
-      const bronzeClawMat = new THREE.MeshStandardMaterial({
-        color: 0xc27838,
-        metalness: 0.86,
-        roughness: 0.26,
-        emissive: new THREE.Color(0x7c2d12),
-        emissiveIntensity: 0.16
-      });
-      const violetTrimMat = new THREE.MeshStandardMaterial({
-        color: 0x9333ea,
-        emissive: new THREE.Color(0xa855f7),
-        emissiveIntensity: 0.75,
-        roughness: 0.22,
-        metalness: 0.45
-      });
+      const seamEnergyRedMat = new THREE.MeshBasicMaterial({ color: 0xff2a55 });
+      const seamEnergyVioletMat = new THREE.MeshBasicMaterial({ color: 0xc026d3 });
 
-      // 2. 중앙 열린 챔버 프레임 (상단 브릿지 + 하단 킬 프레임으로 중앙에 오픈 공간 확보)
-      const rearReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.084, 0.15), darkMetalMat);
+      const rearReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.088, 0.16), darkGunmetalMat);
       rearReceiver.position.set(0, 0.012, 0.075);
 
-      const topSpineBridge = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.016, 0.44), tealArmorMat);
-      topSpineBridge.position.set(0, 0.052, -0.14);
+      const upperCharcoalPlate = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.022, 0.45), charcoalArmorMat);
+      upperCharcoalPlate.position.set(0, 0.052, -0.14);
 
-      const topVioletRail = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.008, 0.42), violetTrimMat);
-      topVioletRail.position.set(0, 0.061, -0.14);
+      const bronzeTopSpine = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.012, 0.43), bronzeFrameMat);
+      bronzeTopSpine.position.set(0, 0.064, -0.14);
 
-      const bottomKeel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.022, 0.34), obsidianPlateMat);
+      const bronzeSideTrimL = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.016, 0.36), bronzeFrameMat);
+      bronzeSideTrimL.position.set(-0.033, 0.036, -0.12);
+      const bronzeSideTrimR = bronzeSideTrimL.clone();
+      bronzeSideTrimR.position.x = 0.033;
+
+      const bottomKeel = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.024, 0.36), darkGunmetalMat);
       bottomKeel.position.set(0, -0.028, -0.13);
 
-      // 측면 아머 플레이트 (중앙 오픈 챔버 좌우를 감싸는 외계 장갑)
-      const leftChamberWall = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.036, 0.22), darkMetalMat);
-      leftChamberWall.position.set(-0.028, -0.008, -0.12);
-      const rightChamberWall = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.036, 0.22), darkMetalMat);
-      rightChamberWall.position.set(0.028, -0.008, -0.12);
+      const leftChamberWall = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.038, 0.24), charcoalArmorMat);
+      leftChamberWall.position.set(-0.030, -0.008, -0.12);
+      const rightChamberWall = leftChamberWall.clone();
+      rightChamberWall.position.x = 0.030;
 
-      // 3. 핵심 디테일: 중앙 열린 공간(챔버) 안의 보라빛·주황빛 혼돈의 에너지 코어 구체 & 회전 에너지 링
       const chamberGroup = new THREE.Group();
       chamberGroup.position.set(0, 0.014, -0.11);
 
       const chaosCoreMat = new THREE.MeshStandardMaterial({
-        color: 0xd946ef,
-        emissive: new THREE.Color(0xc026d3),
-        emissiveIntensity: 1.85,
-        roughness: 0.12,
+        color: 0xff5500,
+        emissive: new THREE.Color(0xd946ef),
+        emissiveIntensity: 2.1,
+        roughness: 0.14,
         metalness: 0.15
       });
-      const chaosCoreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.022, 20, 20), chaosCoreMat);
+      const chaosCoreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.023, 22, 22), chaosCoreMat);
 
       const chaosInnerFlameMat = new THREE.MeshBasicMaterial({
-        color: 0xff6b2b,
+        color: 0xff6b00,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.88,
         wireframe: true
       });
-      const chaosInnerFlame = new THREE.Mesh(new THREE.IcosahedronGeometry(0.025, 1), chaosInnerFlameMat);
+      const chaosInnerFlame = new THREE.Mesh(new THREE.IcosahedronGeometry(0.026, 1), chaosInnerFlameMat);
 
-      const chaosRingMat1 = new THREE.MeshBasicMaterial({
-        color: 0xe879f9,
-        transparent: true,
-        opacity: 0.92
-      });
-      const chaosRingMat2 = new THREE.MeshBasicMaterial({
-        color: 0xff7b29,
-        transparent: true,
-        opacity: 0.92
-      });
-      const chaosRing1 = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.0032, 10, 28), chaosRingMat1);
+      const chaosRing1 = new THREE.Mesh(
+        new THREE.TorusGeometry(0.033, 0.0032, 10, 28),
+        new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: 0.92 })
+      );
       chaosRing1.rotation.set(0.55, 0.35, 0);
-      const chaosRing2 = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.0028, 10, 28), chaosRingMat2);
+
+      const chaosRing2 = new THREE.Mesh(
+        new THREE.TorusGeometry(0.037, 0.0028, 10, 28),
+        new THREE.MeshBasicMaterial({ color: 0xff6b2b, transparent: true, opacity: 0.92 })
+      );
       chaosRing2.rotation.set(-0.65, -0.45, 0.4);
 
-      // 총열 내부를 관통하는 보라빛 에너지 플라즈마 빔
-      const barrelPlasmaBeam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.006, 0.006, 0.34, 10),
-        new THREE.MeshBasicMaterial({ color: 0xd946ef })
-      );
-      barrelPlasmaBeam.rotation.x = Math.PI / 2;
-      barrelPlasmaBeam.position.set(0, 0.016, -0.25);
-
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI) / 2 + Math.PI / 4;
+        const claw = new THREE.Mesh(new THREE.ConeGeometry(0.0085, 0.058, 4), darkGunmetalMat);
+        claw.position.set(Math.cos(angle) * 0.031, Math.sin(angle) * 0.031, -0.006);
+        claw.rotation.z = angle - Math.PI / 2;
+        claw.rotation.x = 0.38;
+        chamberGroup.add(claw);
+      }
       chamberGroup.add(chaosCoreSphere, chaosInnerFlame, chaosRing1, chaosRing2);
 
-      // 4. 날카로운 외계 가시 / 발톱(Spikes & Claws) 장식
-      const clawPositions = [
-        { x: -0.034, y: 0.034, z: -0.06, rz: 0.55, rx: -0.35 },
-        { x: 0.034, y: 0.034, z: -0.06, rz: -0.55, rx: -0.35 },
-        { x: -0.032, y: 0.028, z: -0.24, rz: 0.65, rx: -0.45 },
-        { x: 0.032, y: 0.028, z: -0.24, rz: -0.65, rx: -0.45 },
-        { x: -0.028, y: -0.022, z: -0.32, rz: 2.35, rx: -0.35 },
-        { x: 0.028, y: -0.022, z: -0.32, rz: -2.35, rx: -0.35 },
-        { x: 0, y: 0.066, z: -0.34, rz: 0, rx: -0.52 }
-      ];
-      clawPositions.forEach((cp, idx) => {
-        const spike = new THREE.Mesh(
-          new THREE.ConeGeometry(0.0085, 0.056, 5),
-          idx % 2 === 0 ? bronzeClawMat : darkMetalMat
-        );
-        spike.position.set(cp.x, cp.y, cp.z);
-        spike.rotation.set(cp.rx, 0, cp.rz);
-        group.add(spike);
-      });
+      const barrelEnergySeamL = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.008, 0.36), seamEnergyRedMat);
+      barrelEnergySeamL.position.set(-0.026, 0.022, -0.24);
+      const barrelEnergySeamR = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.008, 0.36), seamEnergyVioletMat);
+      barrelEnergySeamR.position.set(0.026, 0.022, -0.24);
 
-      // 5. 전방 핸드가드, 총열 및 총구 화염(Muzzle Flash) 메쉬
-      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.044, 0.16), darkMetalMat);
+      const barrelPlasmaBeam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.006, 0.006, 0.36, 10),
+        seamEnergyVioletMat
+      );
+      barrelPlasmaBeam.rotation.x = Math.PI / 2;
+      barrelPlasmaBeam.position.set(0, 0.016, -0.26);
+
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.048, 0.17), charcoalArmorMat);
       handguard.position.set(0, 0.012, -0.31);
 
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.18, 8), obsidianPlateMat);
+      const handguardBronzeBand = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.022, 0.045), bronzeFrameMat);
+      handguardBronzeBand.position.set(0, 0.012, -0.27);
+
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.016, 0.19, 8), darkGunmetalMat);
       barrel.rotation.x = Math.PI / 2;
       barrel.position.set(0, 0.018, -0.46);
 
-      const muzzleCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.014, 0.035, 6), bronzeClawMat);
+      const muzzleCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.014, 0.038, 6), bronzeFrameMat);
       muzzleCrown.rotation.x = Math.PI / 2;
       muzzleCrown.position.set(0, 0.018, -0.54);
 
-      // 총구 화염 메쉬 (사격 시 보라빛·붉은빛 혼돈 에너지 폭발)
-      const muzzleFlashMat = new THREE.MeshBasicMaterial({
-        color: 0xd946ef,
-        transparent: true,
-        opacity: 0.0,
-        side: THREE.DoubleSide
-      });
-      const muzzleFlashInnerMat = new THREE.MeshBasicMaterial({
-        color: 0xff2a5f,
-        transparent: true,
-        opacity: 0.0,
-        side: THREE.DoubleSide
-      });
+      const muzzleFlashMat = new THREE.MeshBasicMaterial({ color: 0xd946ef, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
+      const muzzleFlashInnerMat = new THREE.MeshBasicMaterial({ color: 0xff2a5f, transparent: true, opacity: 0.0, side: THREE.DoubleSide });
       const muzzleFlashGroup = new THREE.Group();
       muzzleFlashGroup.position.set(0, 0.018, -0.58);
       const flashPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), muzzleFlashMat);
@@ -3835,31 +3800,30 @@
       const flashCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.036, 0), muzzleFlashInnerMat);
       muzzleFlashGroup.add(flashPlane1, flashPlane2, flashCore);
 
-      // 6. 혼돈의 서막 곡선 탄창 (다크 메탈 + 구릿빛 갈비뼈 + 보라빛 코어 라인)
-      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.068), darkMetalMat);
+      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.068), charcoalArmorMat);
       magUpper.rotation.x = -0.22;
       magUpper.position.set(0, -0.072, -0.10);
 
-      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.064), obsidianPlateMat);
+      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.064), darkGunmetalMat);
       magLower.rotation.x = -0.48;
       magLower.position.set(0, -0.156, -0.138);
 
-      const magGlowStrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.15, 0.012), violetTrimMat);
+      const magGlowStrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.15, 0.012), seamEnergyRedMat);
       magGlowStrip.rotation.x = -0.34;
       magGlowStrip.position.set(0, -0.112, -0.118);
 
-      const magClawTip = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 5), bronzeClawMat);
+      const magClawTip = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 5), bronzeFrameMat);
       magClawTip.rotation.x = Math.PI - 0.48;
       magClawTip.position.set(0, -0.215, -0.166);
 
-      // 7. 조준기 (보라·주황 홀로그램 프레임)
       const sight = buildHoloSight();
-      sight.position.set(0, 0.062, -0.02);
+      sight.position.set(0, 0.066, -0.02);
 
       group.add(
-        rearReceiver, topSpineBridge, topVioletRail, bottomKeel,
-        leftChamberWall, rightChamberWall, chamberGroup, barrelPlasmaBeam,
-        handguard, barrel, muzzleCrown, muzzleFlashGroup,
+        rearReceiver, upperCharcoalPlate, bronzeTopSpine, bronzeSideTrimL, bronzeSideTrimR, bottomKeel,
+        leftChamberWall, rightChamberWall, chamberGroup,
+        barrelEnergySeamL, barrelEnergySeamR, barrelPlasmaBeam,
+        handguard, handguardBronzeBand, barrel, muzzleCrown, muzzleFlashGroup,
         magUpper, magLower, magGlowStrip, magClawTip, sight
       );
 
@@ -4728,54 +4692,163 @@
     function triggerChaosFinisher(pos) {
       clearChampionsFinisher();
       stopFinisherAudio();
-      const finAudio = new Audio('prelude-to-chaos-finisher.mp3');
-      finAudio.volume = 0.92;
-      currentFinisherAudio = finAudio;
-      const p = finAudio.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => {
+
+      const chaosAudioCandidates = [
+        encodeURI('혼돈의 서막밴달 마무리모션 _ TikTok - Chrome 2026-11-15 23-55-21.mp3'),
+        'prelude-to-chaos-finisher.mp3',
+        'prelude-to-chaos-kill-5.mp3'
+      ];
+      let audioIdx = 0;
+      const tryPlayChaosAudio = () => {
+        if (audioIdx >= chaosAudioCandidates.length) return;
+        const finAudio = new Audio(chaosAudioCandidates[audioIdx++]);
+        finAudio.volume = 0.95;
+        currentFinisherAudio = finAudio;
+        finAudio.onerror = () => {
           if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
-          playSynthChaosKillSound(5, true);
-        });
-      }
-      finAudio.onerror = () => {
-        if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
-        playSynthChaosKillSound(5, true);
+          tryPlayChaosAudio();
+        };
+        const p = finAudio.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+            tryPlayChaosAudio();
+          });
+        }
       };
+      tryPlayChaosAudio();
 
       const group = new THREE.Group();
       group.position.set(pos.x, 0, pos.z);
 
-      const vortexMat = new THREE.MeshBasicMaterial({ color: 0xc026d3, transparent: true, opacity: 0.78, side: THREE.DoubleSide, wireframe: true });
-      const vortexCone = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 0.35, 11, 18, 6, true), vortexMat);
-      vortexCone.position.y = 5.5;
-      group.add(vortexCone);
+      const abyssRim = new THREE.Mesh(
+        new THREE.RingGeometry(2.05, 2.55, 36),
+        new THREE.MeshBasicMaterial({ color: 0x3b0712, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+      );
+      abyssRim.rotation.x = -Math.PI / 2;
+      abyssRim.position.y = 0.03;
+      group.add(abyssRim);
 
-      const coreOrbMat = new THREE.MeshBasicMaterial({ color: 0xff6b2b, transparent: true, opacity: 0.92 });
-      const coreOrb = new THREE.Mesh(new THREE.SphereGeometry(1.15, 20, 20), coreOrbMat);
-      coreOrb.position.y = 3.2;
-      group.add(coreOrb);
+      const lavaPortalMat = new THREE.MeshBasicMaterial({
+        color: 0xff4500,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.92
+      });
+      const lavaPortal = new THREE.Mesh(new THREE.CircleGeometry(2.05, 36), lavaPortalMat);
+      lavaPortal.rotation.x = -Math.PI / 2;
+      lavaPortal.position.y = 0.04;
+      group.add(lavaPortal);
 
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0xe879f9, side: THREE.DoubleSide, transparent: true, opacity: 0.88 });
-      const ringMesh = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.12, 10, 32), ringMat);
-      ringMesh.rotation.x = Math.PI / 2;
-      ringMesh.position.y = 1.6;
-      group.add(ringMesh);
+      const swirlRingMat = new THREE.MeshBasicMaterial({
+        color: 0xdc2626,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.88
+      });
+      const swirlRing = new THREE.Mesh(new THREE.RingGeometry(0.45, 1.85, 32), swirlRingMat);
+      swirlRing.rotation.x = -Math.PI / 2;
+      swirlRing.position.y = 0.05;
+      group.add(swirlRing);
+
+      const shockRingMat = new THREE.MeshBasicMaterial({
+        color: 0xff4500,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9
+      });
+      const shockRing = new THREE.Mesh(new THREE.RingGeometry(1.9, 2.15, 36), shockRingMat);
+      shockRing.rotation.x = -Math.PI / 2;
+      shockRing.position.y = 0.06;
+      group.add(shockRing);
+
+      const firePillarMat = new THREE.MeshBasicMaterial({
+        color: 0xff4500,
+        transparent: true,
+        opacity: 0.52,
+        side: THREE.DoubleSide
+      });
+      const firePillar = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 1.45, 8.5, 24, 1, true), firePillarMat);
+      firePillar.position.y = 4.25;
+      group.add(firePillar);
+
+      const innerRedPillarMat = new THREE.MeshBasicMaterial({
+        color: 0xdc2626,
+        transparent: true,
+        opacity: 0.68,
+        side: THREE.DoubleSide
+      });
+      const innerRedPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.85, 7.0, 20, 1, true), innerRedPillarMat);
+      innerRedPillar.position.y = 3.5;
+      group.add(innerRedPillar);
+
+      const chainPillars = [];
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI) / 2 + Math.PI / 4;
+        const chainMat = new THREE.MeshStandardMaterial({
+          color: 0x16070c,
+          emissive: new THREE.Color(0x991b1b),
+          emissiveIntensity: 0.85,
+          roughness: 0.3
+        });
+        const chain = new THREE.Mesh(new THREE.ConeGeometry(0.24, 4.4, 5), chainMat);
+        chain.position.set(Math.cos(angle) * 1.55, 2.0, Math.sin(angle) * 1.55);
+        chain.lookAt(pos.x, 1.15, pos.z);
+        chain.rotateX(Math.PI / 2);
+        group.add(chain);
+        chainPillars.push({ mesh: chain, angle });
+      }
+
+      const victimGroup = new THREE.Group();
+      victimGroup.position.set(0, 1.15, 0);
+      const victimMat = new THREE.MeshBasicMaterial({ color: 0x1f0914, transparent: true, opacity: 0.9 });
+      const victimTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 1.1, 12), victimMat);
+      const victimHead = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), victimMat);
+      victimHead.position.y = 0.78;
+      victimGroup.add(victimTorso, victimHead);
+      group.add(victimGroup);
+
+      const embers = [];
+      for (let i = 0; i < 56; i++) {
+        const eMat = new THREE.MeshBasicMaterial({
+          color: i % 2 === 0 ? 0xff6b00 : 0xc026d3,
+          transparent: true,
+          opacity: 0.95
+        });
+        const eMesh = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6), eMat);
+        eMesh.position.set((Math.random() - 0.5) * 1.4, 0.2 + Math.random() * 0.6, (Math.random() - 0.5) * 1.4);
+        group.add(eMesh);
+        embers.push({
+          mesh: eMesh,
+          mat: eMat,
+          vx: (Math.random() - 0.5) * 4.8,
+          vy: 2.8 + Math.random() * 5.2,
+          vz: (Math.random() - 0.5) * 4.8
+        });
+      }
 
       scene.add(group);
-      scene.background = new THREE.Color(0x240938);
-      if (scene.fog) scene.fog.color.setHex(0x240938);
+      scene.background = new THREE.Color(0x140812);
+      if (scene.fog) scene.fog.color.setHex(0x140812);
 
       activeFinisher = {
         edition: 'chaos',
         group,
-        vortexCone,
-        coreOrb,
-        ringMesh,
-        vortexMat,
+        lavaPortal,
+        lavaPortalMat,
+        swirlRing,
+        shockRing,
+        shockRingMat,
+        firePillar,
+        firePillarMat,
+        innerRedPillarMat,
+        chainPillars,
+        victimGroup,
+        victimMat,
+        embers,
         timer: 0,
-        duration: 6.5,
-        audio: finAudio
+        duration: 3.5,
+        audio: currentFinisherAudio
       };
     }
 
@@ -5282,12 +5355,52 @@
       f.timer += dt;
 
       if (f.edition === 'chaos') {
-        f.vortexCone.rotation.y += dt * 4.5;
-        f.coreOrb.rotation.y -= dt * 3.2;
-        f.ringMesh.rotation.z += dt * 2.8;
-        f.ringMesh.position.y = 1.2 + Math.sin(f.timer * 3.5) * 1.4;
-        const pulse = 1.0 + Math.sin(f.timer * 14) * 0.18;
-        f.coreOrb.scale.setScalar(pulse);
+        const progress = Math.min(1, f.timer / f.duration);
+
+        f.swirlRing.rotation.z += dt * 3.8;
+        const ringCycle = (f.timer * 1.15) % 1;
+        const ringScale = 0.85 + ringCycle * 1.95;
+        f.shockRing.scale.set(ringScale, ringScale, 1);
+        f.shockRingMat.opacity = (1 - ringCycle) * 0.88;
+
+        const pillarPulse = 1.0 + Math.sin(f.timer * 18) * 0.12;
+        f.firePillar.scale.set(pillarPulse, 1, pillarPulse);
+
+        if (progress < 0.35) {
+          const clampP = progress / 0.35;
+          f.chainPillars.forEach((cp) => {
+            const r = 1.55 - clampP * 0.78;
+            cp.mesh.position.x = Math.cos(cp.angle) * r;
+            cp.mesh.position.z = Math.sin(cp.angle) * r;
+          });
+        } else {
+          const sinkP = (progress - 0.35) / 0.65;
+          f.victimGroup.position.y = 1.15 - sinkP * 2.25;
+          f.victimGroup.rotation.y += dt * 4.5;
+          const shrink = Math.max(0.01, 1 - sinkP * 0.75);
+          f.victimGroup.scale.setScalar(shrink);
+
+          f.chainPillars.forEach((cp) => {
+            cp.mesh.position.y = 2.0 - sinkP * 3.1;
+          });
+        }
+
+        f.embers.forEach((em) => {
+          em.mesh.position.x += em.vx * dt;
+          em.mesh.position.y += em.vy * dt;
+          em.mesh.position.z += em.vz * dt;
+          em.vy -= 4.2 * dt;
+          em.mat.opacity = Math.max(0, 1 - progress * 1.1);
+          em.mesh.scale.setScalar(Math.max(0.05, 1 - progress * 0.85));
+        });
+
+        if (f.timer > f.duration - 0.5) {
+          const fade = Math.max(0, (f.duration - f.timer) / 0.5);
+          f.lavaPortalMat.opacity = 0.92 * fade;
+          f.firePillarMat.opacity = 0.52 * fade;
+          f.innerRedPillarMat.opacity = 0.68 * fade;
+        }
+
         if (f.timer >= f.duration) clearChampionsFinisher();
         return;
       }
