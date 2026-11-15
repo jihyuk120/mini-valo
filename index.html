@@ -2108,6 +2108,7 @@
       timer: 45.0,
       plantProgress: 0,
       defuseProgress: 0,
+      isPlanting: false,
       mesh: null
     };
 
@@ -2203,6 +2204,7 @@
       spikeState.timer = 45.0;
       spikeState.plantProgress = 0;
       spikeState.defuseProgress = 0;
+      spikeState.isPlanting = false;
       const prompt = document.getElementById('spikePromptBanner');
       if (prompt) prompt.style.display = 'none';
     }
@@ -2326,6 +2328,9 @@
       doorGroup.add(leftPillar, rightPillar, topBeam, panel, sw1, sw2);
       mapGroup.add(doorGroup);
 
+      panel.position.set(0, 5.7, 0);
+      panel.visible = false;
+
       const doorObj = {
         name,
         group: doorGroup,
@@ -2335,6 +2340,7 @@
         z,
         rotY,
         isOpen: true,
+        openProgress: 1.0,
         destroyed: false,
         hp: 400,
         collider: null
@@ -2345,30 +2351,76 @@
       return doorObj;
     }
 
-    function toggleAscentDoor(doorObj, forceState = null) {
+    function syncAscentDoorState(doorObj) {
+      if (!doorObj) return;
+      if (doorObj.destroyed) {
+        doorObj.panel.visible = false;
+        if (doorObj.collider) {
+          const idx = wallColliders.indexOf(doorObj.collider);
+          if (idx >= 0) wallColliders.splice(idx, 1);
+          doorObj.collider = null;
+        }
+        return;
+      }
+
+      const closedCenterY = 1.9;
+      const openCenterY = 5.7;
+      const currentCenterY = THREE.MathUtils.lerp(closedCenterY, openCenterY, doorObj.openProgress);
+      doorObj.panel.position.y = currentCenterY;
+      doorObj.panel.visible = doorObj.openProgress < 0.995;
+
+      const doorBottomY = currentCenterY - 1.9;
+      if (doorBottomY >= 3.75) {
+        if (doorObj.collider) {
+          const idx = wallColliders.indexOf(doorObj.collider);
+          if (idx >= 0) wallColliders.splice(idx, 1);
+          doorObj.collider = null;
+        }
+      } else {
+        if (!doorObj.collider) {
+          const w = Math.abs(Math.cos(doorObj.rotY)) > 0.5 ? 4.2 : 0.6;
+          const d = Math.abs(Math.cos(doorObj.rotY)) > 0.5 ? 0.6 : 4.2;
+          doorObj.collider = {
+            minX: doorObj.x - w / 2 - 0.45,
+            maxX: doorObj.x + w / 2 + 0.45,
+            minZ: doorObj.z - d / 2 - 0.45,
+            maxZ: doorObj.z + d / 2 + 0.45,
+            minY: doorBottomY,
+            maxY: 3.8
+          };
+          wallColliders.push(doorObj.collider);
+        } else {
+          doorObj.collider.minY = doorBottomY;
+        }
+      }
+    }
+
+    function updateAscentDoors(dt) {
+      const duration = 1.75;
+      const step = dt / duration;
+      for (const d of ascentDoors) {
+        if (d.destroyed) continue;
+        const target = d.isOpen ? 1.0 : 0.0;
+        if (Math.abs(d.openProgress - target) > 0.0001) {
+          if (d.openProgress < target) {
+            d.openProgress = Math.min(target, d.openProgress + step);
+          } else {
+            d.openProgress = Math.max(target, d.openProgress - step);
+          }
+          syncAscentDoorState(d);
+        }
+      }
+    }
+
+    function toggleAscentDoor(doorObj, forceState = null, instant = false) {
       if (!doorObj || doorObj.destroyed) return;
       doorObj.isOpen = forceState !== null ? forceState : !doorObj.isOpen;
-      doorObj.panel.visible = !doorObj.isOpen;
       doorObj.switchMat.color.setHex(doorObj.isOpen ? 0x00ffcc : 0xff4655);
       doorObj.switchMat.emissive.setHex(doorObj.isOpen ? 0x00aa88 : 0xaa1122);
 
-      if (doorObj.collider) {
-        const idx = wallColliders.indexOf(doorObj.collider);
-        if (idx >= 0) wallColliders.splice(idx, 1);
-        doorObj.collider = null;
-      }
-      if (!doorObj.isOpen) {
-        const w = Math.abs(Math.cos(doorObj.rotY)) > 0.5 ? 4.2 : 0.6;
-        const d = Math.abs(Math.cos(doorObj.rotY)) > 0.5 ? 0.6 : 4.2;
-        doorObj.collider = {
-          minX: doorObj.x - w / 2 - 0.45,
-          maxX: doorObj.x + w / 2 + 0.45,
-          minZ: doorObj.z - d / 2 - 0.45,
-          maxZ: doorObj.z + d / 2 + 0.45,
-          minY: 0,
-          maxY: 3.8
-        };
-        wallColliders.push(doorObj.collider);
+      if (instant) {
+        doorObj.openProgress = doorObj.isOpen ? 1.0 : 0.0;
+        syncAscentDoorState(doorObj);
       }
     }
 
@@ -5045,8 +5097,7 @@
       ascentDoors.forEach(d => {
         d.destroyed = false;
         d.hp = 400;
-        d.panel.visible = true;
-        toggleAscentDoor(d, true);
+        toggleAscentDoor(d, true, true);
       });
       ascentGlassPanes.forEach(g => {
         if (g.destroyed) {
@@ -5255,7 +5306,12 @@
     }
 
     function updateSpikeAndGimmicks(dt) {
-      if (currentMap !== 'brawl') return;
+      if (currentMap !== 'brawl') {
+        spikeState.isPlanting = false;
+        return;
+      }
+
+      updateAscentDoors(dt);
 
       const promptBanner = document.getElementById('spikePromptBanner');
       const promptTitle = document.getElementById('spikePromptTitle');
@@ -5268,11 +5324,13 @@
       }
 
       if (roundPhase !== 'COMBAT') {
+        spikeState.isPlanting = false;
         if (promptBanner) promptBanner.style.display = 'none';
         return;
       }
 
       if (spikeState.planted) {
+        spikeState.isPlanting = false;
         spikeState.timer -= dt;
         if (spikeState.timer <= 0) {
           endBrawlRound('red', spikeState.pos.clone(), false, '스파이크 폭발!');
@@ -5315,6 +5373,7 @@
       if (!isDead && myTeam === 'red' && playerHasSpike && nearSite) {
         if (promptBanner) promptBanner.style.display = 'block';
         if (keys['Digit4'] || keys['KeyF']) {
+          spikeState.isPlanting = true;
           spikeState.plantProgress += dt;
           const pct = Math.min(100, (spikeState.plantProgress / 4.0) * 100);
           if (promptTitle) {
@@ -5330,6 +5389,7 @@
             spikeState.site = nearSite;
             spikeState.timer = 45.0;
             spikeState.plantProgress = 0;
+            spikeState.isPlanting = false;
             playerHasSpike = false;
             spikeState.pos.set(camera.position.x, 0, camera.position.z);
             createSpikeMesh(spikeState.pos);
@@ -5343,6 +5403,7 @@
           }
         } else {
           spikeState.plantProgress = 0;
+          spikeState.isPlanting = false;
           if (promptTitle) {
             promptTitle.innerText = `[F] 또는 [4] 키를 꾹 눌러 ${nearSite} 사이트에 스파이크 설치 (4.0초)`;
             promptTitle.style.color = '#00ffcc';
@@ -5351,6 +5412,7 @@
         }
       } else {
         spikeState.plantProgress = 0;
+        spikeState.isPlanting = false;
         let nearDoor = null;
         for (const d of ascentDoors) {
           if (!d.destroyed && Math.hypot(camera.position.x - d.x, camera.position.z - d.z) < 4.2) {
@@ -5653,7 +5715,7 @@
       aiRaycaster.far = dist;
       const blockers = [...wallMeshes];
       for (const dObj of ascentDoors) {
-        if (!dObj.isOpen && !dObj.destroyed && dObj.panel) blockers.push(dObj.panel);
+        if (dObj.openProgress < 0.95 && !dObj.destroyed && dObj.panel) blockers.push(dObj.panel);
       }
       for (const gObj of ascentGlassPanes) {
         if (!gObj.destroyed && gObj.mesh) blockers.push(gObj.mesh);
@@ -6264,6 +6326,7 @@
     }
 
     function switchSlot(slotNum) {
+      if (spikeState.isPlanting || spikeState.plantProgress > 0) return;
       if (slotNum === 1 && !slotWeapons[1]) return;
       if (slotNum === 4) {
         if (currentMap !== 'brawl' || myTeam !== 'red' || !playerHasSpike || spikeState.planted) return;
@@ -6893,12 +6956,13 @@
     const raycaster = new THREE.Raycaster();
 
     function fireBurstRounds(count = 3, interval = 0.055) {
+      if (spikeState.isPlanting || spikeState.plantProgress > 0) return;
       const startKey = getCurrentWeaponKey();
       if (isReloading || isDead || ammoState[startKey] <= 0) return;
       fireCooldown = count * interval + 0.24;
       for (let i = 0; i < count; i++) {
         setTimeout(() => {
-          if (getCurrentWeaponKey() === startKey && !isReloading && !isDead && ammoState[startKey] > 0) {
+          if (getCurrentWeaponKey() === startKey && !isReloading && !isDead && !spikeState.isPlanting && spikeState.plantProgress <= 0 && ammoState[startKey] > 0) {
             fireWeapon(false);
             fireCooldown = Math.max(fireCooldown, 0.22);
           }
@@ -6907,6 +6971,7 @@
     }
 
     function fireWeapon(isHeavyAttack = false) {
+      if (spikeState.isPlanting || spikeState.plantProgress > 0) return;
       const key = getCurrentWeaponKey();
       const w = WEAPONS[key];
       if (isReloading || isDead) return;
@@ -7044,7 +7109,7 @@
           const hitObj = hit.object;
           if (hitObj.userData.targetType === 'ascentDoor') {
             const dObj = hitObj.userData.doorObj;
-            if (dObj && !dObj.destroyed && !dObj.isOpen) {
+            if (dObj && !dObj.destroyed && dObj.openProgress < 0.95) {
               dObj.hp -= w.getDamage(hit.distance, 'body');
               if (dObj.hp <= 0) {
                 dObj.destroyed = true;
@@ -7286,6 +7351,7 @@
         if (e.button === 0) spectateTargetIndex++;
         return;
       }
+      if (spikeState.isPlanting || spikeState.plantProgress > 0) return;
       const curK = getCurrentWeaponKey();
       const w = WEAPONS[curK];
       // 마샬 / 버키 1발씩 장전 중일 때 클릭 시 즉시 장전 캔슬(Reload Cancel)!
@@ -7364,7 +7430,7 @@
 
       if (fireCooldown > 0) fireCooldown -= dt;
       const curWeapon = WEAPONS[getCurrentWeaponKey()];
-      if (isMouseDown && curWeapon.auto && fireCooldown <= 0 && !isReloading && !isDead && document.pointerLockElement === document.body) {
+      if (isMouseDown && curWeapon.auto && fireCooldown <= 0 && !isReloading && !isDead && !spikeState.isPlanting && spikeState.plantProgress <= 0 && document.pointerLockElement === document.body) {
         const kNow = getCurrentWeaponKey();
         if ((kNow === 'bulldog' || kNow === 'stinger') && zoomLevel > 0) {
           fireBurstRounds(3, 0.055);
