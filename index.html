@@ -773,6 +773,63 @@
       osc.start(now); osc.stop(now + 0.085);
     }
 
+    const CHAOS_STREAK_FILES = {
+      1: ['prelude-to-chaos-kill-1.mp3', './prelude-to-chaos-kill-1.mp3', 'kill_1.mp3', './kill_1.mp3'],
+      2: ['prelude-to-chaos-kill-2.mp3', './prelude-to-chaos-kill-2.mp3', 'kill_2.mp3', './kill_2.mp3'],
+      3: ['prelude-to-chaos-kill-3.mp3', './prelude-to-chaos-kill-3.mp3', 'kill_3.mp3', './kill_3.mp3'],
+      4: ['prelude-to-chaos-kill-4.mp3', './prelude-to-chaos-kill-4.mp3', 'kill_4.mp3', './kill_4.mp3'],
+      5: ['prelude-to-chaos-kill-5.mp3', './prelude-to-chaos-kill-5.mp3', 'ace.mp3', './ace.mp3']
+    };
+
+    function playSynthChaosKillSound(tier = 1, isHeadshot = false) {
+      initAudio();
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const clampedTier = Math.min(5, Math.max(1, tier));
+      const notes = [196.00, 233.08, 261.63, 311.13, 392.00];
+      const root = notes[clampedTier - 1];
+
+      const sub = audioCtx.createOscillator();
+      const subG = audioCtx.createGain();
+      sub.type = 'sawtooth';
+      sub.frequency.setValueAtTime(98, now);
+      sub.frequency.exponentialRampToValueAtTime(36, now + 0.52);
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(480, now);
+      subG.gain.setValueAtTime(0.45, now);
+      subG.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      sub.connect(lp); lp.connect(subG); subG.connect(audioCtx.destination);
+      sub.start(now); sub.stop(now + 0.58);
+
+      const ratios = clampedTier === 5 ? [0.5, 1.0, 1.5, 2.0, 2.5] : [1.0, 1.5, 2.0];
+      ratios.forEach((r, idx) => {
+        const st = now + (clampedTier === 5 ? idx * 0.045 : 0);
+        const dur = clampedTier === 5 ? 1.45 : 0.72;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(root * r, st);
+        g.gain.setValueAtTime(0.001, st);
+        g.gain.linearRampToValueAtTime(0.22, st + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, st + dur);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(st); osc.stop(st + dur + 0.03);
+      });
+
+      if (isHeadshot) {
+        const hs = audioCtx.createOscillator();
+        const hsG = audioCtx.createGain();
+        hs.type = 'sine';
+        hs.frequency.setValueAtTime(1720, now);
+        hs.frequency.exponentialRampToValueAtTime(2540, now + 0.14);
+        hsG.gain.setValueAtTime(0.28, now);
+        hsG.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        hs.connect(hsG); hsG.connect(audioCtx.destination);
+        hs.start(now); hs.stop(now + 0.32);
+      }
+    }
+
     const STREAK_FILES = {
       1: ['multikill-1.mp3', './multikill-1.mp3', 'valorant-1-kill.mp3'],
       2: ['valorant-2-kills.mp3', './valorant-2-kills.mp3', 'multikill-2.mp3'],
@@ -980,11 +1037,13 @@
 
     function playKillStreakAudio(tier, champEdition, isHeadshot) {
       const soundTier = Math.min(5, Math.max(1, tier));
+      const isChaos = champEdition === 'chaos';
       const isNeoFrontier = champEdition === 'neofrontier';
       const isAraxys = champEdition === 'araxys';
       const isChamp2024 = champEdition === '2024';
       const isChamp2021 = champEdition === '2021' || champEdition === true;
       const candidates = (
+        isChaos ? CHAOS_STREAK_FILES[soundTier] :
         isNeoFrontier ? NEO_FRONTIER_STREAK_FILES[soundTier] :
         isAraxys ? ARAXYS_STREAK_FILES[soundTier] :
         isChamp2024 ? CHAMPIONS_2024_STREAK_FILES[soundTier] :
@@ -998,6 +1057,8 @@
           if (isNeoFrontier) {
             // 네오 프론티어 셰리프는 합성음(땅땅 소리) 없이 제공된 킬사운드 파일만 재생
             return;
+          } else if (isChaos) {
+            playSynthChaosKillSound(soundTier, isHeadshot);
           } else if (isAraxys) {
             playSynthAraxysKillSound(soundTier, isHeadshot);
           } else {
@@ -1025,7 +1086,7 @@
 
     // 무기별 장착 스킨 상태
     const equippedSkins = {
-      vandal: 'champions2021',
+      vandal: 'chaos',
       phantom: 'champions2024',
       sheriff: 'neofrontier', // 네오 프론티어 셰리프 기본 장착
       outlaw: 'araxys', // 아락시스 아웃로 (블랙/레드 크로마) 기본 장착
@@ -1035,7 +1096,8 @@
     let neoFrontierAuraTimer = 0;
     let championsAuraTimer = 0;
     let champions2024AuraTimer = 0;
-    let araxysAuraTimer = 0; // 아락시스 킬 달성 시 비늘 맥박 & 크림슨 코어 발광 타이머
+    let araxysAuraTimer = 0;
+    let chaosAuraTimer = 0; // 아락시스 킬 달성 시 비늘 맥박 & 크림슨 코어 발광 타이머
 
     let currentStreak = 0;
     let streakBannerTimer = null;
@@ -1572,15 +1634,76 @@
       </svg>`;
     }
 
+    function buildChaosEmblemSVG(count, isHeadshot = false) {
+      const tier = Math.min(6, Math.max(1, count));
+      const killLabel = tier >= 5 ? (tier === 6 ? '6 KILLS · HEXA' : 'ACE · 5 KILLS') : `${tier} KILL${tier > 1 ? 'S' : ''}`;
+      const nodes = [
+        [100, 34], [156, 68], [156, 132], [100, 166], [44, 132], [44, 68]
+      ];
+      const activeNodesHtml = nodes.slice(0, tier).map(([nx, ny], idx) => `
+        <circle cx="${nx}" cy="${ny}" r="${tier >= 5 ? 6.5 : 5.2}" fill="${idx % 2 === 0 ? '#d946ef' : '#ff6b2b'}" stroke="#ffffff" stroke-width="1.5" style="filter: drop-shadow(0 0 8px #d946ef);" />
+      `).join('');
+
+      return `
+      <div style="position:relative; width:190px; height:176px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <img src="chaos_banner.png" alt="Chaos Kill Banner"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+             style="width:154px; height:136px; object-fit:contain; filter: drop-shadow(0 0 14px rgba(217,70,239,0.85));" />
+        <svg viewBox="0 0 200 200" width="156" height="140" xmlns="http://www.w3.org/2000/svg" style="display:none;">
+          <defs>
+            <radialGradient id="chaosBannerBg" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="rgba(42, 10, 56, 0.92)" />
+              <stop offset="68%" stop-color="rgba(22, 8, 30, 0.58)" />
+              <stop offset="100%" stop-color="rgba(12, 4, 18, 0)" />
+            </radialGradient>
+            <linearGradient id="chaosHelmetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#f3f4f6" />
+              <stop offset="100%" stop-color="#9ca3af" />
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="82" fill="url(#chaosBannerBg)" />
+          <g fill="#c026d3" opacity="0.72" style="filter: drop-shadow(0 0 8px #d946ef);">
+            <polygon points="24,88 52,78 44,100 54,120 22,110 34,99" />
+            <polygon points="176,88 148,78 156,100 146,120 178,110 166,99" />
+            <circle cx="32" cy="72" r="3" />
+            <circle cx="168" cy="72" r="3" />
+            <circle cx="28" cy="128" r="3.5" />
+            <circle cx="172" cy="128" r="3.5" />
+          </g>
+          <circle cx="100" cy="100" r="64" fill="none" stroke="#d946ef" stroke-width="2.2" stroke-dasharray="36 12" style="filter: drop-shadow(0 0 6px #c026d3);" />
+          <circle cx="100" cy="100" r="54" fill="none" stroke="#e5e7eb" stroke-width="2.6" />
+          <circle cx="100" cy="100" r="38" fill="#14101c" stroke="#f3f4f6" stroke-width="2.4" />
+          <line x1="16" y1="96" x2="184" y2="96" stroke="rgba(243,244,246,0.65)" stroke-width="1.3" />
+          <line x1="16" y1="104" x2="184" y2="104" stroke="rgba(243,244,246,0.65)" stroke-width="1.3" />
+          <line x1="100" y1="14" x2="100" y2="38" stroke="#f3f4f6" stroke-width="2" />
+          <circle cx="100" cy="18" r="4.5" fill="#18181b" stroke="#f3f4f6" stroke-width="2" />
+          <polygon points="82,76 92,70 92,118 80,108 78,88" fill="url(#chaosHelmetGrad)" />
+          <polygon points="118,76 108,70 108,118 120,108 122,88" fill="#9ca3af" />
+          <polygon points="94,72 106,72 105,128 95,128" fill="#d1d5db" />
+          <circle cx="100" cy="91" r="11" fill="#18181b" stroke="#f3f4f6" stroke-width="1.6" />
+          <polygon points="92,86 108,86 100,100" fill="#ff1e56" stroke="#ff7597" stroke-width="1.2" style="filter: drop-shadow(0 0 6px #ff1e56);" />
+          ${activeNodesHtml}
+          ${isHeadshot ? `<g stroke="#ff6b2b" stroke-width="2.4"><line x1="91" y1="62" x2="109" y2="76"/><line x1="109" y1="62" x2="91" y2="76"/></g>` : ''}
+        </svg>
+        <div style="margin-top:2px; padding:2px 12px; border-radius:4px; background:linear-gradient(90deg, rgba(24,24,27,0.92), rgba(88,28,135,0.92), rgba(24,24,27,0.92)); border:1px solid #d946ef; color:#fdf4ff; font-size:13px; font-weight:900; letter-spacing:1.5px; text-shadow:0 0 8px #d946ef; box-shadow:0 0 12px rgba(217,70,239,0.55);">
+          ${killLabel}${isHeadshot ? ' · HEADSHOT' : ''}
+        </div>
+      </div>`;
+    }
+
     function triggerScoreStreak(addCount = 1, isHeadshot = false) {
       currentStreak += addCount;
 
       const soundTier = Math.min(5, currentStreak);
       const curW = getCurrentWeaponKey();
+      const isChaosActive = (curW === 'vandal' && equippedSkins.vandal === 'chaos');
       const isNeoFrontierActive = (curW === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
       const isAraxysActive = (curW === 'operator' && equippedSkins.operator === 'araxys') || (curW === 'outlaw' && equippedSkins.outlaw === 'araxys');
       const isChamp2024Active = (curW === 'phantom' && equippedSkins.phantom === 'champions2024');
       const isChamp2021Active = (curW === 'vandal' && equippedSkins.vandal === 'champions2021') || (curW === 'melee' && equippedSkins.melee === 'champions2021');
+      if (isChaosActive) {
+        chaosAuraTimer = 4.5;
+      }
       if (isNeoFrontierActive) {
         neoFrontierAuraTimer = 4.5;
       }
@@ -1593,7 +1716,7 @@
       if (isChamp2021Active) {
         championsAuraTimer = 5.0; // 5초간 2021 챔피언스 황금 오라 발광
       }
-      const champEdition = isNeoFrontierActive ? 'neofrontier' : (isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null)));
+      const champEdition = isChaosActive ? 'chaos' : (isNeoFrontierActive ? 'neofrontier' : (isAraxysActive ? 'araxys' : (isChamp2024Active ? '2024' : (isChamp2021Active ? '2021' : null))));
       if (isNeoFrontierActive) {
         setTimeout(() => {
           playKillStreakAudio(soundTier, champEdition, isHeadshot);
@@ -1604,8 +1727,15 @@
 
       const banner = document.getElementById('streakBanner');
       const svgWrap = document.getElementById('streakEmblemWrap');
-      svgWrap.innerHTML = isNeoFrontierActive
-        ? buildNeoFrontierEmblemSVG(currentStreak, isHeadshot)
+      svgWrap.style.width = isChaosActive ? '190px' : '150px';
+      svgWrap.style.height = isChaosActive ? '176px' : '150px';
+      banner.style.filter = isChaosActive
+        ? 'drop-shadow(0 0 18px rgba(217, 70, 239, 0.78))'
+        : 'drop-shadow(0 0 14px rgba(45, 255, 196, 0.45))';
+      svgWrap.innerHTML = isChaosActive
+        ? buildChaosEmblemSVG(currentStreak, isHeadshot)
+        : isNeoFrontierActive
+          ? buildNeoFrontierEmblemSVG(currentStreak, isHeadshot)
         : (isAraxysActive
           ? buildAraxysEmblemSVG(currentStreak, isHeadshot)
           : (isChamp2024Active
@@ -1626,7 +1756,7 @@
         banner.style.transition = 'opacity 0.45s ease-in, transform 0.45s ease-in';
         banner.style.opacity = '0';
         banner.style.transform = 'translateX(-50%) scale(0.92)';
-      }, 1500);
+      }, 2500);
     }
 
     function resetScoreStreak() {
@@ -3550,6 +3680,204 @@
       return group;
     }
 
+    function buildPreludeOfChaosVandalModel() {
+      const group = new THREE.Group();
+      group.add(buildFirstPersonHandModel('gun'));
+
+      // 1. 어두운 다크 메탈(#18181b) & 외계 기계 갑옷 + 청록/보라/구릿빛 엣지 트림
+      const darkMetalMat = new THREE.MeshStandardMaterial({
+        color: 0x18181b,
+        metalness: 0.88,
+        roughness: 0.24
+      });
+      const obsidianPlateMat = new THREE.MeshStandardMaterial({
+        color: 0x0f0f12,
+        metalness: 0.92,
+        roughness: 0.20
+      });
+      const tealArmorMat = new THREE.MeshStandardMaterial({
+        color: 0x164e63,
+        metalness: 0.78,
+        roughness: 0.28,
+        emissive: new THREE.Color(0x0e7490),
+        emissiveIntensity: 0.18
+      });
+      const bronzeClawMat = new THREE.MeshStandardMaterial({
+        color: 0xc27838,
+        metalness: 0.86,
+        roughness: 0.26,
+        emissive: new THREE.Color(0x7c2d12),
+        emissiveIntensity: 0.16
+      });
+      const violetTrimMat = new THREE.MeshStandardMaterial({
+        color: 0x9333ea,
+        emissive: new THREE.Color(0xa855f7),
+        emissiveIntensity: 0.75,
+        roughness: 0.22,
+        metalness: 0.45
+      });
+
+      // 2. 중앙 열린 챔버 프레임 (상단 브릿지 + 하단 킬 프레임으로 중앙에 오픈 공간 확보)
+      const rearReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.084, 0.15), darkMetalMat);
+      rearReceiver.position.set(0, 0.012, 0.075);
+
+      const topSpineBridge = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.016, 0.44), tealArmorMat);
+      topSpineBridge.position.set(0, 0.052, -0.14);
+
+      const topVioletRail = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.008, 0.42), violetTrimMat);
+      topVioletRail.position.set(0, 0.061, -0.14);
+
+      const bottomKeel = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.022, 0.34), obsidianPlateMat);
+      bottomKeel.position.set(0, -0.028, -0.13);
+
+      // 측면 아머 플레이트 (중앙 오픈 챔버 좌우를 감싸는 외계 장갑)
+      const leftChamberWall = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.036, 0.22), darkMetalMat);
+      leftChamberWall.position.set(-0.028, -0.008, -0.12);
+      const rightChamberWall = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.036, 0.22), darkMetalMat);
+      rightChamberWall.position.set(0.028, -0.008, -0.12);
+
+      // 3. 핵심 디테일: 중앙 열린 공간(챔버) 안의 보라빛·주황빛 혼돈의 에너지 코어 구체 & 회전 에너지 링
+      const chamberGroup = new THREE.Group();
+      chamberGroup.position.set(0, 0.014, -0.11);
+
+      const chaosCoreMat = new THREE.MeshStandardMaterial({
+        color: 0xd946ef,
+        emissive: new THREE.Color(0xc026d3),
+        emissiveIntensity: 1.85,
+        roughness: 0.12,
+        metalness: 0.15
+      });
+      const chaosCoreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.022, 20, 20), chaosCoreMat);
+
+      const chaosInnerFlameMat = new THREE.MeshBasicMaterial({
+        color: 0xff6b2b,
+        transparent: true,
+        opacity: 0.85,
+        wireframe: true
+      });
+      const chaosInnerFlame = new THREE.Mesh(new THREE.IcosahedronGeometry(0.025, 1), chaosInnerFlameMat);
+
+      const chaosRingMat1 = new THREE.MeshBasicMaterial({
+        color: 0xe879f9,
+        transparent: true,
+        opacity: 0.92
+      });
+      const chaosRingMat2 = new THREE.MeshBasicMaterial({
+        color: 0xff7b29,
+        transparent: true,
+        opacity: 0.92
+      });
+      const chaosRing1 = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.0032, 10, 28), chaosRingMat1);
+      chaosRing1.rotation.set(0.55, 0.35, 0);
+      const chaosRing2 = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.0028, 10, 28), chaosRingMat2);
+      chaosRing2.rotation.set(-0.65, -0.45, 0.4);
+
+      // 총열 내부를 관통하는 보라빛 에너지 플라즈마 빔
+      const barrelPlasmaBeam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.006, 0.006, 0.34, 10),
+        new THREE.MeshBasicMaterial({ color: 0xd946ef })
+      );
+      barrelPlasmaBeam.rotation.x = Math.PI / 2;
+      barrelPlasmaBeam.position.set(0, 0.016, -0.25);
+
+      chamberGroup.add(chaosCoreSphere, chaosInnerFlame, chaosRing1, chaosRing2);
+
+      // 4. 날카로운 외계 가시 / 발톱(Spikes & Claws) 장식
+      const clawPositions = [
+        { x: -0.034, y: 0.034, z: -0.06, rz: 0.55, rx: -0.35 },
+        { x: 0.034, y: 0.034, z: -0.06, rz: -0.55, rx: -0.35 },
+        { x: -0.032, y: 0.028, z: -0.24, rz: 0.65, rx: -0.45 },
+        { x: 0.032, y: 0.028, z: -0.24, rz: -0.65, rx: -0.45 },
+        { x: -0.028, y: -0.022, z: -0.32, rz: 2.35, rx: -0.35 },
+        { x: 0.028, y: -0.022, z: -0.32, rz: -2.35, rx: -0.35 },
+        { x: 0, y: 0.066, z: -0.34, rz: 0, rx: -0.52 }
+      ];
+      clawPositions.forEach((cp, idx) => {
+        const spike = new THREE.Mesh(
+          new THREE.ConeGeometry(0.0085, 0.056, 5),
+          idx % 2 === 0 ? bronzeClawMat : darkMetalMat
+        );
+        spike.position.set(cp.x, cp.y, cp.z);
+        spike.rotation.set(cp.rx, 0, cp.rz);
+        group.add(spike);
+      });
+
+      // 5. 전방 핸드가드, 총열 및 총구 화염(Muzzle Flash) 메쉬
+      const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.044, 0.16), darkMetalMat);
+      handguard.position.set(0, 0.012, -0.31);
+
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.18, 8), obsidianPlateMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.018, -0.46);
+
+      const muzzleCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.014, 0.035, 6), bronzeClawMat);
+      muzzleCrown.rotation.x = Math.PI / 2;
+      muzzleCrown.position.set(0, 0.018, -0.54);
+
+      // 총구 화염 메쉬 (사격 시 보라빛·붉은빛 혼돈 에너지 폭발)
+      const muzzleFlashMat = new THREE.MeshBasicMaterial({
+        color: 0xd946ef,
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide
+      });
+      const muzzleFlashInnerMat = new THREE.MeshBasicMaterial({
+        color: 0xff2a5f,
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide
+      });
+      const muzzleFlashGroup = new THREE.Group();
+      muzzleFlashGroup.position.set(0, 0.018, -0.58);
+      const flashPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), muzzleFlashMat);
+      const flashPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), muzzleFlashMat);
+      flashPlane2.rotation.z = Math.PI / 4;
+      const flashCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.036, 0), muzzleFlashInnerMat);
+      muzzleFlashGroup.add(flashPlane1, flashPlane2, flashCore);
+
+      // 6. 혼돈의 서막 곡선 탄창 (다크 메탈 + 구릿빛 갈비뼈 + 보라빛 코어 라인)
+      const magUpper = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.11, 0.068), darkMetalMat);
+      magUpper.rotation.x = -0.22;
+      magUpper.position.set(0, -0.072, -0.10);
+
+      const magLower = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.064), obsidianPlateMat);
+      magLower.rotation.x = -0.48;
+      magLower.position.set(0, -0.156, -0.138);
+
+      const magGlowStrip = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.15, 0.012), violetTrimMat);
+      magGlowStrip.rotation.x = -0.34;
+      magGlowStrip.position.set(0, -0.112, -0.118);
+
+      const magClawTip = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 5), bronzeClawMat);
+      magClawTip.rotation.x = Math.PI - 0.48;
+      magClawTip.position.set(0, -0.215, -0.166);
+
+      // 7. 조준기 (보라·주황 홀로그램 프레임)
+      const sight = buildHoloSight();
+      sight.position.set(0, 0.062, -0.02);
+
+      group.add(
+        rearReceiver, topSpineBridge, topVioletRail, bottomKeel,
+        leftChamberWall, rightChamberWall, chamberGroup, barrelPlasmaBeam,
+        handguard, barrel, muzzleCrown, muzzleFlashGroup,
+        magUpper, magLower, magGlowStrip, magClawTip, sight
+      );
+
+      group.userData = {
+        chaosCoreSphere,
+        chaosInnerFlame,
+        chaosRing1,
+        chaosRing2,
+        chaosCoreMat,
+        chaosInnerFlameMat,
+        muzzleFlashGroup,
+        muzzleFlashMat,
+        muzzleFlashInnerMat,
+        muzzleFlashTimer: 0
+      };
+      return group;
+    }
+
     function buildChampions2021VandalModel() {
       const group = new THREE.Group();
       group.add(buildFirstPersonHandModel('gun'));
@@ -4101,6 +4429,7 @@
       phantom: buildPhantomModel(),
       phantom_champions2024: buildChampions2024PhantomModel(),
       vandal: buildVandalModel(),
+      vandal_chaos: buildPreludeOfChaosVandalModel(),
       vandal_champions2021: buildChampions2021VandalModel(),
       marshal: buildSniperModel({ bodyColor: 0x323840 }),
       outlaw: buildSniperModel({ doubleBarrel: true, bodyColor: 0x2c2829 }),
@@ -4130,6 +4459,9 @@
       if (wKey === 'phantom' && equippedSkins.phantom === 'champions2024') {
         return models.phantom_champions2024;
       }
+      if (wKey === 'vandal' && equippedSkins.vandal === 'chaos') {
+        return models.vandal_chaos;
+      }
       if (wKey === 'vandal' && equippedSkins.vandal === 'champions2021') {
         return models.vandal_champions2021;
       }
@@ -4157,7 +4489,7 @@
         updateHUD();
         if (getCurrentWeaponKey() === 'phantom') updateGunVisual();
       } else if (wKey === 'vandal') {
-        equippedSkins.vandal = equippedSkins.vandal === 'champions2021' ? 'standard' : 'champions2021';
+        equippedSkins.vandal = equippedSkins.vandal === 'chaos' ? 'champions2021' : (equippedSkins.vandal === 'champions2021' ? 'standard' : 'chaos');
         updateHUD();
         if (getCurrentWeaponKey() === 'vandal') updateGunVisual();
       } else if (wKey === 'melee') {
@@ -4219,16 +4551,17 @@
       const dist = startPos.distanceTo(endPos);
       if (dist < 0.2) return;
 
+      const isChaos = isOperator === 'chaos';
       const isNeo = isOperator === 'neofrontier';
       const isAraxys = isOperator === 'araxys';
-      const thickness = (isAraxys || isNeo) ? 0.030 : (isOperator ? 0.028 : 0.014);
+      const thickness = (isChaos || isAraxys || isNeo) ? 0.030 : (isOperator ? 0.028 : 0.014);
       const tracerGeo = new THREE.CylinderGeometry(thickness, thickness, dist, 8);
       tracerGeo.rotateX(Math.PI / 2);
 
       const tracerMat = new THREE.MeshBasicMaterial({
-        color: isNeo ? 0x2dffc4 : (isAraxys ? 0xff2438 : (isOperator ? 0xffaa33 : 0xffe066)),
+        color: isChaos ? 0xd946ef : (isNeo ? 0x2dffc4 : (isAraxys ? 0xff2438 : (isOperator ? 0xffaa33 : 0xffe066))),
         transparent: true,
-        opacity: (isAraxys || isNeo) ? 0.96 : 0.92
+        opacity: (isChaos || isAraxys || isNeo) ? 0.96 : 0.92
       });
 
       const tracerMesh = new THREE.Mesh(tracerGeo, tracerMat);
@@ -4390,6 +4723,60 @@
           osc.stop(now + c.t + c.dur + 0.05);
         });
       });
+    }
+
+    function triggerChaosFinisher(pos) {
+      clearChampionsFinisher();
+      stopFinisherAudio();
+      const finAudio = new Audio('prelude-to-chaos-finisher.mp3');
+      finAudio.volume = 0.92;
+      currentFinisherAudio = finAudio;
+      const p = finAudio.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+          playSynthChaosKillSound(5, true);
+        });
+      }
+      finAudio.onerror = () => {
+        if (currentFinisherAudio === finAudio) currentFinisherAudio = null;
+        playSynthChaosKillSound(5, true);
+      };
+
+      const group = new THREE.Group();
+      group.position.set(pos.x, 0, pos.z);
+
+      const vortexMat = new THREE.MeshBasicMaterial({ color: 0xc026d3, transparent: true, opacity: 0.78, side: THREE.DoubleSide, wireframe: true });
+      const vortexCone = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 0.35, 11, 18, 6, true), vortexMat);
+      vortexCone.position.y = 5.5;
+      group.add(vortexCone);
+
+      const coreOrbMat = new THREE.MeshBasicMaterial({ color: 0xff6b2b, transparent: true, opacity: 0.92 });
+      const coreOrb = new THREE.Mesh(new THREE.SphereGeometry(1.15, 20, 20), coreOrbMat);
+      coreOrb.position.y = 3.2;
+      group.add(coreOrb);
+
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xe879f9, side: THREE.DoubleSide, transparent: true, opacity: 0.88 });
+      const ringMesh = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.12, 10, 32), ringMat);
+      ringMesh.rotation.x = Math.PI / 2;
+      ringMesh.position.y = 1.6;
+      group.add(ringMesh);
+
+      scene.add(group);
+      scene.background = new THREE.Color(0x240938);
+      if (scene.fog) scene.fog.color.setHex(0x240938);
+
+      activeFinisher = {
+        edition: 'chaos',
+        group,
+        vortexCone,
+        coreOrb,
+        ringMesh,
+        vortexMat,
+        timer: 0,
+        duration: 6.5,
+        audio: finAudio
+      };
     }
 
     function triggerChampions2021Finisher(pos) {
@@ -4894,6 +5281,17 @@
       const f = activeFinisher;
       f.timer += dt;
 
+      if (f.edition === 'chaos') {
+        f.vortexCone.rotation.y += dt * 4.5;
+        f.coreOrb.rotation.y -= dt * 3.2;
+        f.ringMesh.rotation.z += dt * 2.8;
+        f.ringMesh.position.y = 1.2 + Math.sin(f.timer * 3.5) * 1.4;
+        const pulse = 1.0 + Math.sin(f.timer * 14) * 0.18;
+        f.coreOrb.scale.setScalar(pulse);
+        if (f.timer >= f.duration) clearChampionsFinisher();
+        return;
+      }
+
       if (f.edition === 'araxys') {
         // 바닥 외계 마법진 회전 & 상공 차원 균열 회전
         f.outerRing.rotation.z += dt * 1.4;
@@ -5317,7 +5715,9 @@
       credits = Math.min(MAX_CREDITS, credits + roundReward);
       updateHUD();
 
-      if (usedChampEdition === 'araxys' && killerPos) {
+      if (usedChampEdition === 'chaos' && killerPos) {
+        triggerChaosFinisher(killerPos);
+      } else if (usedChampEdition === 'araxys' && killerPos) {
         triggerAraxysFinisher(killerPos);
       } else if (usedChampEdition === '2024' && killerPos) {
         triggerChampions2024Finisher(killerPos);
@@ -7092,7 +7492,7 @@
         (key === 'operator' && isOperatorAraxys) ? '아락시스 오퍼레이터' :
         (key === 'melee' && isMeleeChamp) ? '2021 챔피언스 카람빗' :
         (key === 'phantom' && isPhantom2024) ? '2024 챔피언스 팬텀' :
-        (key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name;
+        (key === 'vandal' && equippedSkins.vandal === 'chaos') ? '혼돈의 서막 밴달' : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021 챔피언스 밴달' : w.name);
       document.getElementById('ammoText').innerText = (key === 'melee' || key === 'spike') ? '∞' : `${ammoState[key]} / ${w.magSize}`;
 
       const s1 = document.getElementById('slot1'), s2 = document.getElementById('slot2'), s3 = document.getElementById('slot3'), s4 = document.getElementById('slot4');
@@ -7146,15 +7546,15 @@
       }
       if (pBtn) pBtn.innerText = isPhantom2024 ? '기본 스킨으로 변경' : '2024 챔피언스 장착';
 
-      const isChamp = equippedSkins.vandal === 'champions2021';
+      const vSkin = equippedSkins.vandal;
       const badge = document.getElementById('vandalSkinBadge');
       const btn = document.getElementById('toggleVandalSkinBtn');
       if (badge) {
-        badge.innerText = isChamp ? '2021 챔피언스' : '기본 스킨';
-        badge.style.background = isChamp ? '#4a3800' : '#333';
-        badge.style.color = isChamp ? '#ffd700' : '#ccc';
+        badge.innerText = vSkin === 'chaos' ? '혼돈의 서막' : (vSkin === 'champions2021' ? '2021 챔피언스' : '기본 스킨');
+        badge.style.background = vSkin === 'chaos' ? '#581c87' : (vSkin === 'champions2021' ? '#4a3800' : '#333');
+        badge.style.color = vSkin === 'chaos' ? '#f5d0fe' : (vSkin === 'champions2021' ? '#ffd700' : '#ccc');
       }
-      if (btn) btn.innerText = isChamp ? '기본 스킨으로 변경' : '2021 챔피언스 장착';
+      if (btn) btn.innerText = vSkin === 'chaos' ? '2021 챔피언스로 변경' : (vSkin === 'champions2021' ? '기본 스킨으로 변경' : '혼돈의 서막 장착');
 
       const mBadge = document.getElementById('meleeSkinBadge');
       const mBtn = document.getElementById('toggleMeleeSkinBtn');
@@ -7615,10 +8015,17 @@
           if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
           }
+          const isChaosVandal = (key === 'vandal' && equippedSkins.vandal === 'chaos');
           const isNeoSheriff = (key === 'sheriff' && equippedSkins.sheriff === 'neofrontier');
           const isAraxysOp = (key === 'operator' && equippedSkins.operator === 'araxys') || (key === 'outlaw' && equippedSkins.outlaw === 'araxys');
           const isChampSkin = (key === 'vandal' && equippedSkins.vandal === 'champions2021') || (key === 'phantom' && equippedSkins.phantom === 'champions2024');
-          spawnBulletTracer(muzzleWorld, tracerEnd, isNeoSheriff ? 'neofrontier' : (isAraxysOp ? 'araxys' : (key === 'operator' || isChampSkin)));
+          if (isChaosVandal && models.vandal_chaos && models.vandal_chaos.userData) {
+            models.vandal_chaos.userData.muzzleFlashTimer = 0.075;
+            if (models.vandal_chaos.userData.muzzleFlashGroup) {
+              models.vandal_chaos.userData.muzzleFlashGroup.rotation.z = Math.random() * Math.PI * 2;
+            }
+          }
+          spawnBulletTracer(muzzleWorld, tracerEnd, isChaosVandal ? 'chaos' : (isNeoSheriff ? 'neofrontier' : (isAraxysOp ? 'araxys' : (key === 'operator' || isChampSkin))));
         }
 
         const hitTargetsSet = new Set();
@@ -7754,7 +8161,7 @@
                   ? 'araxys'
                   : ((key === 'phantom' && equippedSkins.phantom === 'champions2024')
                     ? '2024'
-                    : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false));
+                    : ((key === 'vandal' && equippedSkins.vandal === 'chaos') ? 'chaos' : ((key === 'vandal' && equippedSkins.vandal === 'champions2021') ? '2021' : false)));
                 endBrawlRound(myTeam, botRoot.position.clone(), usedChamp);
               }
             }
@@ -7773,6 +8180,8 @@
             triggerAraxysFinisher(finPos);
           } else if (key === 'phantom' && equippedSkins.phantom === 'champions2024') {
             triggerChampions2024Finisher(finPos);
+          } else if (key === 'vandal' && equippedSkins.vandal === 'chaos') {
+            triggerChaosFinisher(finPos);
           } else if (key === 'vandal' && equippedSkins.vandal === 'champions2021') {
             triggerChampions2021Finisher(finPos);
           }
@@ -8350,6 +8759,47 @@
           champ2024Model.userData.auraMat.opacity = isAura2024On ? (0.34 + Math.sin(performance.now() * 0.016) * 0.15) : 0.0;
           champ2024Model.userData.amethystBodyMat.emissiveIntensity = isAura2024On ? 0.58 : 0.22;
           champ2024Model.userData.coreCrystalMat.emissiveIntensity = isAura2024On ? 1.45 : 0.85;
+        }
+      }
+
+      // 혼돈의 서막(Prelude of Chaos) 밴달 에너지 코어, 회전 링 & 총구 화염 애니메이션
+      if (chaosAuraTimer > 0) chaosAuraTimer -= dt;
+      const chaosModel = models.vandal_chaos;
+      if (chaosModel && chaosModel.userData) {
+        const cu = chaosModel.userData;
+        const isChaosBoost = chaosAuraTimer > 0 || (isInspecting && curKey === 'vandal' && equippedSkins.vandal === 'chaos');
+        const rotSpeed = isChaosBoost ? 4.8 : 1.9;
+        if (cu.chaosCoreSphere) {
+          cu.chaosCoreSphere.rotation.y += dt * rotSpeed;
+          cu.chaosCoreSphere.rotation.x += dt * (rotSpeed * 0.6);
+          const pulseScale = 1.0 + Math.sin(performance.now() * 0.015) * (isChaosBoost ? 0.16 : 0.08);
+          cu.chaosCoreSphere.scale.setScalar(pulseScale);
+        }
+        if (cu.chaosInnerFlame) {
+          cu.chaosInnerFlame.rotation.y -= dt * (rotSpeed * 1.4);
+          cu.chaosInnerFlame.rotation.z += dt * (rotSpeed * 1.1);
+        }
+        if (cu.chaosRing1) {
+          cu.chaosRing1.rotation.z += dt * (rotSpeed * 1.6);
+          cu.chaosRing1.rotation.x += dt * (rotSpeed * 0.7);
+        }
+        if (cu.chaosRing2) {
+          cu.chaosRing2.rotation.y -= dt * (rotSpeed * 1.8);
+          cu.chaosRing2.rotation.z -= dt * (rotSpeed * 0.9);
+        }
+        if (cu.chaosCoreMat) {
+          const colorShift = 0.5 + 0.5 * Math.sin(performance.now() * 0.008);
+          cu.chaosCoreMat.emissive.setRGB(0.75 + colorShift * 0.25, 0.15 + colorShift * 0.28, 0.85 - colorShift * 0.45);
+          cu.chaosCoreMat.emissiveIntensity = isChaosBoost ? 2.4 : 1.75;
+        }
+        if (cu.muzzleFlashTimer > 0) {
+          cu.muzzleFlashTimer -= dt;
+          const flashAlpha = Math.max(0, cu.muzzleFlashTimer / 0.075);
+          cu.muzzleFlashMat.opacity = flashAlpha * 0.95;
+          cu.muzzleFlashInnerMat.opacity = flashAlpha;
+        } else if (cu.muzzleFlashMat) {
+          cu.muzzleFlashMat.opacity = 0;
+          cu.muzzleFlashInnerMat.opacity = 0;
         }
       }
 
