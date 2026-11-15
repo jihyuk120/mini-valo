@@ -2724,120 +2724,21 @@
       addBlock(0.8, 4.8, 10.0, 28.4, 2.4, -27.0, italianBeige, true, 'italianWall');
 
       // =========================================================
-      // 5. 서쪽 B 구역: B 로비 -> B 메인(ㄱ자 통로 & 월샷 패널) -> B 사이트 입구 & 수비 창문 단차
+      // 5. 서쪽 B 사이트 구역 (X: -45 ~ -20)
       // =========================================================
-      // [헬퍼] 3D 캔버스 텍스트 표지판 (예: "B →")
-      function addSignBoard(text, x, y, z, rotY = 0, w = 2.6, h = 1.1) {
-        const cvs = document.createElement('canvas');
-        cvs.width = 256; cvs.height = 112;
-        const c = cvs.getContext('2d');
-        c.fillStyle = '#141920';
-        c.fillRect(0, 0, 256, 112);
-        c.strokeStyle = '#ff4655';
-        c.lineWidth = 8;
-        c.strokeRect(6, 6, 244, 100);
-        c.fillStyle = '#f8fafc';
-        c.font = 'bold 64px sans-serif';
-        c.textAlign = 'center';
-        c.textBaseline = 'middle';
-        c.fillText(text, 128, 58);
-        const tex = new THREE.CanvasTexture(cvs);
-        const signMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(w, h, 0.14),
-          new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, metalness: 0.3 })
-        );
-        signMesh.position.set(x, y, z);
-        signMesh.rotation.y = rotY;
-        mapGroup.add(signMesh);
-        return signMesh;
-      }
+      // (1) B 메인 복도: X: -42 ~ -32, Z: +10 ~ +35 구간 양옆이 벽으로 막힌 좁은 진입 통로
+      // 우측(동측) 벽: X = -32 ~ -20 건물 블록 (미드/마켓 하단과 완전 분리)
+      addBlock(12.0, 8.5, 25.0, -26.0, 4.25, 22.5, italianBeige, true, 'italianWall');
+      addBlock(12.4, 0.7, 25.4, -26.0, 8.7, 22.5, terracottaOrange, false, 'terracotta');
+      // 좌측(서측) 벽: X = -45 ~ -42 벽
+      addBlock(3.0, 8.5, 25.0, -43.5, 4.25, 22.5, italianBeige, true, 'italianWall');
+      addBlock(3.4, 0.7, 25.4, -43.5, 8.7, 22.5, terracottaOrange, false, 'terracotta');
+      // B 메인 복도 내부 엄폐 상자 (통행 가능 폭 X: -42 ~ -32 확보)
+      addBlock(2.0, 1.6, 2.0, -40.5, 0.8, 24.0, woodCrateBrown, true, 'woodCrate');
+      addBlock(2.0, 1.6, 2.0, -33.5, 0.8, 15.0, radianiteGreen, true, 'greenCrate');
 
-      // (1) B 로비 (공격팀 진입 광장: X: -45 ~ -16, Z: +37 ~ +55)
-      // 공격팀 진영에서 내려오는 넓은 돌바닥 광장
-      addBlock(29.0, 0.08, 18.0, -30.5, 0.02, 46.0, sunkenAsphalt, false, 'sunkenAsphalt');
-      // B 로비 좌측(X: -20 ~ -14, Z: +36 ~ +44) 미드(중앙 연결부)로 올라가는 완만한 돌계단 (4단)
-      addFloorZone(6.0, 7.6, -17.0, 0.72, 39.8, asphaltDark, true, 0.72, 0.0);
-      for (let s = 0; s < 4; s++) {
-        const stepH = (4 - s) * 0.18;
-        const stepZ = 36.8 + s * 1.9;
-        addBlock(6.0, stepH, 1.95, -17.0, stepH / 2, stepZ, italianBeige, false, 'asphalt');
-      }
-      // B 로비 중앙 엄폐 화단/돌기둥
-      addBlock(2.4, 1.3, 2.4, -27.5, 0.65, 45.5, italianBeige, true, 'italianWall');
-
-      // (2) B 로비 정면 오른쪽 아치형 B 메인 입구 (Z = 36.0, 개구부 X: -41.0 ~ -33.0) + "B →" 표지판
-      // 왼쪽 아치 기둥 (X: -45.0 ~ -41.0)
-      addBlock(4.0, 8.5, 2.2, -43.0, 4.25, 36.0, italianBeige, true, 'italianWall');
-      // 오른쪽 아치 기둥 (X: -33.0 ~ -20.0, 미드와 분리)
-      addBlock(13.0, 8.5, 2.2, -26.5, 4.25, 36.0, italianBeige, true, 'italianWall');
-      // 아치 상단 인방보 (Y: 4.4 ~ 8.5 -> 아래로 걸어서 통과 가능)
-      addBlock(8.0, 4.1, 2.2, -37.0, 6.45, 36.0, italianBeige, true, 'italianWall');
-      addBlock(25.4, 0.6, 2.6, -32.5, 8.7, 36.0, terracottaOrange, false, 'terracotta');
-      // 정면 오른쪽 아치 상단/우측 "B →" 표지판
-      addSignBoard('B →', -32.2, 3.6, 37.25, 0, 2.6, 1.15);
-
-      // (3) B 메인 복도 (ㄱ자 통로: 직선 구간 Z: 12 ~ 36, X: -42 ~ -32 -> 정면 끝에서 왼쪽 90도 꺾여 X: -42 ~ -30, Z: 12 ~ 20)
-      // 외곽 좌측(서측) 긴 벽 (X: -45.0 ~ -42.0, Z: 10.0 ~ 36.0)
-      addBlock(3.0, 8.5, 26.0, -43.5, 4.25, 23.0, italianBeige, true, 'italianWall');
-      addBlock(3.4, 0.7, 26.4, -43.5, 8.7, 23.0, terracottaOrange, false, 'terracotta');
-
-      // 직선 복도 우측(동측) 벽 (X: -32.0 ~ -20.0, Z: 20.0 ~ 36.0) -> Z=12~20 구간을 열어 왼쪽(동쪽 B 사이트 입구)으로 90도 꺾이는 ㄱ자 통로 형성!
-      addBlock(12.0, 8.5, 16.0, -26.0, 4.25, 28.0, italianBeige, true, 'italianWall');
-      addBlock(12.4, 0.7, 16.4, -26.0, 8.7, 28.0, terracottaOrange, false, 'terracotta');
-
-      // 복도 오른쪽 벽(X = -32.05, Z = 27.5) 회색 금속 셔터 문 장식
-      const shutterMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, metalness: 0.82, roughness: 0.32 });
-      const shutterFrameMat = new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.75, roughness: 0.4 });
-      const shutterDoor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.6, 3.4), shutterMat);
-      shutterDoor.position.set(-32.05, 1.8, 27.5);
-      mapGroup.add(shutterDoor);
-      for (let rib = 0; rib < 7; rib++) {
-        const ribMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 3.3), shutterFrameMat);
-        ribMesh.position.set(-32.05, 0.45 + rib * 0.48, 27.5);
-        mapGroup.add(ribMesh);
-      }
-
-      // ㄱ자 꺾이는 정면 코너 벽 (Z = 10.5 ~ 12.0, X: -43.5 ~ -28.0)
-      // 좌측 코너 기둥 (X: -43.5 ~ -39.5) + 우측 코너 벽 (X: -34.5 ~ -28.0)
-      addBlock(4.0, 8.5, 1.6, -41.5, 4.25, 11.2, italianBeige, true, 'italianWall');
-      addBlock(6.5, 8.5, 1.6, -31.25, 4.25, 11.2, italianBeige, true, 'italianWall');
-      addBlock(16.0, 0.6, 2.0, -35.8, 8.7, 11.2, terracottaOrange, false, 'terracotta');
-
-      // 코너 중앙(X: -39.5 ~ -34.5, Z = 11.2) 총알이 관통(월샷)되는 얇은 나무 패널 + 그 앞 나무 상자 엄폐물
-      const wallbangPanelMat = new THREE.MeshStandardMaterial({
-        map: getMapTexture('woodCrate'),
-        color: 0xc89666,
-        roughness: 0.82,
-        metalness: 0.05
-      });
-      const wallbangWoodPanel = new THREE.Mesh(new THREE.BoxGeometry(5.0, 4.4, 0.24), wallbangPanelMat);
-      wallbangWoodPanel.position.set(-37.0, 2.2, 11.2);
-      wallbangWoodPanel.castShadow = true;
-      wallbangWoodPanel.receiveShadow = true;
-      wallbangWoodPanel.userData = { isWallbangWood: true };
-      mapGroup.add(wallbangWoodPanel);
-      wallMeshes.push(wallbangWoodPanel);
-      wallColliders.push({
-        minX: -39.5 - 0.45, maxX: -34.5 + 0.45,
-        minZ: 11.2 - 0.12 - 0.45, maxZ: 11.2 + 0.12 + 0.45,
-        minY: 0, maxY: 4.4
-      });
-      // 나무 패널 위쪽 상단 벽 (Y: 4.4 ~ 8.5)
-      addBlock(5.0, 4.1, 1.6, -37.0, 6.45, 11.2, italianBeige, true, 'italianWall');
-
-      // 코너 앞 나무 상자 엄폐물 (X: -39.2, Z: 13.4) & 복도 안쪽 보조 상자
-      addBlock(2.0, 1.6, 2.0, -39.2, 0.8, 13.4, woodCrateBrown, true, 'woodCrate');
-      addBlock(1.8, 1.4, 1.8, -40.6, 0.7, 25.0, woodCrateBrown, true, 'woodCrate');
-
-      // (4) ㄱ자 통로 출구 아치 (B 사이트 진입부: X = -28.0, Z: 12.0 ~ 20.0)
-      // 아치 남측/북측 기둥 + 상단 인방보
-      addBlock(1.8, 8.5, 1.6, -28.0, 4.25, 12.6, italianBeige, true, 'italianWall');
-      addBlock(1.8, 8.5, 1.6, -28.0, 4.25, 19.4, italianBeige, true, 'italianWall');
-      addBlock(1.8, 4.1, 5.2, -28.0, 6.45, 16.0, italianBeige, true, 'italianWall');
-      addBlock(2.2, 0.6, 8.8, -28.0, 8.7, 16.0, terracottaOrange, false, 'terracotta');
-
-      // (5) B 사이트(Z: -15 ~ +11) 바닥 및 스파이크 설치 구역
-      addBlock(25.0, 0.06, 26.0, -32.5, 0.01, -2.0, sunkenAsphalt, false, 'sunkenAsphalt');
+      // (2) B 사이트(Z: -15 ~ +10) 바닥 및 스파이크 설치 구역
+      addBlock(25.0, 0.06, 25.0, -32.5, 0.01, -2.5, sunkenAsphalt, false, 'sunkenAsphalt');
       const siteBRing = new THREE.Mesh(new THREE.RingGeometry(6.2, 6.8, 48), siteRingMat);
       siteBRing.rotation.x = -Math.PI / 2;
       siteBRing.position.set(-32, 0.03, -2);
@@ -2847,37 +2748,18 @@
       addBlock(2.2, 1.6, 2.2, -31.0, 0.8, 2.0, woodCrateBrown, true, 'woodCrate');
       addBlock(2.0, 1.6, 2.0, -41.5, 0.8, 3.0, radianiteGreen, true, 'greenCrate');
 
-      // (6) 수비 진영 창문 단차(레인/플랫폼: X: -22.5 ~ -15.5, Z: 2.0 ~ 19.5, 바닥 높이 Y = 1.15)
-      // B 사이트 출구 아치(X = -28.0) 맞은편에 살짝 높게 올라간 수비 통로 + 아치형 창문 3개 + 아래 나무 상자 엄폐물
-      addFloorZone(7.0, 17.5, -19.0, 1.15, 10.75, asphaltDark);
-      addBlock(7.0, 1.15, 17.5, -19.0, 0.575, 10.75, italianBeige, true, 'italianWall');
-      // 수비 플랫폼으로 올라가는 북쪽 계단 (Z: -1.5 ~ +2.0, X: -22.5 ~ -15.5)
-      addFloorZone(7.0, 3.5, -19.0, 1.15, 0.25, asphaltDark, true, 1.15, 0.0);
-      for (let st = 0; st < 4; st++) {
-        const sH = (4 - st) * 0.2875;
-        const sZ = 1.56 - st * 0.875;
-        addBlock(7.0, sH, 0.9, -19.0, sH / 2, sZ, italianBeige, false, 'asphalt');
-      }
-
-      // 아치형 창문 3개가 뚫린 수비 벽 (X = -22.2, Z: 3.0 ~ 19.0, 플랫폼 바닥 Y = 1.15 위)
-      // 창문 하단 난간 벽 (Y: 1.15 ~ 2.25 -> 1.1m 높이 엄폐물)
-      addBlock(0.7, 1.1, 16.0, -22.2, 1.70, 11.0, italianBeige, true, 'italianWall');
-      // 창문 상단 인방보 (Y: 4.15 ~ 8.5 -> 창문 개구부 높이 1.9m 확보)
-      addBlock(0.7, 4.35, 16.0, -22.2, 6.325, 11.0, italianBeige, true, 'italianWall');
-      // 아치형 창문 3개를 구분하는 수직 기둥 4개 (Z = 3.4, 8.4, 13.6, 18.6)
-      [3.4, 8.4, 13.6, 18.6].forEach(pz => {
-        addBlock(0.75, 2.0, 1.1, -22.2, 3.20, pz, italianBeige, true, 'italianWall');
-      });
-      // 아치 창문 벽 아래 나무 상자 엄폐물 (B 사이트 바닥 X: -23.7, Z: 13.2)
-      addBlock(2.1, 1.55, 2.1, -23.7, 0.775, 13.2, woodCrateBrown, true, 'woodCrate');
-
-      // (7) 보트하우스: B 사이트 안쪽(X: -40 ~ -25, Z: -20 ~ -10)에 지붕이 덮인 건물
+      // (3) 보트하우스: B 사이트 안쪽(X: -40 ~ -25, Z: -20 ~ -10)에 지붕이 덮인 건물
+      // 보트하우스 우측(동쪽) 벽 (X = -25.4, Z: -20 ~ -10)
       addBlock(1.2, 4.8, 10.0, -25.4, 2.4, -15.0, italianBeige, true, 'italianWall');
+      // 보트하우스 뒤쪽(북쪽) 벽 (X: -40 ~ -25, Z = -19.6)
       addBlock(15.0, 4.8, 1.2, -32.5, 2.4, -19.6, italianBeige, true, 'italianWall');
+      // 보트하우스 좌측(서쪽) 기둥벽 (X = -39.6, Z: -20 ~ -17 및 Z: -12 ~ -10, 중앙 개방)
       addBlock(1.2, 4.8, 3.2, -39.6, 2.4, -18.4, italianBeige, true, 'italianWall');
       addBlock(1.2, 4.8, 2.4, -39.6, 2.4, -11.2, italianBeige, true, 'italianWall');
+      // 보트하우스 지붕 (Y = 4.8 ~ 5.5 -> minY = 4.8, 내부 통행 가능)
       addBlock(15.8, 0.6, 10.8, -32.5, 5.1, -15.0, terracottaOrange, true, 'terracotta');
       addBlock(13.0, 0.5, 8.4, -32.5, 5.6, -15.0, terracottaOrange, false, 'terracotta');
+      // 보트하우스 내부 엄폐 상자
       addBlock(2.2, 1.5, 2.2, -32.5, 0.75, -14.5, radianiteGreen, true, 'greenCrate');
 
       // 미드 마켓 <-> B 사이트 연결 분리벽 & 방화 철문 (X = -20.0, Z: -20 ~ -6)
@@ -5146,44 +5028,31 @@
     function createPrepBarriers() {
       clearPrepBarriers();
       const atkBarrierMat = new THREE.MeshStandardMaterial({
-        color: 0x3b82f6,
-        emissive: 0x1d4ed8,
-        emissiveIntensity: 0.72,
+        color: 0x10b981,
+        emissive: 0x059669,
+        emissiveIntensity: 0.65,
         transparent: true,
-        opacity: 0.50,
+        opacity: 0.45,
         side: THREE.DoubleSide
       });
       const defBarrierMat = new THREE.MeshStandardMaterial({
         color: 0xff4655,
         emissive: 0xdc2626,
-        emissiveIntensity: 0.72,
+        emissiveIntensity: 0.65,
         transparent: true,
-        opacity: 0.50,
+        opacity: 0.45,
         side: THREE.DoubleSide
       });
 
-      // 미드 / A 메인 공격팀 준비 장벽
-      const atkMainBarrier = new THREE.Mesh(new THREE.PlaneGeometry(66, 9.0), atkBarrierMat);
-      atkMainBarrier.position.set(12.0, 4.5, 37.5);
-      scene.add(atkMainBarrier);
+      const atkBarrier = new THREE.Mesh(new THREE.PlaneGeometry(90, 9.0), atkBarrierMat);
+      atkBarrier.position.set(0, 4.5, 37.5);
+      scene.add(atkBarrier);
 
-      // B 메인 아치형 입구(X: -37.0, Z: 36.0) 공격팀 투명 에너지 장벽
-      const atkBMainBarrier = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 4.6), atkBarrierMat);
-      atkBMainBarrier.position.set(-37.0, 2.3, 36.0);
-      scene.add(atkBMainBarrier);
+      const defBarrier = new THREE.Mesh(new THREE.PlaneGeometry(90, 9.0), defBarrierMat);
+      defBarrier.position.set(0, 4.5, -37.5);
+      scene.add(defBarrier);
 
-      // 수비 스폰 쪽 준비 장벽
-      const defSpawnBarrier = new THREE.Mesh(new THREE.PlaneGeometry(90, 9.0), defBarrierMat);
-      defSpawnBarrier.position.set(0, 4.5, -37.5);
-      scene.add(defSpawnBarrier);
-
-      // B 메인 출구 아치(X: -28.0, Z: 16.0) 수비팀 구매 단계 장벽
-      const defBMainExitBarrier = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 4.6), defBarrierMat);
-      defBMainExitBarrier.rotation.y = Math.PI / 2;
-      defBMainExitBarrier.position.set(-28.0, 2.3, 16.0);
-      scene.add(defBMainExitBarrier);
-
-      prepBarrierMeshes.push(atkMainBarrier, atkBMainBarrier, defSpawnBarrier, defBMainExitBarrier);
+      prepBarrierMeshes.push(atkBarrier, defBarrier);
     }
 
     function showRoundBanner(title, sub, color = '#ece8e1', duration = 2200) {
@@ -5729,9 +5598,8 @@
     ];
     const WAYPOINTS_ATK_B_MAIN = [
       new THREE.Vector3(-37, 0, 42),
-      new THREE.Vector3(-37, 0, 28),
-      new THREE.Vector3(-36.5, 0, 16.5),
-      new THREE.Vector3(-27.5, 0, 16.0),
+      new THREE.Vector3(-37, 0, 24),
+      new THREE.Vector3(-37, 0, 10),
       new THREE.Vector3(-32, 0, -2)
     ];
     const WAYPOINTS_ATK_B_MARKET = [
@@ -5746,7 +5614,7 @@
       new THREE.Vector3(31.0, 3.5, -17.0), // A 사이트 2층 헤븐 방어
       new THREE.Vector3(26.0, 0, -6.0),    // A 사이트/트리 방어
       new THREE.Vector3(0, 0, -20.0),      // 미드 광장 방어
-      new THREE.Vector3(-19.0, 1.15, 11.0), // B 사이트 수비 창문 단차 방어
+      new THREE.Vector3(-16.0, 0, -14.0),  // 미드 마켓 방어
       new THREE.Vector3(-32.5, 0, -13.0)   // B 사이트 보트하우스 방어
     ];
 
@@ -7186,20 +7054,10 @@
           blockedZ = true; break;
         }
       }
-      // 준비 시간(PREP)에는 진영 보호막(B 메인 입구 아치 & 출구 아치 포함) 밖으로 나갈 수 없음
+      // 준비 시간(PREP)에는 진영 보호막 밖으로 나갈 수 없음
       if (currentMap === 'brawl' && roundPhase === 'PREP') {
-        if (myTeam === 'red') {
-          const inBLobby = (camera.position.x <= -20.0 && camera.position.z >= 36.0);
-          const minAllowedZ = inBLobby ? 36.55 : 38.0;
-          if (nextZ < minAllowedZ) blockedZ = true;
-        }
-        if (myTeam === 'blue') {
-          if (nextZ > -38.0 && camera.position.z <= -37.5) blockedZ = true;
-          if (camera.position.z >= 11.5 && camera.position.z <= 20.5 && camera.position.x >= -28.0 && nextX < -27.45) {
-            blockedX = true;
-            camera.position.x = Math.max(camera.position.x, -27.45);
-          }
-        }
+        if (myTeam === 'red' && nextZ < 38.0) blockedZ = true;
+        if (myTeam === 'blue' && nextZ > -38.0) blockedZ = true;
       }
       if (!blockedZ) camera.position.z = nextZ;
 
@@ -7345,16 +7203,8 @@
 
           let tracerEnd = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 120);
           const wallHits = raycaster.intersectObjects(wallMeshes);
-          let solidWallDist = 120;
-          let passedWoodCount = 0;
-          for (const wh of wallHits) {
-            if (wh.object && wh.object.userData && wh.object.userData.isWallbangWood) {
-              passedWoodCount++;
-              if (passedWoodCount <= w.penetration) continue;
-            }
-            solidWallDist = wh.distance;
-            tracerEnd = wh.point;
-            break;
+          if (wallHits.length > 0 && wallHits[0].distance < 120) {
+            tracerEnd = wallHits[0].point;
           }
           if (hits.length > 0 && hits[0].distance < muzzleWorld.distanceTo(tracerEnd)) {
             tracerEnd = hits[0].point;
@@ -7367,7 +7217,6 @@
 
         const hitTargetsSet = new Set();
         for (const hit of hits) {
-          if (hit.distance > solidWallDist + 0.05) break;
           if (hitTargetsSet.size >= w.penetration) break;
           const hitObj = hit.object;
           if (hitObj.userData.targetType === 'ascentDoor') {
