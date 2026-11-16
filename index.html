@@ -102,6 +102,17 @@
         <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">공격팀 (GREEN · 초록)</button>
         <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">수비팀 (RED · 빨강)</button>
         <span style="color:#555;">|</span>
+        <span style="font-size:14px; color:#bbb;">내 요원:</span>
+        <select id="agentSelect" onchange="selectAgent(this.value)" style="background:#0f1923; border:1px solid #ff4655; color:#ff4655; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
+          <option value="jett" selected>제트 (Jett)</option>
+          <option value="phoenix">피닉스 (Phoenix)</option>
+          <option value="reyna">레이나 (Reyna)</option>
+          <option value="sova">소바 (Sova)</option>
+          <option value="clove">클로브 (Clove)</option>
+          <option value="neon">네온 (Neon)</option>
+          <option value="chamber">체임버 (Chamber)</option>
+        </select>
+        <span style="color:#555;">|</span>
         <span style="font-size:14px; color:#bbb;">인원 구성:</span>
         <select id="brawlModeSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
           <option value="5v5" selected>5 vs 5 (어센트 폭파전 · AI 봇)</option>
@@ -1982,7 +1993,7 @@
       const enemies = [];
 
       allies.push({
-        name: `[나] ${myNick}`,
+        name: `[나 · ${(AGENT_MODELS[myAgent] || AGENT_MODELS.jett).name}] ${myNick}`,
         k: playerStats.k,
         d: playerStats.d,
         a: playerStats.a,
@@ -2070,6 +2081,254 @@
     let inspectTimer = 0;
 
     let myTeam = 'red';
+    let myAgent = 'jett';
+
+    const AGENT_MODELS = {
+      jett: { key: 'jett', name: '제트', skinColor: 0xf6d5be, hairColor: 0xf4f7fb, primaryColor: 0x38bdf8, secondaryColor: 0xf8fafc, accentColor: 0xbae6fd },
+      phoenix: { key: 'phoenix', name: '피닉스', skinColor: 0x6b442a, hairColor: 0x1e130c, primaryColor: 0xf8fafc, secondaryColor: 0x18181b, accentColor: 0xf97316 },
+      reyna: { key: 'reyna', name: '레이나', skinColor: 0xd8a382, hairColor: 0x2e1065, primaryColor: 0x6b21a8, secondaryColor: 0x1f1135, accentColor: 0xe879f9 },
+      sova: { key: 'sova', name: '소바', skinColor: 0xf3cfb6, hairColor: 0xfde047, primaryColor: 0x1d4ed8, secondaryColor: 0xe2e8f0, accentColor: 0x38bdf8 },
+      clove: { key: 'clove', name: '클로브', skinColor: 0xf7d7c4, hairColor: 0xf472b6, primaryColor: 0xec4899, secondaryColor: 0x14b8a6, accentColor: 0xf9a8d4 },
+      neon: { key: 'neon', name: '네온', skinColor: 0xd69f7e, hairColor: 0x2563eb, primaryColor: 0x1e40af, secondaryColor: 0x0f172a, accentColor: 0x22d3ee },
+      chamber: { key: 'chamber', name: '체임버', skinColor: 0xedc8ae, hairColor: 0x4a321f, primaryColor: 0x1e293b, secondaryColor: 0xf8fafc, accentColor: 0xfbbf24 }
+    };
+
+    const BOT_AGENT_MAP = {
+      '[공격] 봇 제트': 'jett',
+      '[공격] 봇 레이나': 'reyna',
+      '[공격] 봇 피닉스': 'phoenix',
+      '[공격] 봇 브리치': 'chamber',
+      '[공격] 봇 케이오': 'neon',
+      '[수비] 봇 오멘': 'chamber',
+      '[수비] 봇 소바': 'sova',
+      '[수비] 봇 세이지': 'clove',
+      '[수비] 봇 사이퍼': 'neon',
+      '[수비] 봇 킬조이': 'jett'
+    };
+
+    function resolveAgentKeyFromNick(nick, fallbackIdx = 0) {
+      if (nick && BOT_AGENT_MAP[nick]) return BOT_AGENT_MAP[nick];
+      const keys = Object.keys(AGENT_MODELS);
+      return keys[Math.abs(fallbackIdx) % keys.length];
+    }
+
+    function buildAgent3DCharacterMesh(agentKey, team, hitboxUserDataBase) {
+      const cfg = AGENT_MODELS[agentKey] || AGENT_MODELS.jett;
+      const root = new THREE.Group();
+
+      const teamOutlineHex = team === 'red' ? 0x10b981 : 0xff4655;
+      const skinMat = new THREE.MeshStandardMaterial({ color: cfg.skinColor, roughness: 0.55 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: cfg.hairColor, roughness: 0.45 });
+      const primaryMat = new THREE.MeshStandardMaterial({ color: cfg.primaryColor, roughness: 0.42, metalness: 0.15 });
+      const secondaryMat = new THREE.MeshStandardMaterial({ color: cfg.secondaryColor, roughness: 0.48, metalness: 0.2 });
+      const accentMat = new THREE.MeshStandardMaterial({
+        color: cfg.accentColor,
+        emissive: cfg.accentColor,
+        emissiveIntensity: 0.55,
+        roughness: 0.3
+      });
+      const teamTrimMat = new THREE.MeshStandardMaterial({
+        color: teamOutlineHex,
+        emissive: teamOutlineHex,
+        emissiveIntensity: 0.45,
+        roughness: 0.35
+      });
+
+      // Invisible/structural hitboxes keeping exact collision & damage detection
+      const hbMat = new THREE.MeshBasicMaterial({ visible: false });
+      const legsHb = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.29, 0.86, 10), hbMat);
+      legsHb.position.y = 0.43;
+      legsHb.userData = Object.assign({}, hitboxUserDataBase, { part: 'leg' });
+
+      const torsoHb = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.96, 0.50), hbMat);
+      torsoHb.position.y = 1.31;
+      torsoHb.userData = Object.assign({}, hitboxUserDataBase, { part: 'body' });
+
+      const headHb = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), hbMat);
+      headHb.position.y = 2.09;
+      headHb.userData = Object.assign({}, hitboxUserDataBase, { part: 'head' });
+
+      root.add(legsHb, torsoHb, headHb);
+
+      // Visual 3D Character Rig
+      const visual = new THREE.Group();
+
+      // Legs & Boots
+      const legGeo = new THREE.CylinderGeometry(0.115, 0.095, 0.84, 10);
+      const leftLeg = new THREE.Mesh(legGeo, secondaryMat);
+      leftLeg.position.set(-0.15, 0.44, 0);
+      const rightLeg = new THREE.Mesh(legGeo, secondaryMat);
+      rightLeg.position.set(0.15, 0.44, 0);
+
+      const bootGeo = new THREE.BoxGeometry(0.18, 0.16, 0.28);
+      const leftBoot = new THREE.Mesh(bootGeo, primaryMat);
+      leftBoot.position.set(-0.15, 0.08, 0.04);
+      const rightBoot = new THREE.Mesh(bootGeo, primaryMat);
+      rightBoot.position.set(0.15, 0.08, 0.04);
+
+      // Team armband / belt indicator
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.08, 0.36), teamTrimMat);
+      belt.position.set(0, 0.88, 0);
+
+      // Torso / Jacket
+      const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.82, 0.34), primaryMat);
+      torsoMesh.position.set(0, 1.30, 0);
+
+      const chestInner = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.72, 0.36), secondaryMat);
+      chestInner.position.set(0, 1.31, 0.01);
+
+      // Arms
+      const armGeo = new THREE.CylinderGeometry(0.085, 0.075, 0.72, 10);
+      const leftArm = new THREE.Mesh(armGeo, primaryMat);
+      leftArm.position.set(-0.39, 1.30, 0.04);
+      leftArm.rotation.x = -0.25;
+      const rightArm = new THREE.Mesh(armGeo, primaryMat);
+      rightArm.position.set(0.39, 1.30, 0.14);
+      rightArm.rotation.x = -0.65;
+
+      // Neck & Head
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.10, 0.16, 10), skinMat);
+      neck.position.set(0, 1.76, 0);
+
+      const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 14), skinMat);
+      headMesh.scale.set(0.92, 1.06, 0.96);
+      headMesh.position.set(0, 2.02, 0);
+
+      // Eyes
+      const eyeDarkMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+      const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.03), eyeDarkMat);
+      leftEye.position.set(-0.075, 2.04, 0.195);
+      const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.03), eyeDarkMat);
+      rightEye.position.set(0.075, 2.04, 0.195);
+
+      visual.add(leftLeg, rightLeg, leftBoot, rightBoot, belt, torsoMesh, chestInner, leftArm, rightArm, neck, headMesh, leftEye, rightEye);
+
+      // Agent-Specific Distinct Features
+      if (agentKey === 'jett') {
+        // White top-bun + flowing ponytail & wind scarf
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.23, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), hairMat);
+        hairCap.position.set(0, 2.05, -0.01);
+        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), hairMat);
+        bun.position.set(0, 2.26, -0.08);
+        const tail = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.34, 8), hairMat);
+        tail.position.set(0, 2.12, -0.22);
+        tail.rotation.x = -0.55;
+        const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.045, 8, 16), accentMat);
+        scarf.rotation.x = Math.PI / 2;
+        scarf.position.set(0, 1.73, 0);
+        const shoulderPadL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.10, 0.36), secondaryMat);
+        shoulderPadL.position.set(-0.34, 1.68, 0);
+        const shoulderPadR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.10, 0.36), secondaryMat);
+        shoulderPadR.position.set(0.34, 1.68, 0);
+        visual.add(hairCap, bun, tail, scarf, shoulderPadL, shoulderPadR);
+      } else if (agentKey === 'phoenix') {
+        // High-top afro + fiery collar & flame sleeve stripes
+        const afro = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.21, 0.22, 12), hairMat);
+        afro.position.set(0, 2.22, -0.01);
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.16, 12, 1, true), accentMat);
+        collar.position.set(0, 1.74, 0);
+        const flameL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.52, 0.18), accentMat);
+        flameL.position.set(-0.46, 1.32, 0.04);
+        flameL.rotation.x = -0.25;
+        const flameR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.52, 0.18), accentMat);
+        flameR.position.set(0.46, 1.32, 0.14);
+        flameR.rotation.x = -0.65;
+        visual.add(afro, collar, flameL, flameR);
+      } else if (agentKey === 'reyna') {
+        // Long purple-black hair + glowing magenta soul tattoos on arms & chest
+        const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.235, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.65), hairMat);
+        hairTop.position.set(0, 2.05, -0.01);
+        const longHairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.68, 0.14), hairMat);
+        longHairBack.position.set(0, 1.76, -0.18);
+        const tattooL = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.02, 6, 12), accentMat);
+        tattooL.rotation.x = Math.PI / 2;
+        tattooL.position.set(-0.39, 1.25, 0.06);
+        const tattooR = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.02, 6, 12), accentMat);
+        tattooR.rotation.x = Math.PI / 2;
+        tattooR.position.set(0.39, 1.25, 0.16);
+        const heartCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.08, 0), accentMat);
+        heartCore.position.set(0, 1.44, 0.19);
+        visual.add(hairTop, longHairBack, tattooL, tattooR, heartCore);
+      } else if (agentKey === 'sova') {
+        // Blonde braided hair + blue hunter cape + glowing blue eye visor
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.23, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), hairMat);
+        hairCap.position.set(0, 2.05, -0.01);
+        const braid = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.56, 8), hairMat);
+        braid.position.set(0.14, 1.78, -0.18);
+        braid.rotation.z = -0.12;
+        const scouter = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.07, 0.05), accentMat);
+        scouter.position.set(-0.075, 2.04, 0.21);
+        const cape = new THREE.Mesh(new THREE.BoxGeometry(0.68, 1.05, 0.06), primaryMat);
+        cape.position.set(0, 1.20, -0.21);
+        cape.rotation.x = 0.08;
+        const furTrim = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.12, 0.40), secondaryMat);
+        furTrim.position.set(0, 1.70, -0.02);
+        visual.add(hairCap, braid, scouter, cape, furTrim);
+      } else if (agentKey === 'clove') {
+        // Pink bob hair + butterfly hairclip + teal/pink cropped jacket
+        const bobHair = new THREE.Mesh(new THREE.SphereGeometry(0.245, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.72), hairMat);
+        bobHair.position.set(0, 2.03, -0.02);
+        const butterflyClip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.04), accentMat);
+        butterflyClip.position.set(0.15, 2.16, 0.15);
+        butterflyClip.rotation.z = 0.35;
+        const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.78, 0.37), secondaryMat);
+        strapL.position.set(-0.16, 1.30, 0);
+        const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.78, 0.37), secondaryMat);
+        strapR.position.set(0.16, 1.30, 0);
+        visual.add(bobHair, butterflyClip, strapL, strapR);
+      } else if (agentKey === 'neon') {
+        // Blue/yellow twin tails + glowing cyan lightning stripes
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.23, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), hairMat);
+        hairCap.position.set(0, 2.05, -0.01);
+        const twinL = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.42, 8), accentMat);
+        twinL.position.set(-0.24, 1.98, -0.10);
+        twinL.rotation.z = 0.35;
+        const twinR = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.42, 8), accentMat);
+        twinR.position.set(0.24, 1.98, -0.10);
+        twinR.rotation.z = -0.35;
+        const boltChest = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, 0.37), accentMat);
+        boltChest.position.set(0, 1.45, 0);
+        boltChest.rotation.z = 0.25;
+        const legStripeL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.74, 0.22), accentMat);
+        legStripeL.position.set(-0.24, 0.46, 0);
+        const legStripeR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.74, 0.22), accentMat);
+        legStripeR.position.set(0.24, 0.46, 0);
+        visual.add(hairCap, twinL, twinR, boltChest, legStripeL, legStripeR);
+      } else if (agentKey === 'chamber') {
+        // Neat brown hair + gold-rimmed glasses + suit tie & gold watch
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.228, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
+        hairCap.position.set(0, 2.06, -0.01);
+        const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.055, 0.04), accentMat);
+        glasses.position.set(0, 2.04, 0.205);
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.48, 0.04), accentMat);
+        tie.position.set(0, 1.38, 0.19);
+        const goldWatch = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.06, 10), accentMat);
+        goldWatch.position.set(-0.39, 1.04, 0.12);
+        goldWatch.rotation.x = -0.25;
+        visual.add(hairCap, glasses, tie, goldWatch);
+      }
+
+      // Weapon prop held by character
+      const gunProp = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.10, 0.56), new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.7, roughness: 0.3 }));
+      gunProp.position.set(0.34, 1.24, 0.38);
+      visual.add(gunProp);
+
+      root.add(visual);
+      root.userData.visualGroup = visual;
+      root.userData.teamTrimMat = teamTrimMat;
+      root.userData.hitboxes = [legsHb, torsoHb, headHb];
+      return root;
+    }
+
+    window.selectAgent = function(agentKey) {
+      if (!AGENT_MODELS[agentKey]) return;
+      myAgent = agentKey;
+      const myNick = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+      broadcastData({ type: 'info', nick: myNick, team: myTeam, agentKey: myAgent });
+      if (document.getElementById('tabLeaderboard') && document.getElementById('tabLeaderboard').style.display === 'block') {
+        renderTabLeaderboard();
+      }
+    };
     let redScore = 0, blueScore = 0;
 
     function getCurrentWeaponKey() { return slotWeapons[activeSlot] || 'melee'; }
@@ -6653,7 +6912,11 @@
 
       // 팀 색상: 공격(red 변수)=초록 0x10b981, 수비(blue 변수)=빨강 0xff4655
       const teamColor = botTeam === 'red' ? 0x10b981 : 0xff4655;
-      bot.userData.armorMat.color.setHex(teamColor);
+      if (bot.userData.armorMat) bot.userData.armorMat.color.setHex(teamColor);
+      if (bot.userData.teamTrimMat) {
+        bot.userData.teamTrimMat.color.setHex(teamColor);
+        bot.userData.teamTrimMat.emissive.setHex(teamColor);
+      }
 
       // FSM 초기화
       bot.userData.fsmState = botTeam === 'red' ? 'ADVANCE' : 'HOLD';
@@ -6682,39 +6945,21 @@
     }
 
     function createSingleBrawlBot(i, team, laneIdx) {
-      const botGroup = new THREE.Group();
-      const teamColor = team === 'red' ? 0x10b981 : 0xff4655;
-      const armorMat = new THREE.MeshStandardMaterial({ color: teamColor, metalness: 0.35, roughness: 0.45 });
-      const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.6, roughness: 0.4 });
-      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
-
-      const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.28, 0.85, 12), darkMat);
-      legs.position.y = 0.425;
-      legs.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'leg' };
-
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat);
-      torso.position.y = 1.3;
-      torso.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'body' };
-
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat);
-      head.position.y = 2.08;
-      head.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
-
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat);
-      visor.position.set(0, 2.08, 0.24);
-      visor.userData = { targetType: 'brawlBot', botRoot: botGroup, part: 'head' };
-
-      const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.55), darkMat);
-      gunMesh.position.set(0.35, 1.35, 0.32);
-
-      botGroup.add(legs, torso, head, visor, gunMesh);
       const namePool = team === 'red' ? AI_NAMES_RED : AI_NAMES_BLUE;
+      const botNick = namePool[laneIdx % namePool.length];
+      const botAgentKey = resolveAgentKeyFromNick(botNick, i);
+      const botGroup = buildAgent3DCharacterMesh(botAgentKey, team, { targetType: 'brawlBot', botRoot: null });
+      botGroup.userData.hitboxes.forEach(hb => { hb.userData.botRoot = botGroup; });
+
       botGroup.userData = {
         idx: i,
         laneIdx,
-        nick: namePool[laneIdx % namePool.length],
+        nick: botNick,
+        agentKey: botAgentKey,
         weaponKey: 'classic',
-        armorMat,
+        armorMat: null,
+        teamTrimMat: botGroup.userData.teamTrimMat,
+        hitboxes: botGroup.userData.hitboxes,
         team: team,
         hp: 100,
         shield: 0,
@@ -6747,7 +6992,7 @@
         botGroup.userData.a = saved.a;
       }
       brawlBots.push(botGroup);
-      brawlBotHitboxes.push(legs, torso, head, visor);
+      brawlBotHitboxes.push(...botGroup.userData.hitboxes);
       spawnBrawlBot(botGroup);
     }
 
@@ -7033,32 +7278,12 @@
     const remotePlayers = {};
     const remoteHitboxes = [];
 
-    function createRemoteAvatar(peerId, nick, team) {
+    function createRemoteAvatar(peerId, nick, team, agentKey = 'jett') {
       if (remotePlayers[peerId]) {
         scene.remove(remotePlayers[peerId].mesh);
       }
-      const group = new THREE.Group();
-      const teamColor = team === 'red' ? 0x10b981 : 0xff4655;
-      const bodyMat = new THREE.MeshStandardMaterial({ color: teamColor, roughness: 0.4 });
-      const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.5 });
-
-      const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.29, 0.86, 12), darkMat);
-      legs.position.y = 0.43;
-      legs.userData = { targetType: 'player', peerId, part: 'leg' };
-
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.98, 0.52), bodyMat);
-      torso.position.y = 1.32;
-      torso.userData = { targetType: 'player', peerId, part: 'body' };
-
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.48, 0.48), bodyMat);
-      head.position.y = 2.10;
-      head.userData = { targetType: 'player', peerId, part: 'head' };
-
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.14, 0.06), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-      visor.position.set(0, 2.10, -0.25);
-      visor.userData = { targetType: 'player', peerId, part: 'head' };
-
-      group.add(legs, torso, head, visor);
+      const resolvedAgent = AGENT_MODELS[agentKey] ? agentKey : 'jett';
+      const group = buildAgent3DCharacterMesh(resolvedAgent, team, { targetType: 'player', peerId });
       const spawnZ = team === 'red' ? 46 : -46;
       group.position.set(0, 0, spawnZ);
       group.updateMatrixWorld(true);
@@ -7069,7 +7294,8 @@
         mesh: group,
         nick,
         team,
-        hitboxes: [legs, torso, head, visor],
+        agentKey: resolvedAgent,
+        hitboxes: group.userData.hitboxes,
         targetPos: group.position.clone(),
         targetYaw: 0,
         hasPosUpdate: false,
@@ -7120,7 +7346,7 @@
       document.getElementById('teamRedBtn').classList.toggle('active', team === 'red');
       document.getElementById('teamBlueBtn').classList.toggle('active', team === 'blue');
       updatePlayerListUI();
-      broadcastData({ type: 'info', nick: document.getElementById('nickInput').value || '플레이어', team: myTeam });
+      broadcastData({ type: 'info', nick: document.getElementById('nickInput').value || '플레이어', team: myTeam, agentKey: myAgent });
       if (currentMap === 'brawl') {
         startBrawlRound(1);
       }
@@ -7242,7 +7468,7 @@
       conn.on('open', () => {
         connections[conn.peer] = conn;
         const myNick = document.getElementById('nickInput').value || '플레이어';
-        conn.send({ type: 'info', nick: myNick, team: myTeam, isDead, k: playerStats.k, d: playerStats.d, a: playerStats.a, credits });
+        conn.send({ type: 'info', nick: myNick, team: myTeam, agentKey: myAgent, isDead, k: playerStats.k, d: playerStats.d, a: playerStats.a, credits });
 
         if (isHost) {
           const otherPeers = Object.keys(connections).filter(id => id !== conn.peer);
@@ -7256,7 +7482,7 @@
 
       conn.on('data', (msg) => {
         if (msg.type === 'info') {
-          createRemoteAvatar(conn.peer, msg.nick, msg.team);
+          createRemoteAvatar(conn.peer, msg.nick, msg.team, msg.agentKey || 'jett');
           if (remotePlayers[conn.peer]) {
             if (typeof msg.isDead === 'boolean') {
               remotePlayers[conn.peer].isDead = msg.isDead;
@@ -7296,6 +7522,16 @@
             rp.mesh.visible = !rp.isDead;
             if (msg.weaponKey) rp.weaponKey = msg.weaponKey;
             if (typeof msg.credits === 'number') rp.credits = msg.credits;
+            if (msg.agentKey && rp.agentKey !== msg.agentKey && AGENT_MODELS[msg.agentKey]) {
+              const curPos = rp.mesh.position.clone();
+              const curYaw = rp.mesh.rotation.y;
+              createRemoteAvatar(conn.peer, rp.nick, rp.team, msg.agentKey);
+              remotePlayers[conn.peer].mesh.position.copy(curPos);
+              remotePlayers[conn.peer].mesh.rotation.y = curYaw;
+              remotePlayers[conn.peer].targetPos.copy(curPos);
+              remotePlayers[conn.peer].targetYaw = curYaw;
+              remotePlayers[conn.peer].hasPosUpdate = true;
+            }
           }
         } else if (msg.type === 'hit') {
           if ((!msg.targetId || msg.targetId === myPeerId) && !isDead) {
@@ -7636,6 +7872,7 @@
           yaw: yaw,
           isDead: true,
           weaponKey: getCurrentWeaponKey(),
+          agentKey: myAgent,
           credits
         });
 
@@ -8725,7 +8962,8 @@
       // 살아있는 아군 우선
       for (const b of brawlBots) {
         if (!b.userData.dead && b.userData.team === myTeam) {
-          list.push({ name: `[아군] ${b.userData.nick}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false, weaponKey: b.userData.weaponKey || 'vandal' });
+          const agLabel = AGENT_MODELS[b.userData.agentKey] ? ` · ${AGENT_MODELS[b.userData.agentKey].name}` : '';
+          list.push({ name: `[아군] ${b.userData.nick}${agLabel}`, pos: b.position, yaw: b.rotation.y, mesh: b, isRemote: false, weaponKey: b.userData.weaponKey || 'vandal' });
         }
       }
       Object.values(remotePlayers).forEach(rp => {
@@ -9375,6 +9613,7 @@
           yaw: yaw,
           isDead: isDead,
           weaponKey: getCurrentWeaponKey(),
+          agentKey: myAgent,
           credits: credits
         });
       }
