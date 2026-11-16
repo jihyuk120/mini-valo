@@ -2148,7 +2148,11 @@
       headHb.position.y = 2.09;
       headHb.userData = Object.assign({}, hitboxUserDataBase, { part: 'head' });
 
-      root.add(legsHb, torsoHb, headHb);
+      const neckHb = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.24, 10), hbMat);
+      neckHb.position.y = 1.81;
+      neckHb.userData = Object.assign({}, hitboxUserDataBase, { part: 'body' });
+
+      root.add(legsHb, torsoHb, neckHb, headHb);
 
       // Visual 3D Character Rig
       const visual = new THREE.Group();
@@ -2316,7 +2320,7 @@
       root.add(visual);
       root.userData.visualGroup = visual;
       root.userData.teamTrimMat = teamTrimMat;
-      root.userData.hitboxes = [legsHb, torsoHb, headHb];
+      root.userData.hitboxes = [legsHb, torsoHb, neckHb, headHb];
       return root;
     }
 
@@ -5245,14 +5249,15 @@
 
       const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.85, 12), darkMat); legs.position.y = 0.425; legs.userData = { targetType: 'bot', botRoot: botGroup, part: 'leg' };
       const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.95, 0.48), armorMat); torso.position.y = 1.3; torso.userData = { targetType: 'bot', botRoot: botGroup, part: 'body' };
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.20, 0.24, 12), darkMat); neck.position.y = 1.81; neck.userData = { targetType: 'bot', botRoot: botGroup, part: 'body' };
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), armorMat); head.position.y = 2.08; head.userData = { targetType: 'bot', botRoot: botGroup, part: 'head' };
       const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), eyeMat); visor.position.set(0, 2.08, 0.24); visor.userData = { targetType: 'bot', botRoot: botGroup, part: 'head' };
 
-      botGroup.add(legs, torso, head, visor);
+      botGroup.add(legs, torso, neck, head, visor);
       botGroup.userData = { idx, hp: 100, shield: 50, strafeDir: 1, strafeTimer: 1.2, baseX: 0 };
       scene.add(botGroup);
       bots.push(botGroup);
-      botHitboxes.push(legs, torso, head, visor);
+      botHitboxes.push(legs, torso, neck, head, visor);
     }
 
     function respawnBot(bot) {
@@ -10041,22 +10046,29 @@
     cloudGroup.position.copy(smokeObj.mesh.position);
 
     const outerMat = new THREE.MeshStandardMaterial({
-      color: 0xcbd5e1,
-      emissive: 0x1e293b,
-      emissiveIntensity: 0.35,
-      roughness: 0.95,
-      transparent: true,
-      opacity: 0.94
+      color: 0xe2e8f0,
+      emissive: 0x64748b,
+      emissiveIntensity: 0.28,
+      roughness: 0.96,
+      metalness: 0.0,
+      transparent: false,
+      opacity: 1.0,
+      depthWrite: true,
+      side: THREE.DoubleSide
     });
-    const innerMat = new THREE.MeshBasicMaterial({
-      color: 0x38bdf8,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.22
+    const innerMat = new THREE.MeshStandardMaterial({
+      color: 0xcbd5e1,
+      emissive: 0x475569,
+      emissiveIntensity: 0.22,
+      roughness: 1.0,
+      transparent: false,
+      opacity: 1.0,
+      depthWrite: true,
+      side: THREE.DoubleSide
     });
 
-    const coreSphere = new THREE.Mesh(new THREE.SphereGeometry(smokeObj.smokeRadius, 24, 20), outerMat);
-    const swirlShell = new THREE.Mesh(new THREE.IcosahedronGeometry(smokeObj.smokeRadius * 1.02, 2), innerMat);
+    const coreSphere = new THREE.Mesh(new THREE.SphereGeometry(smokeObj.smokeRadius, 28, 24), outerMat);
+    const swirlShell = new THREE.Mesh(new THREE.DodecahedronGeometry(smokeObj.smokeRadius * 0.985, 2), innerMat);
     cloudGroup.add(coreSphere, swirlShell);
     scene.add(cloudGroup);
 
@@ -10100,7 +10112,123 @@
     renderJettHUD();
   }
 
-  // 7. [X] 칼날 폭풍 (Blade Storm): 8포인트 궁극기 · 단검 5개
+  // 7. [X] 칼날 폭풍 (Blade Storm): 8포인트 궁극기 · 단검 5개 + 1인칭 양손 & 부유 단검 3D 뷰모델
+  let bladeStormViewGroup = null;
+  let bladeStormKnifeMeshes = [];
+
+  function createBladeStormKnife3D() {
+    const knife = new THREE.Group();
+    const silverBladeMat = new THREE.MeshStandardMaterial({
+      color: 0xf1f5f9,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.65,
+      metalness: 0.92,
+      roughness: 0.14
+    });
+    const cyanCoreMat = new THREE.MeshBasicMaterial({ color: 0x7dd3fc });
+    const hiltMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.25 });
+
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.17, 4), silverBladeMat);
+    blade.rotation.x = -Math.PI / 2;
+    blade.scale.set(1.35, 1.0, 0.38);
+    blade.position.set(0, 0, -0.09);
+
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.004, 0.14), cyanCoreMat);
+    core.position.set(0, 0, -0.07);
+
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.010, 0.014), hiltMat);
+    guard.position.set(0, 0, -0.005);
+
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.065, 8), hiltMat);
+    handle.rotation.x = Math.PI / 2;
+    handle.position.set(0, 0, 0.032);
+
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0028, 8, 16), silverBladeMat);
+    ring.position.set(0, 0, 0.072);
+
+    knife.add(blade, core, guard, handle, ring);
+    return knife;
+  }
+
+  function ensureBladeStormViewModel() {
+    if (bladeStormViewGroup || typeof camera === 'undefined') return;
+    bladeStormViewGroup = new THREE.Group();
+    bladeStormViewGroup.visible = false;
+
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.55, metalness: 0.15 });
+    const wrapMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xf6d5be, roughness: 0.6 });
+    const windGlowMat = new THREE.MeshBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.78 });
+
+    [-1, 1].forEach((side) => {
+      const armGrp = new THREE.Group();
+      armGrp.position.set(side * 0.25, -0.22, -0.34);
+      armGrp.rotation.set(-0.22, -side * 0.18, side * 0.12);
+
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.26, 12), sleeveMat);
+      forearm.rotation.x = Math.PI / 2.2;
+      forearm.position.set(0, -0.03, 0.12);
+
+      const wristWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.033, 0.045, 12), wrapMat);
+      wristWrap.rotation.x = Math.PI / 2.2;
+      wristWrap.position.set(0, -0.005, 0.01);
+
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.075), skinMat);
+      palm.position.set(0, 0.005, -0.045);
+
+      for (let f = 0; f < 4; f++) {
+        const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0065, 0.048, 8), skinMat);
+        finger.rotation.x = Math.PI / 2.08;
+        finger.position.set((-0.020 + f * 0.013) * side, 0.007, -0.102);
+        armGrp.add(finger);
+      }
+      const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.0075, 0.038, 8), skinMat);
+      thumb.rotation.set(Math.PI / 2.2, 0, side * 0.55);
+      thumb.position.set(-side * 0.032, 0.002, -0.055);
+
+      const windRing = new THREE.Mesh(new THREE.RingGeometry(0.025, 0.034, 18), windGlowMat);
+      windRing.rotation.x = -Math.PI / 2.3;
+      windRing.position.set(0, 0.024, -0.055);
+
+      armGrp.add(forearm, wristWrap, palm, thumb, windRing);
+      bladeStormViewGroup.add(armGrp);
+    });
+
+    const knifeLayout = [
+      { x: -0.34, y: -0.06, z: -0.46, rx: -0.06, ry: -0.14, rz: 0.28 },
+      { x: -0.22, y:  0.07, z: -0.48, rx: -0.08, ry: -0.08, rz: 0.14 },
+      { x:  0.00, y:  0.12, z: -0.50, rx: -0.10, ry:  0.00, rz: 0.00 },
+      { x:  0.22, y:  0.07, z: -0.48, rx: -0.08, ry:  0.08, rz: -0.14 },
+      { x:  0.34, y: -0.06, z: -0.46, rx: -0.06, ry:  0.14, rz: -0.28 }
+    ];
+
+    bladeStormKnifeMeshes = knifeLayout.map((cfg) => {
+      const k = createBladeStormKnife3D();
+      k.position.set(cfg.x, cfg.y, cfg.z);
+      k.rotation.set(cfg.rx, cfg.ry, cfg.rz);
+      k.userData.basePos = new THREE.Vector3(cfg.x, cfg.y, cfg.z);
+      k.userData.baseRot = new THREE.Euler(cfg.rx, cfg.ry, cfg.rz);
+      bladeStormViewGroup.add(k);
+      return k;
+    });
+
+    camera.add(bladeStormViewGroup);
+  }
+
+  function syncBladeStormViewModel() {
+    ensureBladeStormViewModel();
+    if (!bladeStormViewGroup) return;
+    if (jettState.bladeStormActive) {
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      bladeStormViewGroup.visible = true;
+      bladeStormKnifeMeshes.forEach((mesh, idx) => {
+        mesh.visible = idx < jettState.knivesRemaining;
+      });
+    } else {
+      bladeStormViewGroup.visible = false;
+    }
+  }
+
   function activateBladeStorm() {
     if (jettState.bladeStormActive) return;
     if (jettState.ultPoints < JETT_CONFIG.X.maxPoints) return;
@@ -10113,6 +10241,7 @@
     if (typeof addKillFeed === 'function') {
       addKillFeed('[궁극기 X] 제트: "비켜!" — 칼날 폭풍 활성화 (단검 5개)', true);
     }
+    syncBladeStormViewModel();
     renderJettHUD();
   }
 
@@ -10121,8 +10250,12 @@
     jettState.bladeStormActive = false;
     jettState.knivesRemaining = 0;
     bladeReticle.style.display = 'none';
+    syncBladeStormViewModel();
+    syncBladeStormViewModel();
     if (restoreSlot && typeof switchSlot === 'function') {
       switchSlot(prevSlotBeforeUlt || (slotWeapons[1] ? 1 : 2));
+    } else if (typeof gunGroup !== 'undefined') {
+      gunGroup.visible = true;
     }
     renderJettHUD();
   }
@@ -10173,6 +10306,7 @@
       });
     }
 
+    syncBladeStormViewModel();
     if (jettState.knivesRemaining <= 0) {
       setTimeout(() => {
         if (jettState.bladeStormActive && jettState.knivesRemaining <= 0) {
@@ -10295,6 +10429,7 @@
     if (jettState.bladeStormActive) {
       if (!fromRightClickBurst) {
         jettState.knivesRemaining = JETT_CONFIG.X.knives;
+        syncBladeStormViewModel();
       }
     } else {
       jettState.ultPoints = Math.min(JETT_CONFIG.X.maxPoints, jettState.ultPoints + 1);
@@ -10489,6 +10624,26 @@
       }
     }
 
+    // 제트 궁극기(X) 1인칭 양손 & 공중 부유 단검 5자루 애니메이션 동기화
+    if ((typeof myAgent === 'undefined' || myAgent === 'jett') && jettState.bladeStormActive) {
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      ensureBladeStormViewModel();
+      if (bladeStormViewGroup) {
+        bladeStormViewGroup.visible = true;
+        const t = now * 0.005;
+        bladeStormKnifeMeshes.forEach((kMesh, idx) => {
+          kMesh.visible = idx < jettState.knivesRemaining;
+          if (kMesh.visible && kMesh.userData.basePos) {
+            kMesh.position.y = kMesh.userData.basePos.y + Math.sin(t + idx * 1.25) * 0.014;
+            kMesh.position.x = kMesh.userData.basePos.x + Math.cos(t * 0.8 + idx) * 0.006;
+            kMesh.rotation.z = kMesh.userData.baseRot.z + Math.sin(t * 1.1 + idx) * 0.05;
+          }
+        });
+      }
+    } else if (bladeStormViewGroup && bladeStormViewGroup.visible) {
+      bladeStormViewGroup.visible = false;
+    }
+
     // 제트 패시브: 공중에서 Space 키를 누르고 있으면 낙하 속도 감소 (활강)
     if ((typeof myAgent === 'undefined' || myAgent === 'jett') &&
         typeof isGrounded !== 'undefined' && !isGrounded &&
@@ -10524,9 +10679,6 @@
         }
       } else {
         if (s.swirlShell) s.swirlShell.rotation.y += dt * 0.9;
-        if (s.timer < 1.0 && s.outerMat) {
-          s.outerMat.opacity = Math.max(0, s.timer * 0.94);
-        }
         if (s.timer <= 0) {
           scene.remove(s.mesh);
           activeSmokes.splice(i, 1);
@@ -10564,5 +10716,1114 @@
   requestAnimationFrame(updateJettSystems);
 })();
 </script>
+
+<script>
+(function () {
+  // =========================================================================
+  // MINI-VALO 3D: 피닉스(Phoenix) 전용 스킬 시스템 · 상점(B) · 하단 C/Q/E/X HUD
+  // =========================================================================
+  const PHOENIX_CONFIG = {
+    C: { key: 'C', name: '불길 (Blaze)', max: 1, price: 150, desc: '전방 직선 불벽 생성 · 적 화염 도트 / 본인 회복 (최대 1개 · 150 ¤)' },
+    Q: { key: 'Q', name: '뜨거운 손 (Hot Hands)', max: 1, price: 200, desc: '바닥 화염 장판 투척 · 적 지속 데미지 / 본인 회복 (최대 1개 · 200 ¤)' },
+    E: { key: 'E', name: '커브볼 (Curveball)', max: 2, price: 250, desc: '좌클릭 왼쪽 / 우클릭 오른쪽 휘어지는 섬광탄 (라운드 1개 무료 · 최대 2개 · 2킬 충전)' },
+    X: { key: 'X', name: '역습 (Run It Back)', maxPoints: 6, duration: 10.0, desc: '6포인트 궁극기 · 10초 내 사망/종료 시 원위치 체력 100 복귀' }
+  };
+
+  const phoenixState = {
+    cCharges: 0,
+    qCharges: 0,
+    eCharges: 1,
+    eKillsProgress: 0,
+    ultPoints: 0,
+    runItBackActive: false,
+    runItBackTimer: 0,
+    runItBackOrigin: null,
+    runItBackYaw: 0,
+    runItBackMarker: null,
+    curveballEquipped: false,
+    roundPurchasedC: 0,
+    roundPurchasedQ: 0,
+    roundPurchasedE: 0,
+    lastTrackedKills: 0,
+    lastTrackedRound: 0,
+    lastTrackedHp: 100
+  };
+
+  const activeBlazeWalls = [];
+  const activeHotHands = [];
+  const activeCurveballs = [];
+  let flashOverlayTimer = 0;
+  let flashOverlayMax = 1.6;
+  let prevSlotBeforePhoenix = 2;
+
+  // 1. 피닉스 전용 스타일 & 하단 HUD / 섬광 오버레이 / 역습 타이머 배너
+  const phxStyle = document.createElement('style');
+  phxStyle.textContent = `
+    #phoenixSkillHud {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      gap: 10px;
+      z-index: 950;
+      pointer-events: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .phx-slot {
+      min-width: 112px;
+      background: rgba(15, 23, 42, 0.86);
+      border: 1px solid rgba(249, 115, 22, 0.45);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+      color: #f8fafc;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+      transition: all 0.15s ease;
+    }
+    .phx-slot.ready {
+      border-color: #fb923c;
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.38);
+    }
+    .phx-slot.empty {
+      opacity: 0.52;
+      border-color: rgba(148, 163, 184, 0.25);
+    }
+    .phx-slot.ult-ready {
+      border-color: #facc15;
+      background: rgba(124, 45, 18, 0.88);
+      box-shadow: 0 0 16px rgba(250, 204, 21, 0.55);
+    }
+    .phx-slot.ult-active {
+      border-color: #ef4444;
+      background: rgba(153, 27, 27, 0.92);
+      box-shadow: 0 0 18px rgba(239, 68, 68, 0.75);
+    }
+    .phx-key-badge {
+      font-size: 11px;
+      font-weight: 800;
+      color: #fdba74;
+      letter-spacing: 0.4px;
+    }
+    .phx-pips {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      margin: 5px 0 3px;
+      min-height: 8px;
+    }
+    .phx-pip {
+      width: 18px;
+      height: 6px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.16);
+    }
+    .phx-pip.filled {
+      background: #f97316;
+      box-shadow: 0 0 6px #fb923c;
+    }
+    .phx-ult-pip {
+      width: 10px;
+      height: 6px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.16);
+    }
+    .phx-ult-pip.filled {
+      background: #facc15;
+      box-shadow: 0 0 6px #fde047;
+    }
+    .phx-sub {
+      font-size: 10px;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    #phoenixAbilityShopBar {
+      display: none;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(249, 115, 22, 0.35);
+    }
+    .phx-shop-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .phx-shop-card {
+      background: rgba(30, 41, 59, 0.88);
+      border: 1px solid rgba(249, 115, 22, 0.45);
+      border-radius: 6px;
+      padding: 8px 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .phx-shop-card:hover {
+      border-color: #fb923c;
+      background: rgba(124, 45, 18, 0.45);
+    }
+    .phx-shop-card.maxed {
+      opacity: 0.62;
+      border-color: rgba(148, 163, 184, 0.3);
+    }
+    #phoenixFlashOverlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle, #ffffff 45%, #fffbeb 100%);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 2500;
+    }
+    #phoenixRunItBackBanner {
+      position: fixed;
+      top: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      padding: 7px 18px;
+      background: linear-gradient(90deg, rgba(154, 52, 18, 0.92), rgba(234, 88, 12, 0.92), rgba(154, 52, 18, 0.92));
+      border: 1px solid #facc15;
+      border-radius: 20px;
+      color: #fffbeb;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.6px;
+      box-shadow: 0 0 18px rgba(249, 115, 22, 0.7);
+      z-index: 960;
+      pointer-events: none;
+    }
+    #phoenixCurveballPrompt {
+      position: fixed;
+      bottom: 98px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      padding: 5px 14px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid #fb923c;
+      border-radius: 14px;
+      color: #fed7aa;
+      font-size: 12px;
+      font-weight: 700;
+      z-index: 955;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(phxStyle);
+
+  const phxHud = document.createElement('div');
+  phxHud.id = 'phoenixSkillHud';
+  phxHud.innerHTML = `
+    <div class="phx-slot" id="phxHudC">
+      <div class="phx-key-badge">[C] 불길</div>
+      <div class="phx-pips" id="phxPipsC"></div>
+      <div class="phx-sub" id="phxSubC">0 / 1 (150¤)</div>
+    </div>
+    <div class="phx-slot" id="phxHudQ">
+      <div class="phx-key-badge">[Q] 뜨거운 손</div>
+      <div class="phx-pips" id="phxPipsQ"></div>
+      <div class="phx-sub" id="phxSubQ">0 / 1 (200¤)</div>
+    </div>
+    <div class="phx-slot" id="phxHudE">
+      <div class="phx-key-badge">[E] 커브볼</div>
+      <div class="phx-pips" id="phxPipsE"></div>
+      <div class="phx-sub" id="phxSubE">1 / 2 (250¤)</div>
+    </div>
+    <div class="phx-slot" id="phxHudX">
+      <div class="phx-key-badge">[X] 역습</div>
+      <div class="phx-pips" id="phxPipsX"></div>
+      <div class="phx-sub" id="phxSubX">0 / 6 PT</div>
+    </div>
+  `;
+  document.body.appendChild(phxHud);
+
+  const flashOverlay = document.createElement('div');
+  flashOverlay.id = 'phoenixFlashOverlay';
+  document.body.appendChild(flashOverlay);
+
+  const ribBanner = document.createElement('div');
+  ribBanner.id = 'phoenixRunItBackBanner';
+  ribBanner.innerText = '🔥 역습 (RUN IT BACK) 활성화 — 10.0초';
+  document.body.appendChild(ribBanner);
+
+  const cbPrompt = document.createElement('div');
+  cbPrompt.id = 'phoenixCurveballPrompt';
+  cbPrompt.innerText = '🔥 커브볼 장착됨 — [좌클릭] 왼쪽 커브 · [우클릭] 오른쪽 커브';
+  document.body.appendChild(cbPrompt);
+
+  // 2. 상점(B) 내 피닉스 스킬 구매/환불 UI 주입
+  function injectPhoenixAbilityShop() {
+    const shopModalEl = document.getElementById('shopModal');
+    const closeBtn = shopModalEl ? shopModalEl.querySelector('button') : null;
+    if (!shopModalEl || !closeBtn || document.getElementById('phoenixAbilityShopBar')) return;
+
+    const shopBar = document.createElement('div');
+    shopBar.id = 'phoenixAbilityShopBar';
+    shopBar.innerHTML = `
+      <div style="font-size:12px; font-weight:800; color:#fb923c; margin-bottom:6px; letter-spacing:0.5px;">
+        🔥 피닉스 (PHOENIX) 요원 스킬 구매 (좌클릭 구매 · 우클릭 환불)
+      </div>
+      <div class="phx-shop-row">
+        <div class="phx-shop-card" id="phxShopC">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[C] 불길</div>
+            <div style="font-size:12px; font-weight:bold; color:#facc15;">150 ¤</div>
+          </div>
+          <div style="font-size:11px; color:#cbd5e1; margin-top:3px;" id="phxShopCDesc">보유: 0 / 1 · 직선 화염벽</div>
+        </div>
+        <div class="phx-shop-card" id="phxShopQ">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[Q] 뜨거운 손</div>
+            <div style="font-size:12px; font-weight:bold; color:#facc15;">200 ¤</div>
+          </div>
+          <div style="font-size:11px; color:#cbd5e1; margin-top:3px;" id="phxShopQDesc">보유: 0 / 1 · 화염 장판</div>
+        </div>
+        <div class="phx-shop-card" id="phxShopE">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[E] 커브볼</div>
+            <div style="font-size:12px; font-weight:bold; color:#facc15;">250 ¤</div>
+          </div>
+          <div style="font-size:11px; color:#cbd5e1; margin-top:3px;" id="phxShopEDesc">보유: 1 / 2 · 곡선 섬광탄</div>
+        </div>
+        <div class="phx-shop-card maxed" id="phxShopX">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[X] 역습 (궁극기)</div>
+            <div style="font-size:12px; font-weight:bold; color:#fb923c;">6 PT</div>
+          </div>
+          <div style="font-size:11px; color:#cbd5e1; margin-top:3px;" id="phxShopXDesc">포인트: 0 / 6 · 10초 부활</div>
+        </div>
+      </div>
+    `;
+
+    closeBtn.parentNode.insertBefore(shopBar, closeBtn);
+
+    document.getElementById('phxShopC').addEventListener('click', () => buyPhoenixAbility('C'));
+    document.getElementById('phxShopC').addEventListener('contextmenu', (e) => { e.preventDefault(); refundPhoenixAbility('C'); });
+    document.getElementById('phxShopQ').addEventListener('click', () => buyPhoenixAbility('Q'));
+    document.getElementById('phxShopQ').addEventListener('contextmenu', (e) => { e.preventDefault(); refundPhoenixAbility('Q'); });
+    document.getElementById('phxShopE').addEventListener('click', () => buyPhoenixAbility('E'));
+    document.getElementById('phxShopE').addEventListener('contextmenu', (e) => { e.preventDefault(); refundPhoenixAbility('E'); });
+  }
+
+  function buyPhoenixAbility(slot) {
+    if (typeof myAgent === 'undefined' || myAgent !== 'phoenix') return;
+    const isRange = typeof currentMap !== 'undefined' && currentMap === 'range';
+    if (!isRange && typeof canBuyInCurrentState === 'function' && !canBuyInCurrentState()) {
+      if (typeof showShopNotice === 'function') showShopNotice('구매 시간(준비 시간)이 종료되었습니다!');
+      return;
+    }
+
+    if (slot === 'C') {
+      if (phoenixState.cCharges >= PHOENIX_CONFIG.C.max) return;
+      if (!isRange) {
+        if (credits < PHOENIX_CONFIG.C.price) {
+          if (typeof showShopNotice === 'function') showShopNotice('크레드가 부족합니다!');
+          return;
+        }
+        credits -= PHOENIX_CONFIG.C.price;
+        phoenixState.roundPurchasedC++;
+      }
+      phoenixState.cCharges++;
+      playPhoenixSound('buy');
+    } else if (slot === 'Q') {
+      if (phoenixState.qCharges >= PHOENIX_CONFIG.Q.max) return;
+      if (!isRange) {
+        if (credits < PHOENIX_CONFIG.Q.price) {
+          if (typeof showShopNotice === 'function') showShopNotice('크레드가 부족합니다!');
+          return;
+        }
+        credits -= PHOENIX_CONFIG.Q.price;
+        phoenixState.roundPurchasedQ++;
+      }
+      phoenixState.qCharges++;
+      playPhoenixSound('buy');
+    } else if (slot === 'E') {
+      if (phoenixState.eCharges >= PHOENIX_CONFIG.E.max) return;
+      if (!isRange) {
+        if (credits < PHOENIX_CONFIG.E.price) {
+          if (typeof showShopNotice === 'function') showShopNotice('크레드가 부족합니다!');
+          return;
+        }
+        credits -= PHOENIX_CONFIG.E.price;
+        phoenixState.roundPurchasedE++;
+      }
+      phoenixState.eCharges++;
+      playPhoenixSound('buy');
+    }
+    if (typeof updateHUD === 'function') updateHUD();
+    renderPhoenixHUD();
+  }
+
+  function refundPhoenixAbility(slot) {
+    if (typeof myAgent === 'undefined' || myAgent !== 'phoenix') return;
+    if (typeof currentMap !== 'undefined' && currentMap !== 'range' && typeof canBuyInCurrentState === 'function' && !canBuyInCurrentState()) return;
+
+    if (slot === 'C' && phoenixState.roundPurchasedC > 0 && phoenixState.cCharges > 0) {
+      phoenixState.cCharges--;
+      phoenixState.roundPurchasedC--;
+      credits = Math.min(9000, credits + PHOENIX_CONFIG.C.price);
+    } else if (slot === 'Q' && phoenixState.roundPurchasedQ > 0 && phoenixState.qCharges > 0) {
+      phoenixState.qCharges--;
+      phoenixState.roundPurchasedQ--;
+      credits = Math.min(9000, credits + PHOENIX_CONFIG.Q.price);
+    } else if (slot === 'E' && phoenixState.roundPurchasedE > 0 && phoenixState.eCharges > 0) {
+      phoenixState.eCharges--;
+      phoenixState.roundPurchasedE--;
+      credits = Math.min(9000, credits + PHOENIX_CONFIG.E.price);
+    }
+    if (typeof updateHUD === 'function') updateHUD();
+    renderPhoenixHUD();
+  }
+
+  // 3. WebAudio 효과음 합성
+  function playPhoenixSound(type) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!window._phxAudioCtx) window._phxAudioCtx = new AudioCtx();
+      const ctx = window._phxAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      if (type === 'buy') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.09);
+      } else if (type === 'blaze' || type === 'hothands') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(75, now + 0.35);
+        gain.gain.setValueAtTime(0.14, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.36);
+      } else if (type === 'flash') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(2400, now);
+        osc.frequency.exponentialRampToValueAtTime(1650, now + 0.45);
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.48);
+      } else if (type === 'ult_cast' || type === 'ult_return') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(type === 'ult_cast' ? 220 : 440, now);
+        osc.frequency.exponentialRampToValueAtTime(type === 'ult_cast' ? 620 : 190, now + 0.42);
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.45);
+      }
+    } catch (e) {}
+  }
+
+  // 4. [C] 불길 (Blaze): 전방 직선 시야 차단 + 적 도트 데미지 / 피닉스 본인 회복 불벽
+  function castBlaze() {
+    if (phoenixState.cCharges <= 0) return;
+    phoenixState.cCharges--;
+    playPhoenixSound('blaze');
+
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
+    forward.normalize();
+
+    const startPos = camera.position.clone().addScaledVector(forward, 1.4);
+    const floorY = (typeof getFloorHeightAt === 'function')
+      ? getFloorHeightAt(startPos.x, startPos.z, camera.position.y)
+      : 0;
+    startPos.y = floorY;
+
+    const wallGroup = new THREE.Group();
+    scene.add(wallGroup);
+
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0xf97316,
+      emissive: 0xea580c,
+      emissiveIntensity: 1.35,
+      roughness: 0.4,
+      transparent: false,
+      opacity: 1.0,
+      side: THREE.DoubleSide
+    });
+    const crestMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+    activeBlazeWalls.push({
+      group: wallGroup,
+      origin: startPos.clone(),
+      dir: forward.clone(),
+      maxLength: 16.0,
+      currentLength: 0.5,
+      height: 2.65,
+      timer: 8.0,
+      tickTimer: 0,
+      segments: [],
+      wallMat,
+      crestMat
+    });
+
+    renderPhoenixHUD();
+  }
+
+  // 5. [Q] 뜨거운 손 (Hot Hands): 바닥에 화염 장판을 투척해 적 지속 데미지 / 본인 회복
+  function castHotHands() {
+    if (phoenixState.qCharges <= 0) return;
+    phoenixState.qCharges--;
+    playPhoenixSound('hothands');
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const startPos = camera.position.clone().addScaledVector(dir, 0.85);
+
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.20, 14, 14),
+      new THREE.MeshStandardMaterial({
+        color: 0xfdba74,
+        emissive: 0xf97316,
+        emissiveIntensity: 1.5
+      })
+    );
+    orb.position.copy(startPos);
+    scene.add(orb);
+
+    activeHotHands.push({
+      mesh: orb,
+      vel: dir.multiplyScalar(22).add(new THREE.Vector3(0, 3.2, 0)),
+      expanded: false,
+      timer: 2.0,
+      radius: 3.4,
+      tickTimer: 0
+    });
+
+    renderPhoenixHUD();
+  }
+
+  function expandHotHandsPool(poolObj) {
+    if (poolObj.expanded) return;
+    poolObj.expanded = true;
+    poolObj.timer = 4.5;
+    scene.remove(poolObj.mesh);
+
+    const poolGroup = new THREE.Group();
+    poolGroup.position.copy(poolObj.mesh.position);
+
+    const baseMat = new THREE.MeshStandardMaterial({
+      color: 0xea580c,
+      emissive: 0xf97316,
+      emissiveIntensity: 1.4,
+      roughness: 0.5,
+      transparent: true,
+      opacity: 0.92
+    });
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0xfef08a,
+      transparent: true,
+      opacity: 0.78
+    });
+
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(poolObj.radius, poolObj.radius * 1.04, 0.08, 28), baseMat);
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(poolObj.radius * 0.55, poolObj.radius * 0.65, 0.11, 20), innerMat);
+    poolGroup.add(disc, core);
+    scene.add(poolGroup);
+
+    poolObj.mesh = poolGroup;
+    poolObj.core = core;
+  }
+
+  // 6. [E] 커브볼 (Curveball): E로 장착 후 좌클릭(왼쪽 커브) / 우클릭(오른쪽 커브) 섬광탄 투척
+  function equipCurveball() {
+    if (phoenixState.eCharges <= 0) return;
+    phoenixState.curveballEquipped = !phoenixState.curveballEquipped;
+    renderPhoenixHUD();
+  }
+
+  function throwCurveball(curveSign) {
+    // curveSign: -1 = 좌클릭(왼쪽으로 휘어짐), +1 = 우클릭(오른쪽으로 휘어짐)
+    if (phoenixState.eCharges <= 0) return;
+    phoenixState.eCharges--;
+    phoenixState.curveballEquipped = false;
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+    const startPos = camera.position.clone().addScaledVector(dir, 0.8);
+
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 14, 14),
+      new THREE.MeshBasicMaterial({ color: 0xfef08a })
+    );
+    orb.position.copy(startPos);
+    scene.add(orb);
+
+    activeCurveballs.push({
+      mesh: orb,
+      forward: dir.clone().normalize(),
+      right,
+      curveSign,
+      elapsed: 0,
+      fuse: 0.55,
+      speed: 22
+    });
+
+    renderPhoenixHUD();
+  }
+
+  function detonateCurveball(pos) {
+    playPhoenixSound('flash');
+
+    // 폭발 불꽃 구체 잠깐 표시
+    const burst = new THREE.Mesh(
+      new THREE.SphereGeometry(0.95, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 })
+    );
+    burst.position.copy(pos);
+    scene.add(burst);
+    setTimeout(() => scene.remove(burst), 140);
+
+    // 플레이어 시야가 섬광탄을 바라보고 있고 장애물에 가리지 않았는지 판정
+    const toFlash = new THREE.Vector3().subVectors(pos, camera.position);
+    const dist = toFlash.length();
+    if (dist <= 32) {
+      const lookDir = new THREE.Vector3();
+      camera.getWorldDirection(lookDir);
+      const dot = lookDir.dot(toFlash.clone().normalize());
+      let occluded = false;
+      if (typeof wallMeshes !== 'undefined') {
+        const ray = new THREE.Raycaster(camera.position, toFlash.clone().normalize(), 0.2, dist);
+        const wHits = ray.intersectObjects(wallMeshes);
+        if (wHits.length > 0) occluded = true;
+      }
+      if (!occluded && dot > 0.25) {
+        const intensity = Math.min(1.0, (dot - 0.15) * 1.35 * (1 - dist / 42));
+        flashOverlayMax = Math.max(0.65, 1.75 * intensity);
+        flashOverlayTimer = flashOverlayMax;
+      }
+    }
+
+    // 적 AI 봇 / 훈련봇 경직(에임 교란) 및 섬광 판정
+    if (typeof brawlBots !== 'undefined') {
+      brawlBots.forEach((bot) => {
+        if (!bot || !bot.userData || bot.userData.dead || bot.userData.team === myTeam) return;
+        const d = bot.position.distanceTo(pos);
+        if (d <= 18) {
+          bot.userData.fireCooldown = Math.max(bot.userData.fireCooldown || 0, 2.2);
+          bot.userData.strafeTimer = 2.0;
+        }
+      });
+    }
+    if (typeof bots !== 'undefined') {
+      bots.forEach((bot) => {
+        if (!bot || !bot.userData) return;
+        if (bot.position.distanceTo(pos) <= 18) {
+          bot.userData.strafeTimer = 2.0;
+        }
+      });
+    }
+  }
+
+  // 7. [X] 역습 (Run It Back): 6포인트 궁극기 · 불꽃 마커 생성 후 10초 내 사망/종료 시 원위치 체력 100 복귀
+  function activateRunItBack() {
+    if (phoenixState.runItBackActive) return;
+    if (phoenixState.ultPoints < PHOENIX_CONFIG.X.maxPoints) return;
+
+    phoenixState.ultPoints = 0;
+    phoenixState.runItBackActive = true;
+    phoenixState.runItBackTimer = PHOENIX_CONFIG.X.duration;
+    phoenixState.runItBackOrigin = camera.position.clone();
+    phoenixState.runItBackYaw = typeof yaw !== 'undefined' ? yaw : 0;
+    phoenixState.lastTrackedHp = typeof playerHp !== 'undefined' ? playerHp : 100;
+
+    // 원위치 불꽃 마커 생성
+    const markerGroup = new THREE.Group();
+    const floorY = (typeof getFloorHeightAt === 'function')
+      ? getFloorHeightAt(camera.position.x, camera.position.z, camera.position.y)
+      : 0;
+    markerGroup.position.set(camera.position.x, floorY + 0.05, camera.position.z);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.45, 0.72, 24),
+      new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    const pillar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.42, 1.9, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.48, side: THREE.DoubleSide })
+    );
+    pillar.position.y = 0.95;
+    markerGroup.add(ring, pillar);
+    scene.add(markerGroup);
+    phoenixState.runItBackMarker = markerGroup;
+
+    playPhoenixSound('ult_cast');
+    if (typeof addKillFeed === 'function') {
+      addKillFeed('[궁극기 X] 피닉스: "자, 가보자고!" — 역습 활성화 (10초)', true);
+    }
+    renderPhoenixHUD();
+  }
+
+  function finishRunItBack(reasonText = '시간 종료') {
+    if (!phoenixState.runItBackActive) return;
+    phoenixState.runItBackActive = false;
+    phoenixState.runItBackTimer = 0;
+    ribBanner.style.display = 'none';
+
+    if (phoenixState.runItBackMarker) {
+      scene.remove(phoenixState.runItBackMarker);
+      phoenixState.runItBackMarker = null;
+    }
+
+    if (phoenixState.runItBackOrigin) {
+      camera.position.copy(phoenixState.runItBackOrigin);
+      if (typeof yaw !== 'undefined') yaw = phoenixState.runItBackYaw;
+      if (typeof pitch !== 'undefined') pitch = 0;
+      if (typeof velY !== 'undefined') velY = 0;
+    }
+
+    if (typeof isDead !== 'undefined') isDead = false;
+    if (typeof playerHp !== 'undefined') playerHp = 100;
+    const deathBanner = document.getElementById('deathBanner');
+    if (deathBanner) deathBanner.style.display = 'none';
+    if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+    if (typeof updateHUD === 'function') updateHUD();
+
+    playPhoenixSound('ult_return');
+    if (typeof addKillFeed === 'function') {
+      addKillFeed(`[역습 복귀] ${reasonText} — 원위치로 체력 100 상태로 복귀했습니다!`, true);
+    }
+    renderPhoenixHUD();
+  }
+
+  // 8. 피닉스 화염 데미지 / 본인 자가 치유 헬퍼
+  function applyPhoenixFlameZoneEffect(dt, checkInsideFn, dpsEnemy = 42, hpsSelf = 24) {
+    // 1) 피닉스 본인 범위 내 체력 회복
+    if (typeof isDead === 'undefined' || !isDead) {
+      if (checkInsideFn(camera.position)) {
+        if (typeof playerHp !== 'undefined' && playerHp < 100) {
+          playerHp = Math.min(100, playerHp + hpsSelf * dt);
+          if (typeof updateHUD === 'function') updateHUD();
+        }
+      }
+    }
+
+    // 2) 사격장 훈련봇 지속 화염 데미지
+    if (typeof currentMap !== 'undefined' && currentMap === 'range' && typeof bots !== 'undefined') {
+      bots.forEach((bot) => {
+        if (!bot || !bot.userData) return;
+        if (checkInsideFn(bot.position)) {
+          let rem = dpsEnemy * dt;
+          if (bot.userData.shield > 0) {
+            const abs = Math.min(bot.userData.shield, rem);
+            bot.userData.shield -= abs;
+            rem -= abs;
+          }
+          bot.userData.hp -= rem;
+          if (bot.userData.hp <= 0) {
+            onPhoenixConfirmedKill();
+            if (typeof respawnBot === 'function') respawnBot(bot);
+          }
+        }
+      });
+    }
+
+    // 3) 일반전 적 AI 봇 지속 화염 데미지
+    if (typeof brawlBots !== 'undefined') {
+      brawlBots.forEach((bot) => {
+        if (!bot || !bot.userData || bot.userData.dead || bot.userData.team === myTeam) return;
+        if (checkInsideFn(bot.position)) {
+          let rem = dpsEnemy * dt;
+          if (bot.userData.shield > 0) {
+            const abs = Math.min(bot.userData.shield, rem);
+            bot.userData.shield -= abs;
+            rem -= abs;
+          }
+          bot.userData.hp -= rem;
+          if (bot.userData.hp <= 0) {
+            bot.userData.dead = true;
+            bot.visible = false;
+            if (bot.userData.weaponKey && bot.userData.weaponKey !== 'classic' && typeof spawnDroppedItem === 'function') {
+              spawnDroppedItem('weapon', bot.userData.weaponKey, bot.position);
+            }
+            const myNick = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+            playerStats.k += 1;
+            phoenixState.lastTrackedKills = playerStats.k;
+            if (typeof playerRoundKills !== 'undefined') playerRoundKills += 1;
+            bot.userData.d = (bot.userData.d || 0) + 1;
+            if (typeof getBotStat === 'function') getBotStat(bot.userData.nick).d += 1;
+            credits = Math.min(9000, credits + 200);
+            onPhoenixConfirmedKill();
+            if (typeof updateHUD === 'function') updateHUD();
+            if (typeof triggerScoreStreak === 'function') triggerScoreStreak(1, false);
+            if (typeof addKillFeed === 'function') {
+              addKillFeed(`${myNick} [화염 스킬] ➔ ${bot.userData.nick}`, true);
+            }
+            if (typeof countAliveTeams === 'function' && typeof endBrawlRound === 'function') {
+              const { redAlive, blueAlive } = countAliveTeams();
+              const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+              if ((enemyTeam === 'red' ? redAlive : blueAlive) === 0) {
+                endBrawlRound(myTeam, bot.position.clone(), false);
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  // 9. 킬 달성 시 커브볼(E) 2킬 충전 + 역습(X) 6포인트 충전
+  function onPhoenixConfirmedKill() {
+    if (phoenixState.eCharges < PHOENIX_CONFIG.E.max) {
+      phoenixState.eKillsProgress++;
+      if (phoenixState.eKillsProgress >= 2) {
+        phoenixState.eKillsProgress = 0;
+        phoenixState.eCharges++;
+        if (typeof addKillFeed === 'function') {
+          addKillFeed('[피닉스] 2킬 달성! 커브볼(E)이 1개 재충전되었습니다.', false);
+        }
+      }
+    }
+    if (!phoenixState.runItBackActive) {
+      phoenixState.ultPoints = Math.min(PHOENIX_CONFIG.X.maxPoints, phoenixState.ultPoints + 1);
+    }
+    renderPhoenixHUD();
+  }
+
+  // 10. 라운드 시작 / 초기화
+  function resetPhoenixForNewRound(isFullMatchReset = false) {
+    phoenixState.eCharges = Math.max(1, phoenixState.eCharges);
+    phoenixState.eKillsProgress = 0;
+    phoenixState.curveballEquipped = false;
+    phoenixState.roundPurchasedC = 0;
+    phoenixState.roundPurchasedQ = 0;
+    phoenixState.roundPurchasedE = 0;
+    phoenixState.runItBackActive = false;
+    phoenixState.runItBackTimer = 0;
+    ribBanner.style.display = 'none';
+
+    if (phoenixState.runItBackMarker) {
+      scene.remove(phoenixState.runItBackMarker);
+      phoenixState.runItBackMarker = null;
+    }
+
+    if (isFullMatchReset) {
+      phoenixState.cCharges = 0;
+      phoenixState.qCharges = 0;
+      phoenixState.eCharges = 1;
+      phoenixState.ultPoints = 0;
+    }
+
+    while (activeBlazeWalls.length > 0) {
+      const w = activeBlazeWalls.pop();
+      if (w && w.group) scene.remove(w.group);
+    }
+    while (activeHotHands.length > 0) {
+      const h = activeHotHands.pop();
+      if (h && h.mesh) scene.remove(h.mesh);
+    }
+    while (activeCurveballs.length > 0) {
+      const c = activeCurveballs.pop();
+      if (c && c.mesh) scene.remove(c.mesh);
+    }
+
+    renderPhoenixHUD();
+  }
+
+  // 11. 하단 HUD 및 상점 카드 UI 렌더링
+  function renderPhoenixHUD() {
+    const isPhoenix = (typeof myAgent !== 'undefined' && myAgent === 'phoenix');
+    phxHud.style.display = isPhoenix ? 'flex' : 'none';
+    const shopBar = document.getElementById('phoenixAbilityShopBar');
+    if (shopBar) shopBar.style.display = isPhoenix ? 'block' : 'none';
+    cbPrompt.style.display = (isPhoenix && phoenixState.curveballEquipped) ? 'block' : 'none';
+    if (!isPhoenix) return;
+
+    // C 불길
+    const hudC = document.getElementById('phxHudC');
+    hudC.className = 'phx-slot ' + (phoenixState.cCharges > 0 ? 'ready' : 'empty');
+    document.getElementById('phxPipsC').innerHTML =
+      `<div class="phx-pip ${phoenixState.cCharges > 0 ? 'filled' : ''}"></div>`;
+    document.getElementById('phxSubC').innerText = `${phoenixState.cCharges} / 1 (150¤)`;
+
+    // Q 뜨거운 손
+    const hudQ = document.getElementById('phxHudQ');
+    hudQ.className = 'phx-slot ' + (phoenixState.qCharges > 0 ? 'ready' : 'empty');
+    document.getElementById('phxPipsQ').innerHTML =
+      `<div class="phx-pip ${phoenixState.qCharges > 0 ? 'filled' : ''}"></div>`;
+    document.getElementById('phxSubQ').innerText = `${phoenixState.qCharges} / 1 (200¤)`;
+
+    // E 커브볼
+    const hudE = document.getElementById('phxHudE');
+    hudE.className = 'phx-slot ' + (phoenixState.eCharges > 0 ? 'ready' : 'empty');
+    document.getElementById('phxPipsE').innerHTML = [0, 1].map(i =>
+      `<div class="phx-pip ${i < phoenixState.eCharges ? 'filled' : ''}"></div>`
+    ).join('');
+    document.getElementById('phxSubE').innerText = phoenixState.eCharges >= 2
+      ? '2 / 2 (준비완료)'
+      : `${phoenixState.eCharges} / 2 (${phoenixState.eKillsProgress}/2킬)`;
+
+    // X 역습 (6포인트)
+    const hudX = document.getElementById('phxHudX');
+    if (phoenixState.runItBackActive) {
+      hudX.className = 'phx-slot ult-active';
+      document.getElementById('phxPipsX').innerHTML = Array.from({ length: 6 }, (_, i) =>
+        `<div class="phx-ult-pip ${i < Math.ceil((phoenixState.runItBackTimer / 10) * 6) ? 'filled' : ''}"></div>`
+      ).join('');
+      document.getElementById('phxSubX').innerText = `역습 중 (${phoenixState.runItBackTimer.toFixed(1)}s)`;
+    } else {
+      const ultReady = phoenixState.ultPoints >= PHOENIX_CONFIG.X.maxPoints;
+      hudX.className = 'phx-slot ' + (ultReady ? 'ult-ready' : 'empty');
+      document.getElementById('phxPipsX').innerHTML = Array.from({ length: 6 }, (_, i) =>
+        `<div class="phx-ult-pip ${i < phoenixState.ultPoints ? 'filled' : ''}"></div>`
+      ).join('');
+      document.getElementById('phxSubX').innerText = ultReady
+        ? '궁극기 준비완료 [X]'
+        : `${phoenixState.ultPoints} / 6 PT`;
+    }
+
+    // 상점 카드 갱신
+    const cDesc = document.getElementById('phxShopCDesc');
+    const qDesc = document.getElementById('phxShopQDesc');
+    const eDesc = document.getElementById('phxShopEDesc');
+    const xDesc = document.getElementById('phxShopXDesc');
+    if (cDesc) {
+      cDesc.innerText = `보유: ${phoenixState.cCharges} / 1 · 직선 화염벽`;
+      document.getElementById('phxShopC').classList.toggle('maxed', phoenixState.cCharges >= 1);
+    }
+    if (qDesc) {
+      qDesc.innerText = `보유: ${phoenixState.qCharges} / 1 · 화염 장판`;
+      document.getElementById('phxShopQ').classList.toggle('maxed', phoenixState.qCharges >= 1);
+    }
+    if (eDesc) {
+      eDesc.innerText = `보유: ${phoenixState.eCharges} / 2 · 2킬 충전 (${phoenixState.eKillsProgress}/2)`;
+      document.getElementById('phxShopE').classList.toggle('maxed', phoenixState.eCharges >= 2);
+    }
+    if (xDesc) {
+      xDesc.innerText = phoenixState.runItBackActive
+        ? `발동 중 (${phoenixState.runItBackTimer.toFixed(1)}초 남음)`
+        : `포인트: ${phoenixState.ultPoints} / 6 · 10초 부활`;
+      document.getElementById('phxShopX').classList.toggle('maxed', phoenixState.ultPoints >= 6 || phoenixState.runItBackActive);
+    }
+  }
+
+  // 12. 입력 이벤트 후킹 (C 불길, Q 뜨거운 손, E 커브볼 장착 -> 좌/우클릭 커브 투척, X 역습)
+  document.addEventListener('keydown', (e) => {
+    if (typeof myAgent === 'undefined' || myAgent !== 'phoenix') return;
+
+    if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code) && phoenixState.curveballEquipped) {
+      phoenixState.curveballEquipped = false;
+      renderPhoenixHUD();
+    }
+
+    if (document.pointerLockElement !== document.body) return;
+    if (typeof isDead !== 'undefined' && isDead) return;
+
+    if (e.code === 'KeyC') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      phoenixState.curveballEquipped = false;
+      castBlaze();
+    } else if (e.code === 'KeyQ') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      phoenixState.curveballEquipped = false;
+      castHotHands();
+    } else if (e.code === 'KeyE') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      equipCurveball();
+    } else if (e.code === 'KeyX') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!phoenixState.runItBackActive) activateRunItBack();
+    }
+  }, true);
+
+  document.addEventListener('mousedown', (e) => {
+    if (typeof myAgent === 'undefined' || myAgent !== 'phoenix') return;
+    if (document.pointerLockElement !== document.body) return;
+    if (typeof isDead !== 'undefined' && isDead) return;
+    if (!phoenixState.curveballEquipped) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.button === 0) {
+      throwCurveball(-1); // 좌클릭: 왼쪽 커브
+    } else if (e.button === 2) {
+      throwCurveball(1);  // 우클릭: 오른쪽 커브
+    }
+  }, true);
+
+  // 13. 실시간 프레임 루프
+  let phxLastFrame = performance.now();
+  function updatePhoenixSystems(now) {
+    requestAnimationFrame(updatePhoenixSystems);
+    const dt = Math.min(0.05, (now - phxLastFrame) / 1000);
+    phxLastFrame = now;
+
+    const isPhoenix = (typeof myAgent !== 'undefined' && myAgent === 'phoenix');
+
+    // 요원 전환 시 HUD 표시 상태 즉시 반영
+    if (phxHud.style.display !== (isPhoenix ? 'flex' : 'none')) {
+      renderPhoenixHUD();
+    }
+
+    // 라운드 전환 감지
+    if (typeof roundNumber !== 'undefined' && roundNumber !== phoenixState.lastTrackedRound) {
+      const isFullReset = (roundNumber === 1 || roundNumber === 13);
+      phoenixState.lastTrackedRound = roundNumber;
+      resetPhoenixForNewRound(isFullReset);
+    }
+
+    // 킬 수 증가 감지
+    if (isPhoenix && typeof playerStats !== 'undefined' && playerStats.k > phoenixState.lastTrackedKills) {
+      const diff = playerStats.k - phoenixState.lastTrackedKills;
+      phoenixState.lastTrackedKills = playerStats.k;
+      for (let i = 0; i < diff; i++) onPhoenixConfirmedKill();
+    }
+
+    // 사격장(range) 상시 연습 지원
+    if (isPhoenix && typeof currentMap !== 'undefined' && currentMap === 'range') {
+      if (phoenixState.eCharges === 0 && !phoenixState.curveballEquipped) {
+        phoenixState.eCharges = 2;
+        renderPhoenixHUD();
+      }
+      if (!phoenixState.runItBackActive && phoenixState.ultPoints < 6) {
+        phoenixState.ultPoints = 6;
+        renderPhoenixHUD();
+      }
+    }
+
+    // 섬광 화면 페이드아웃
+    if (flashOverlayTimer > 0) {
+      flashOverlayTimer = Math.max(0, flashOverlayTimer - dt);
+      const ratio = flashOverlayTimer / Math.max(0.1, flashOverlayMax);
+      flashOverlay.style.opacity = Math.min(1, ratio * 1.35).toFixed(3);
+    } else if (flashOverlay.style.opacity !== '0') {
+      flashOverlay.style.opacity = '0';
+    }
+
+    // [X] 역습 상태 감시: 사망(isDead 또는 playerHp <= 0) 또는 10초 만료 시 원위치 체력 100 즉시 복귀
+    if (phoenixState.runItBackActive) {
+      phoenixState.runItBackTimer -= dt;
+      ribBanner.style.display = 'block';
+      ribBanner.innerText = `🔥 역습 (RUN IT BACK) 활성화 — ${Math.max(0, phoenixState.runItBackTimer).toFixed(1)}초`;
+      renderPhoenixHUD();
+
+      if (phoenixState.runItBackMarker) {
+        phoenixState.runItBackMarker.rotation.y += dt * 3.0;
+      }
+
+      const diedDuringUlt = (typeof isDead !== 'undefined' && isDead) || (typeof playerHp !== 'undefined' && playerHp <= 0);
+      if (diedDuringUlt) {
+        finishRunItBack('역습 중 사망');
+      } else if (phoenixState.runItBackTimer <= 0) {
+        finishRunItBack('지속 시간 종료');
+      }
+    }
+
+    // [C] 불길 (Blaze) 직선 화염벽 확장 및 도트 데미지/자가 치유
+    for (let i = activeBlazeWalls.length - 1; i >= 0; i--) {
+      const w = activeBlazeWalls[i];
+      w.timer -= dt;
+
+      if (w.currentLength < w.maxLength && w.timer > 1.0) {
+        const nextLen = Math.min(w.maxLength, w.currentLength + 18.0 * dt);
+        while (w.segments.length * 0.8 < nextLen) {
+          const dist = w.segments.length * 0.8;
+          const segPos = w.origin.clone().addScaledVector(w.dir, dist);
+          let hitWall = false;
+          if (typeof wallColliders !== 'undefined') {
+            for (const c of wallColliders) {
+              if (segPos.x > c.minX && segPos.x < c.maxX && segPos.z > c.minZ && segPos.z < c.maxZ && (c.minY || 0) < 1.5 && c.maxY > 1.2) {
+                hitWall = true;
+                break;
+              }
+            }
+          }
+          if (hitWall) {
+            w.maxLength = dist;
+            break;
+          }
+          const segMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, w.height, 0.88), w.wallMat);
+          segMesh.position.set(segPos.x, segPos.y + w.height * 0.5, segPos.z);
+          segMesh.lookAt(segPos.clone().add(w.dir).setY(segPos.y + w.height * 0.5));
+          w.group.add(segMesh);
+          w.segments.push(segPos);
+        }
+        w.currentLength = nextLen;
+      }
+
+      if (w.segments.length > 0) {
+        applyPhoenixFlameZoneEffect(dt, (pos) => {
+          for (let sIdx = 0; sIdx < w.segments.length; sIdx++) {
+            const sp = w.segments[sIdx];
+            if (Math.hypot(pos.x - sp.x, pos.z - sp.z) <= 1.25 && Math.abs(pos.y - sp.y) <= 2.8) {
+              return true;
+            }
+          }
+          return false;
+        }, 40, 22);
+      }
+
+      if (w.timer <= 0) {
+        scene.remove(w.group);
+        activeBlazeWalls.splice(i, 1);
+      }
+    }
+
+    // [Q] 뜨거운 손 (Hot Hands) 투척 및 화염 장판 도트 데미지/자가 치유
+    for (let i = activeHotHands.length - 1; i >= 0; i--) {
+      const h = activeHotHands[i];
+      h.timer -= dt;
+      if (!h.expanded) {
+        h.mesh.position.addScaledVector(h.vel, dt);
+        h.vel.y -= 16.0 * dt;
+        const floorH = (typeof getFloorHeightAt === 'function')
+          ? getFloorHeightAt(h.mesh.position.x, h.mesh.position.z, h.mesh.position.y)
+          : 0;
+        if (h.mesh.position.y <= floorH + 0.15 || h.timer <= 0) {
+          h.mesh.position.y = floorH + 0.06;
+          expandHotHandsPool(h);
+        }
+      } else {
+        if (h.core) h.core.rotation.y += dt * 3.5;
+        applyPhoenixFlameZoneEffect(dt, (pos) => {
+          return Math.hypot(pos.x - h.mesh.position.x, pos.z - h.mesh.position.z) <= h.radius &&
+                 Math.abs(pos.y - h.mesh.position.y) <= 2.4;
+        }, 55, 28);
+
+        if (h.timer <= 0) {
+          scene.remove(h.mesh);
+          activeHotHands.splice(i, 1);
+        }
+      }
+    }
+
+    // [E] 커브볼 (Curveball) 좌/우 곡선 궤적 비행 및 섬광 폭발
+    for (let i = activeCurveballs.length - 1; i >= 0; i--) {
+      const cb = activeCurveballs[i];
+      cb.elapsed += dt;
+      const curveFactor = Math.pow(cb.elapsed / cb.fuse, 1.8) * 1.9 * cb.curveSign;
+      const moveVec = cb.forward.clone().addScaledVector(cb.right, curveFactor).normalize();
+      cb.mesh.position.addScaledVector(moveVec, cb.speed * dt);
+
+      if (cb.elapsed >= cb.fuse) {
+        detonateCurveball(cb.mesh.position.clone());
+        scene.remove(cb.mesh);
+        activeCurveballs.splice(i, 1);
+      }
+    }
+  }
+
+  injectPhoenixAbilityShop();
+  renderPhoenixHUD();
+  requestAnimationFrame(updatePhoenixSystems);
+})();
+</script>
+
 </body>
 </html>
