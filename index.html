@@ -9628,5 +9628,941 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
   </script>
+
+<script>
+(function () {
+  // =========================================================================
+  // MINI-VALO 3D: 제트(Jett) 전용 스킬 시스템 · 스킬 상점(B) · 하단 C/Q/E/X HUD
+  // =========================================================================
+  const JETT_CONFIG = {
+    C: { key: 'C', name: '연막 폭발 (Cloudburst)', max: 2, price: 200, desc: '시야 차단 구체 연막 투척 (최대 2개 · 200 ¤)' },
+    Q: { key: 'Q', name: '상승 기류 (Updraft)', max: 1, price: 150, desc: '즉시 공중으로 수직 도약 (최대 1개 · 150 ¤)' },
+    E: { key: 'E', name: '순풍 (Tailwind)', max: 1, price: 0, desc: '이동 방향으로 고속 대시 (매 라운드 1개 무료 · 2킬 시 재충전)' },
+    X: { key: 'X', name: '칼날 폭풍 (Blade Storm)', maxPoints: 8, knives: 5, desc: '8포인트 궁극기 · 단검 5개 장착 (좌클릭 1발 / 우클릭 일제 사격 · 킬 시 5개 충전)' }
+  };
+
+  const jettState = {
+    cCharges: 0,
+    qCharges: 0,
+    eCharges: 1,
+    eKillsProgress: 0,      // E 순풍 재충전용 킬 카운트 (2킬마다 1충전)
+    ultPoints: 0,           // X 궁극기 포인트 (최대 8)
+    bladeStormActive: false,
+    knivesRemaining: 0,
+    roundPurchasedC: 0,
+    roundPurchasedQ: 0,
+    lastTrackedKills: 0,
+    lastTrackedRound: 0,
+    glideActive: false
+  };
+
+  const activeSmokes = [];
+  const activeKnives = [];
+  let prevSlotBeforeUlt = 2;
+
+  // 1. 스타일 및 하단 C / Q / E / X HUD 생성
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    #jettSkillHud {
+      position: fixed;
+      bottom: 92px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 11;
+      pointer-events: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .jett-slot {
+      background: rgba(15, 25, 35, 0.88);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-bottom: 3px solid #38bdf8;
+      border-radius: 5px;
+      padding: 6px 12px;
+      min-width: 86px;
+      text-align: center;
+      color: #f8fafc;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+      transition: transform 0.12s, border-color 0.15s, background 0.15s;
+    }
+    .jett-slot.ready {
+      border-color: #38bdf8;
+      background: rgba(15, 32, 48, 0.92);
+    }
+    .jett-slot.empty {
+      opacity: 0.48;
+      border-bottom-color: #475569;
+    }
+    .jett-slot.ult-ready {
+      border-color: #00ffcc;
+      border-bottom-color: #00ffcc;
+      box-shadow: 0 0 14px rgba(0, 255, 204, 0.55);
+    }
+    .jett-slot.ult-active {
+      border-color: #ff4655;
+      border-bottom-color: #ff4655;
+      background: rgba(65, 16, 28, 0.92);
+      box-shadow: 0 0 16px rgba(255, 70, 85, 0.7);
+      transform: translateY(-3px);
+    }
+    .jett-key-badge {
+      font-size: 11px;
+      font-weight: 900;
+      color: #38bdf8;
+      letter-spacing: 1px;
+    }
+    .jett-skill-name {
+      font-size: 12px;
+      font-weight: 700;
+      margin: 2px 0;
+      color: #e2e8f0;
+    }
+    .jett-pips {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 3px;
+    }
+    .jett-pip {
+      width: 14px;
+      height: 5px;
+      border-radius: 2px;
+      background: #334155;
+    }
+    .jett-pip.filled {
+      background: #38bdf8;
+      box-shadow: 0 0 6px #38bdf8;
+    }
+    .jett-ult-pip {
+      width: 7px;
+      height: 5px;
+      border-radius: 1px;
+      background: #334155;
+    }
+    .jett-ult-pip.filled {
+      background: #00ffcc;
+      box-shadow: 0 0 5px #00ffcc;
+    }
+    .jett-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+    #jettAbilityShopBar {
+      width: 1160px;
+      max-width: 96vw;
+      margin-top: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-top: 3px solid #38bdf8;
+      padding: 10px 14px;
+      box-sizing: border-box;
+    }
+    .jett-shop-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .jett-shop-card {
+      background: rgba(20, 30, 40, 0.92);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .jett-shop-card:hover {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.14);
+    }
+    .jett-shop-card.maxed {
+      border-color: #00ffcc;
+      background: rgba(0, 255, 204, 0.12);
+    }
+    #jettBladeReticle {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 12;
+      display: none;
+      color: #38bdf8;
+      font-size: 13px;
+      font-weight: 900;
+      text-shadow: 0 0 8px #0284c7;
+      margin-top: 26px;
+    }
+  `;
+  document.head.appendChild(styleEl);
+
+  const skillHud = document.createElement('div');
+  skillHud.id = 'jettSkillHud';
+  skillHud.innerHTML = `
+    <div class="jett-slot" id="jettHudC">
+      <div class="jett-key-badge">[C] 연막 폭발</div>
+      <div class="jett-pips" id="jettPipsC"></div>
+      <div class="jett-sub" id="jettSubC">0 / 2</div>
+    </div>
+    <div class="jett-slot" id="jettHudQ">
+      <div class="jett-key-badge">[Q] 상승 기류</div>
+      <div class="jett-pips" id="jettPipsQ"></div>
+      <div class="jett-sub" id="jettSubQ">0 / 1</div>
+    </div>
+    <div class="jett-slot" id="jettHudE">
+      <div class="jett-key-badge">[E] 순풍</div>
+      <div class="jett-pips" id="jettPipsE"></div>
+      <div class="jett-sub" id="jettSubE">1 / 1 (0/2킬)</div>
+    </div>
+    <div class="jett-slot" id="jettHudX">
+      <div class="jett-key-badge">[X] 칼날 폭풍</div>
+      <div class="jett-pips" id="jettPipsX"></div>
+      <div class="jett-sub" id="jettSubX">0 / 8 PT</div>
+    </div>
+  `;
+  document.body.appendChild(skillHud);
+
+  const bladeReticle = document.createElement('div');
+  bladeReticle.id = 'jettBladeReticle';
+  bladeReticle.innerText = '❖ 단검 5 / 5 ❖';
+  document.body.appendChild(bladeReticle);
+
+  // 2. 상점 모달(shopModal) 내부에 제트 스킬 구매 섹션 삽입
+  function injectJettAbilityShop() {
+    const shopModalEl = document.getElementById('shopModal');
+    const closeBtn = document.getElementById('closeShopBtn');
+    if (!shopModalEl || !closeBtn || document.getElementById('jettAbilityShopBar')) return;
+
+    const shopBar = document.createElement('div');
+    shopBar.id = 'jettAbilityShopBar';
+    shopBar.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:15px; font-weight:bold; color:#38bdf8;">요원 스킬 상점 — 제트 (JETT ABILITIES)</span>
+        <span style="font-size:11px; color:#94a3b8;">좌클릭: 구매 | 우클릭: 이번 라운드 구매분 환불</span>
+      </div>
+      <div class="jett-shop-row">
+        <div class="jett-shop-card" id="shopSkillC">
+          <div>
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[C] 연막 폭발</div>
+            <div style="font-size:11px; color:#cbd5e1;" id="shopSkillCDesc">보유: 0 / 2 · 구체 연막</div>
+          </div>
+          <div style="font-size:13px; font-weight:bold; color:#00ffcc;">200 ¤</div>
+        </div>
+        <div class="jett-shop-card" id="shopSkillQ">
+          <div>
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[Q] 상승 기류</div>
+            <div style="font-size:11px; color:#cbd5e1;" id="shopSkillQDesc">보유: 0 / 1 · 수직 도약</div>
+          </div>
+          <div style="font-size:13px; font-weight:bold; color:#00ffcc;">150 ¤</div>
+        </div>
+        <div class="jett-shop-card maxed" id="shopSkillE">
+          <div>
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[E] 순풍 (시그니처)</div>
+            <div style="font-size:11px; color:#cbd5e1;" id="shopSkillEDesc">보유: 1 / 1 · 2킬 시 충전</div>
+          </div>
+          <div style="font-size:12px; font-weight:bold; color:#38bdf8;">기본 무료</div>
+        </div>
+        <div class="jett-shop-card" id="shopSkillX">
+          <div>
+            <div style="font-size:13px; font-weight:bold; color:#f8fafc;">[X] 칼날 폭풍 (궁극기)</div>
+            <div style="font-size:11px; color:#cbd5e1;" id="shopSkillXDesc">포인트: 0 / 8 · 단검 5개</div>
+          </div>
+          <div style="font-size:12px; font-weight:bold; color:#ffcc00;">8 PT</div>
+        </div>
+      </div>
+    `;
+    shopModalEl.insertBefore(shopBar, closeBtn);
+
+    const cardC = document.getElementById('shopSkillC');
+    const cardQ = document.getElementById('shopSkillQ');
+    cardC.addEventListener('click', () => buyJettAbility('C'));
+    cardC.addEventListener('contextmenu', (e) => { e.preventDefault(); refundJettAbility('C'); });
+    cardQ.addEventListener('click', () => buyJettAbility('Q'));
+    cardQ.addEventListener('contextmenu', (e) => { e.preventDefault(); refundJettAbility('Q'); });
+  }
+
+  function canPurchaseNow() {
+    if (typeof currentMap !== 'undefined' && currentMap === 'range') return true;
+    if (typeof roundPhase !== 'undefined' && roundPhase === 'PREP') return true;
+    return false;
+  }
+
+  function buyJettAbility(slot) {
+    if (typeof myAgent !== 'undefined' && myAgent !== 'jett') return;
+    if (!canPurchaseNow()) return;
+    const isRange = typeof currentMap !== 'undefined' && currentMap === 'range';
+
+    if (slot === 'C') {
+      if (jettState.cCharges >= JETT_CONFIG.C.max) return;
+      if (!isRange && credits < JETT_CONFIG.C.price) return;
+      if (!isRange) {
+        credits -= JETT_CONFIG.C.price;
+        jettState.roundPurchasedC++;
+      }
+      jettState.cCharges++;
+      playJettSound('buy');
+    } else if (slot === 'Q') {
+      if (jettState.qCharges >= JETT_CONFIG.Q.max) return;
+      if (!isRange && credits < JETT_CONFIG.Q.price) return;
+      if (!isRange) {
+        credits -= JETT_CONFIG.Q.price;
+        jettState.roundPurchasedQ++;
+      }
+      jettState.qCharges++;
+      playJettSound('buy');
+    }
+    if (typeof updateHUD === 'function') updateHUD();
+    renderJettHUD();
+  }
+
+  function refundJettAbility(slot) {
+    if (!canPurchaseNow()) return;
+    const isRange = typeof currentMap !== 'undefined' && currentMap === 'range';
+    if (isRange) return;
+
+    if (slot === 'C' && jettState.roundPurchasedC > 0 && jettState.cCharges > 0) {
+      jettState.cCharges--;
+      jettState.roundPurchasedC--;
+      credits = Math.min(9000, credits + JETT_CONFIG.C.price);
+    } else if (slot === 'Q' && jettState.roundPurchasedQ > 0 && jettState.qCharges > 0) {
+      jettState.qCharges--;
+      jettState.roundPurchasedQ--;
+      credits = Math.min(9000, credits + JETT_CONFIG.Q.price);
+    }
+    if (typeof updateHUD === 'function') updateHUD();
+    renderJettHUD();
+  }
+
+  // 3. 제트 스킬 사운드 효과 (Web Audio API)
+  function playJettSound(type) {
+    try {
+      if (typeof initAudio === 'function') initAudio();
+      if (typeof audioCtx === 'undefined' || !audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      if (type === 'updraft') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(760, now + 0.24);
+        gain.gain.setValueAtTime(0.28, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.27);
+      } else if (type === 'tailwind') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(580, now);
+        osc.frequency.exponentialRampToValueAtTime(160, now + 0.22);
+        gain.gain.setValueAtTime(0.32, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.25);
+      } else if (type === 'smoke') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(340, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.3);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.33);
+      } else if (type === 'ult_cast') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(1480, now + 0.28);
+        gain.gain.setValueAtTime(0.24, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.33);
+      } else if (type === 'knife_throw') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1250, now);
+        osc.frequency.exponentialRampToValueAtTime(320, now + 0.11);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.13);
+      } else if (type === 'buy') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(660, now);
+        osc.frequency.setValueAtTime(880, now + 0.05);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.13);
+      }
+    } catch (e) {}
+  }
+
+  // 4. [C] 연막 폭발 (Cloudburst): 전방으로 투척 후 벽/바닥 충돌 시 구체 연막 생성 (7초 지속)
+  function castCloudburst() {
+    if (jettState.cCharges <= 0) return;
+    jettState.cCharges--;
+    playJettSound('smoke');
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const startPos = camera.position.clone().addScaledVector(dir, 0.9);
+
+    const orbMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.24, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0xe0f2fe,
+        emissive: 0x38bdf8,
+        emissiveIntensity: 0.6,
+        roughness: 0.3
+      })
+    );
+    orbMesh.position.copy(startPos);
+    scene.add(orbMesh);
+
+    activeSmokes.push({
+      mesh: orbMesh,
+      vel: dir.multiplyScalar(26),
+      expanded: false,
+      timer: 1.6, // 비행 최대 시간 -> 이후 7.0초 연막 지속
+      smokeRadius: 3.8
+    });
+
+    renderJettHUD();
+  }
+
+  function expandSmokeCloud(smokeObj) {
+    if (smokeObj.expanded) return;
+    smokeObj.expanded = true;
+    smokeObj.timer = 7.0;
+    scene.remove(smokeObj.mesh);
+
+    const cloudGroup = new THREE.Group();
+    cloudGroup.position.copy(smokeObj.mesh.position);
+
+    const outerMat = new THREE.MeshStandardMaterial({
+      color: 0xcbd5e1,
+      emissive: 0x1e293b,
+      emissiveIntensity: 0.35,
+      roughness: 0.95,
+      transparent: true,
+      opacity: 0.94
+    });
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.22
+    });
+
+    const coreSphere = new THREE.Mesh(new THREE.SphereGeometry(smokeObj.smokeRadius, 24, 20), outerMat);
+    const swirlShell = new THREE.Mesh(new THREE.IcosahedronGeometry(smokeObj.smokeRadius * 1.02, 2), innerMat);
+    cloudGroup.add(coreSphere, swirlShell);
+    scene.add(cloudGroup);
+
+    smokeObj.mesh = cloudGroup;
+    smokeObj.outerMat = outerMat;
+    smokeObj.swirlShell = swirlShell;
+  }
+
+  // 5. [Q] 상승 기류 (Updraft): 수직 고도 상승
+  function castUpdraft() {
+    if (jettState.qCharges <= 0) return;
+    jettState.qCharges--;
+    playJettSound('updraft');
+
+    if (typeof velY !== 'undefined') velY = 12.6;
+    if (typeof isGrounded !== 'undefined') isGrounded = false;
+    renderJettHUD();
+  }
+
+  // 6. [E] 순풍 (Tailwind): 보유 충전 1개 소모하여 고속 대시
+  function castTailwind() {
+    if (jettState.eCharges <= 0) return;
+    if (typeof spikeState !== 'undefined' && (spikeState.plantProgress > 0 || spikeState.defuseProgress > 0)) return;
+
+    jettState.eCharges--;
+    playJettSound('tailwind');
+
+    if (typeof getMoveVectors === 'function' && typeof dashDir !== 'undefined') {
+      const { forward, right } = getMoveVectors();
+      const dir = new THREE.Vector3(0, 0, 0);
+      if (keys['KeyW']) dir.add(forward);
+      if (keys['KeyS']) dir.sub(forward);
+      if (keys['KeyD']) dir.add(right);
+      if (keys['KeyA']) dir.sub(right);
+      if (dir.lengthSq() === 0) dir.copy(forward);
+      else dir.normalize();
+      dashDir.copy(dir);
+      dashTime = 0.21;
+      dashCooldown = 0.6;
+    }
+    renderJettHUD();
+  }
+
+  // 7. [X] 칼날 폭풍 (Blade Storm): 8포인트 궁극기 · 단검 5개
+  function activateBladeStorm() {
+    if (jettState.bladeStormActive) return;
+    if (jettState.ultPoints < JETT_CONFIG.X.maxPoints) return;
+
+    jettState.ultPoints = 0;
+    jettState.bladeStormActive = true;
+    jettState.knivesRemaining = JETT_CONFIG.X.knives;
+    prevSlotBeforeUlt = typeof activeSlot !== 'undefined' ? activeSlot : 2;
+    playJettSound('ult_cast');
+    if (typeof addKillFeed === 'function') {
+      addKillFeed('[궁극기 X] 제트: "비켜!" — 칼날 폭풍 활성화 (단검 5개)', true);
+    }
+    renderJettHUD();
+  }
+
+  function deactivateBladeStorm(restoreSlot = true) {
+    if (!jettState.bladeStormActive) return;
+    jettState.bladeStormActive = false;
+    jettState.knivesRemaining = 0;
+    bladeReticle.style.display = 'none';
+    if (restoreSlot && typeof switchSlot === 'function') {
+      switchSlot(prevSlotBeforeUlt || (slotWeapons[1] ? 1 : 2));
+    }
+    renderJettHUD();
+  }
+
+  function throwBladeStormKnives(burstAll = false) {
+    if (!jettState.bladeStormActive || jettState.knivesRemaining <= 0) return;
+    if (typeof isDead !== 'undefined' && isDead) return;
+    if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase === 'PREP') return;
+
+    const count = burstAll ? jettState.knivesRemaining : 1;
+    jettState.knivesRemaining -= count;
+    playJettSound('knife_throw');
+
+    const baseDir = new THREE.Vector3();
+    camera.getWorldDirection(baseDir);
+
+    for (let i = 0; i < count; i++) {
+      const spreadAngle = burstAll ? ((i - (count - 1) / 2) * 0.045) : 0;
+      const spreadY = burstAll ? ((Math.random() - 0.5) * 0.025) : 0;
+      const dir = baseDir.clone();
+      dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), spreadAngle);
+      dir.y += spreadY;
+      dir.normalize();
+
+      const knifeMesh = new THREE.Mesh(
+        new THREE.ConeGeometry(0.045, 0.42, 6),
+        new THREE.MeshStandardMaterial({
+          color: 0xe0f2fe,
+          emissive: 0x38bdf8,
+          emissiveIntensity: 1.2,
+          metalness: 0.9,
+          roughness: 0.15
+        })
+      );
+      knifeMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      const spawnPos = camera.position.clone().addScaledVector(dir, 0.75);
+      spawnPos.y -= 0.08;
+      knifeMesh.position.copy(spawnPos);
+      scene.add(knifeMesh);
+
+      activeKnives.push({
+        mesh: knifeMesh,
+        dir,
+        speed: 78,
+        dist: 0,
+        maxDist: 110,
+        isBurst: burstAll
+      });
+    }
+
+    if (jettState.knivesRemaining <= 0) {
+      setTimeout(() => {
+        if (jettState.bladeStormActive && jettState.knivesRemaining <= 0) {
+          deactivateBladeStorm(true);
+        }
+      }, 180);
+    }
+    renderJettHUD();
+  }
+
+  function processKnifeHit(knife, nextPos) {
+    const ray = new THREE.Raycaster(knife.mesh.position, knife.dir, 0, knife.dir.distanceTo(nextPos) + knife.speed * 0.02 + 0.6);
+    const targets = (typeof currentMap !== 'undefined' && currentMap === 'range')
+      ? (typeof botHitboxes !== 'undefined' ? botHitboxes : [])
+      : [...(typeof remoteHitboxes !== 'undefined' ? remoteHitboxes : []), ...(typeof brawlBotHitboxes !== 'undefined' ? brawlBotHitboxes : [])];
+
+    const hits = ray.intersectObjects(targets);
+    if (hits.length === 0) return false;
+
+    const hit = hits[0];
+    const hitObj = hit.object;
+    const part = hitObj.userData.part || 'body';
+    const dmg = part === 'head' ? 150 : 50; // 발로란트 제트 단검 공식 데미지: 헤드 150 / 몸통·다리 50
+
+    if (typeof spawnHitSpark === 'function') spawnHitSpark(hit.point, part === 'head');
+    if (typeof playHitMarkerSound === 'function') playHitMarkerSound(part === 'head');
+
+    // 사격장 훈련봇 타격
+    if (hitObj.userData.targetType === 'bot' && hitObj.userData.botRoot) {
+      const bd = hitObj.userData.botRoot.userData;
+      let rem = dmg;
+      if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+      bd.hp -= rem;
+      if (bd.hp <= 0) {
+        onJettConfirmedKill(part === 'head', knife.isBurst);
+        if (typeof respawnBot === 'function') respawnBot(hitObj.userData.botRoot);
+      }
+      return true;
+    }
+
+    // 일반전 AI 봇 타격
+    if (hitObj.userData.targetType === 'brawlBot' && hitObj.userData.botRoot) {
+      const botRoot = hitObj.userData.botRoot;
+      const bd = botRoot.userData;
+      if (bd.dead || bd.team === myTeam) return false;
+      let rem = dmg;
+      if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+      bd.hp -= rem;
+      if (bd.hp <= 0) {
+        bd.dead = true;
+        botRoot.visible = false;
+        if (bd.weaponKey && bd.weaponKey !== 'classic' && typeof spawnDroppedItem === 'function') {
+          spawnDroppedItem('weapon', bd.weaponKey, botRoot.position);
+        }
+        const myNick = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+        playerStats.k += 1;
+        jettState.lastTrackedKills = playerStats.k;
+        if (typeof playerRoundKills !== 'undefined') playerRoundKills += 1;
+        bd.d = (bd.d || 0) + 1;
+        if (typeof getBotStat === 'function') getBotStat(bd.nick).d += 1;
+        credits = Math.min(9000, credits + 200);
+        onJettConfirmedKill(part === 'head', knife.isBurst);
+        if (typeof updateHUD === 'function') updateHUD();
+        if (typeof triggerScoreStreak === 'function') triggerScoreStreak(1, part === 'head');
+        if (typeof addKillFeed === 'function') {
+          addKillFeed(`${myNick} [칼날 폭풍] ➔ ${bd.nick}${part === 'head' ? ' [헤드샷]' : ''}`, true);
+        }
+        if (typeof countAliveTeams === 'function' && typeof endBrawlRound === 'function') {
+          const { redAlive, blueAlive } = countAliveTeams();
+          const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+          if ((enemyTeam === 'red' ? redAlive : blueAlive) === 0) {
+            endBrawlRound(myTeam, botRoot.position.clone(), false);
+          }
+        }
+      }
+      return true;
+    }
+
+    // 멀티플레이어 원격 플레이어 타격
+    if (hitObj.userData.targetType === 'player') {
+      const targetPeerId = hitObj.userData.peerId;
+      const rp = remotePlayers[targetPeerId];
+      if (!rp || rp.isDead || rp.team === myTeam) return false;
+      const myNick = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+      const payload = {
+        type: 'hit',
+        targetId: targetPeerId,
+        part,
+        dmg,
+        attackerId: myPeerId,
+        attackerNick: myNick,
+        attackerTeam: myTeam,
+        attackerPos: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+        weaponName: '칼날 폭풍',
+        isHead: part === 'head'
+      };
+      if (connections[targetPeerId] && connections[targetPeerId].open) connections[targetPeerId].send(payload);
+      else if (typeof broadcastData === 'function') broadcastData(payload);
+      return true;
+    }
+
+    return false;
+  }
+
+  // 8. 킬 달성 시 제트 패시브/충전 로직 (E: 2킬당 1충전, X: 궁극기 포인트 +1 / 칼날 폭풍 중 처치 시 단검 5개 즉시 재충전)
+  function onJettConfirmedKill(isHead = false, fromRightClickBurst = false) {
+    // E 순풍 2킬 충전
+    if (jettState.eCharges < JETT_CONFIG.E.max) {
+      jettState.eKillsProgress++;
+      if (jettState.eKillsProgress >= 2) {
+        jettState.eKillsProgress = 0;
+        jettState.eCharges = 1;
+        if (typeof addKillFeed === 'function') {
+          addKillFeed('[제트] 2킬 달성! 순풍(E)이 재충전되었습니다.', false);
+        }
+      }
+    }
+
+    // X 칼날 폭풍 처치 시 단검 5개 리필 (발로란트 공식: 좌클릭 단검 킬 시 리필, 우클릭 일제 사격 킬은 비리필)
+    if (jettState.bladeStormActive) {
+      if (!fromRightClickBurst) {
+        jettState.knivesRemaining = JETT_CONFIG.X.knives;
+      }
+    } else {
+      jettState.ultPoints = Math.min(JETT_CONFIG.X.maxPoints, jettState.ultPoints + 1);
+    }
+    renderJettHUD();
+  }
+
+  // 9. 라운드 시작 / 초기화 동기화
+  function resetJettForNewRound(isFullMatchReset = false) {
+    jettState.eCharges = 1;          // 매 라운드 순풍(E) 기본 1개 무료 지급
+    jettState.eKillsProgress = 0;
+    jettState.roundPurchasedC = 0;
+    jettState.roundPurchasedQ = 0;
+    jettState.bladeStormActive = false;
+    jettState.knivesRemaining = 0;
+    bladeReticle.style.display = 'none';
+
+    if (isFullMatchReset) {
+      jettState.cCharges = 0;
+      jettState.qCharges = 0;
+      jettState.ultPoints = 0;
+    }
+
+    // 맵에 남은 연막/단검 제거
+    while (activeSmokes.length > 0) {
+      const s = activeSmokes.pop();
+      if (s && s.mesh) scene.remove(s.mesh);
+    }
+    while (activeKnives.length > 0) {
+      const k = activeKnives.pop();
+      if (k && k.mesh) scene.remove(k.mesh);
+    }
+    renderJettHUD();
+  }
+
+  // 10. 하단 HUD 및 상점 카드 UI 렌더링
+  function renderJettHUD() {
+    const isJett = (typeof myAgent === 'undefined' || myAgent === 'jett');
+    skillHud.style.display = isJett ? 'flex' : 'none';
+    const shopBar = document.getElementById('jettAbilityShopBar');
+    if (shopBar) shopBar.style.display = isJett ? 'block' : 'none';
+    if (!isJett) return;
+
+    // C 연막 폭발
+    const hudC = document.getElementById('jettHudC');
+    hudC.className = 'jett-slot ' + (jettState.cCharges > 0 ? 'ready' : 'empty');
+    document.getElementById('jettPipsC').innerHTML = [0, 1].map(i =>
+      `<div class="jett-pip ${i < jettState.cCharges ? 'filled' : ''}"></div>`
+    ).join('');
+    document.getElementById('jettSubC').innerText = `${jettState.cCharges} / 2 (200¤)`;
+
+    // Q 상승 기류
+    const hudQ = document.getElementById('jettHudQ');
+    hudQ.className = 'jett-slot ' + (jettState.qCharges > 0 ? 'ready' : 'empty');
+    document.getElementById('jettPipsQ').innerHTML =
+      `<div class="jett-pip ${jettState.qCharges > 0 ? 'filled' : ''}"></div>`;
+    document.getElementById('jettSubQ').innerText = `${jettState.qCharges} / 1 (150¤)`;
+
+    // E 순풍
+    const hudE = document.getElementById('jettHudE');
+    hudE.className = 'jett-slot ' + (jettState.eCharges > 0 ? 'ready' : 'empty');
+    document.getElementById('jettPipsE').innerHTML =
+      `<div class="jett-pip ${jettState.eCharges > 0 ? 'filled' : ''}"></div>`;
+    document.getElementById('jettSubE').innerText = jettState.eCharges > 0
+      ? '1 / 1 (준비완료)'
+      : `0 / 1 (${jettState.eKillsProgress}/2킬)`;
+
+    // X 칼날 폭풍
+    const hudX = document.getElementById('jettHudX');
+    if (jettState.bladeStormActive) {
+      hudX.className = 'jett-slot ult-active';
+      document.getElementById('jettPipsX').innerHTML = [0, 1, 2, 3, 4].map(i =>
+        `<div class="jett-pip ${i < jettState.knivesRemaining ? 'filled' : ''}"></div>`
+      ).join('');
+      document.getElementById('jettSubX').innerText = `단검 ${jettState.knivesRemaining} / 5`;
+      bladeReticle.style.display = 'block';
+      bladeReticle.innerText = `❖ 칼날 폭풍: 단검 ${jettState.knivesRemaining} / 5 ❖`;
+    } else {
+      const ultReady = jettState.ultPoints >= JETT_CONFIG.X.maxPoints;
+      hudX.className = 'jett-slot ' + (ultReady ? 'ult-ready' : 'empty');
+      document.getElementById('jettPipsX').innerHTML = Array.from({ length: 8 }, (_, i) =>
+        `<div class="jett-ult-pip ${i < jettState.ultPoints ? 'filled' : ''}"></div>`
+      ).join('');
+      document.getElementById('jettSubX').innerText = ultReady
+        ? '궁극기 준비완료 [X]'
+        : `${jettState.ultPoints} / 8 PT`;
+      bladeReticle.style.display = 'none';
+    }
+
+    // 상점 카드 상태 갱신
+    const cDesc = document.getElementById('shopSkillCDesc');
+    const qDesc = document.getElementById('shopSkillQDesc');
+    const eDesc = document.getElementById('shopSkillEDesc');
+    const xDesc = document.getElementById('shopSkillXDesc');
+    if (cDesc) {
+      cDesc.innerText = `보유: ${jettState.cCharges} / 2 · 구체 연막`;
+      document.getElementById('shopSkillC').classList.toggle('maxed', jettState.cCharges >= 2);
+    }
+    if (qDesc) {
+      qDesc.innerText = `보유: ${jettState.qCharges} / 1 · 수직 도약`;
+      document.getElementById('shopSkillQ').classList.toggle('maxed', jettState.qCharges >= 1);
+    }
+    if (eDesc) {
+      eDesc.innerText = `보유: ${jettState.eCharges} / 1 · 2킬 시 충전 (${jettState.eKillsProgress}/2)`;
+    }
+    if (xDesc) {
+      xDesc.innerText = jettState.bladeStormActive
+        ? `발동 중 (단검 ${jettState.knivesRemaining}/5)`
+        : `포인트: ${jettState.ultPoints} / 8 · 단검 5개`;
+      document.getElementById('shopSkillX').classList.toggle('maxed', jettState.ultPoints >= 8 || jettState.bladeStormActive);
+    }
+  }
+
+  // 11. 입력 이벤트 후킹 (capture 단계에서 기존 E키 쿨타임 로직 및 총기 발사 가로채기)
+  document.addEventListener('keydown', (e) => {
+    if (typeof myAgent !== 'undefined' && myAgent !== 'jett') return;
+
+    // 1~4 슬롯 전환 시 칼날 폭풍 해제
+    if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code) && jettState.bladeStormActive) {
+      deactivateBladeStorm(false);
+    }
+
+    if (document.pointerLockElement !== document.body) return;
+    if (typeof isDead !== 'undefined' && isDead) return;
+
+    if (e.code === 'KeyC') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      castCloudburst();
+    } else if (e.code === 'KeyQ') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      castUpdraft();
+    } else if (e.code === 'KeyE') {
+      // 기존 index (28).html의 기본 E 대시를 제트 순풍(1충전 + 2킬 재충전)으로 대체
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      castTailwind();
+    } else if (e.code === 'KeyX') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!jettState.bladeStormActive) activateBladeStorm();
+    }
+  }, true);
+
+  document.addEventListener('mousedown', (e) => {
+    if (typeof myAgent !== 'undefined' && myAgent !== 'jett') return;
+    if (document.pointerLockElement !== document.body) return;
+    if (typeof isDead !== 'undefined' && isDead) return;
+    if (!jettState.bladeStormActive) return;
+
+    // 칼날 폭풍 활성화 중에는 총기 대신 단검 투척 (좌클릭 1발 / 우클릭 잔여 단검 일제 투척)
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.button === 0) {
+      throwBladeStormKnives(false);
+    } else if (e.button === 2) {
+      throwBladeStormKnives(true);
+    }
+  }, true);
+
+  // 12. 실시간 프레임 루프: 연막 물리, 단검 투사체, 제트 패시브 활강(Space 홀드), 라운드/킬 동기화
+  let lastFrameTime = performance.now();
+  function updateJettSystems(now) {
+    requestAnimationFrame(updateJettSystems);
+    const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+    lastFrameTime = now;
+
+    // 라운드 전환 감지
+    if (typeof roundNumber !== 'undefined' && roundNumber !== jettState.lastTrackedRound) {
+      const isFullReset = (roundNumber === 1 || roundNumber === 13);
+      jettState.lastTrackedRound = roundNumber;
+      resetJettForNewRound(isFullReset);
+    }
+
+    // 멀티플레이어 킬 증가 감지
+    if (typeof playerStats !== 'undefined' && playerStats.k > jettState.lastTrackedKills) {
+      const diff = playerStats.k - jettState.lastTrackedKills;
+      jettState.lastTrackedKills = playerStats.k;
+      for (let i = 0; i < diff; i++) onJettConfirmedKill(false, false);
+    }
+
+    // 사격장(range)에서는 스킬/궁극기 상시 연습 가능하도록 보정
+    if (typeof currentMap !== 'undefined' && currentMap === 'range' && (typeof myAgent === 'undefined' || myAgent === 'jett')) {
+      if (jettState.eCharges === 0 && typeof dashTime !== 'undefined' && dashTime <= 0) {
+        jettState.eCharges = 1;
+        renderJettHUD();
+      }
+      if (!jettState.bladeStormActive && jettState.ultPoints < 8) {
+        jettState.ultPoints = 8;
+        renderJettHUD();
+      }
+    }
+
+    // 제트 패시브: 공중에서 Space 키를 누르고 있으면 낙하 속도 감소 (활강)
+    if ((typeof myAgent === 'undefined' || myAgent === 'jett') &&
+        typeof isGrounded !== 'undefined' && !isGrounded &&
+        typeof keys !== 'undefined' && keys['Space'] &&
+        typeof velY !== 'undefined' && velY < -2.2) {
+      velY = -2.2;
+    }
+
+    // 구체 연막(C) 업데이트
+    for (let i = activeSmokes.length - 1; i >= 0; i--) {
+      const s = activeSmokes[i];
+      s.timer -= dt;
+      if (!s.expanded) {
+        s.mesh.position.addScaledVector(s.vel, dt);
+        s.vel.y -= 9.8 * dt;
+        const floorH = (typeof getFloorHeightAt === 'function')
+          ? getFloorHeightAt(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y)
+          : 0;
+        let hitWall = s.mesh.position.y <= floorH + 0.3;
+        if (!hitWall && typeof wallColliders !== 'undefined') {
+          for (const c of wallColliders) {
+            if (s.mesh.position.x > c.minX && s.mesh.position.x < c.maxX &&
+                s.mesh.position.z > c.minZ && s.mesh.position.z < c.maxZ &&
+                s.mesh.position.y >= (c.minY || 0) && s.mesh.position.y <= c.maxY) {
+              hitWall = true;
+              break;
+            }
+          }
+        }
+        if (hitWall || s.timer <= 0) {
+          if (s.mesh.position.y < floorH + 1.4) s.mesh.position.y = floorH + 1.4;
+          expandSmokeCloud(s);
+        }
+      } else {
+        if (s.swirlShell) s.swirlShell.rotation.y += dt * 0.9;
+        if (s.timer < 1.0 && s.outerMat) {
+          s.outerMat.opacity = Math.max(0, s.timer * 0.94);
+        }
+        if (s.timer <= 0) {
+          scene.remove(s.mesh);
+          activeSmokes.splice(i, 1);
+        }
+      }
+    }
+
+    // 칼날 폭풍(X) 단검 투사체 업데이트
+    for (let i = activeKnives.length - 1; i >= 0; i--) {
+      const k = activeKnives[i];
+      const step = k.speed * dt;
+      const nextPos = k.mesh.position.clone().addScaledVector(k.dir, step);
+      const hitEnemy = processKnifeHit(k, nextPos);
+      k.mesh.position.copy(nextPos);
+      k.dist += step;
+
+      if (hitEnemy || k.dist >= k.maxDist) {
+        scene.remove(k.mesh);
+        activeKnives.splice(i, 1);
+      }
+    }
+
+    // 기존 HUD의 대시 상태 텍스트 동기화
+    const dashStatusEl = document.getElementById('dashStatus');
+    if (dashStatusEl && (typeof myAgent === 'undefined' || myAgent === 'jett')) {
+      dashStatusEl.innerText = jettState.eCharges > 0
+        ? '순풍 준비완료'
+        : `재충전 (${jettState.eKillsProgress}/2킬)`;
+      dashStatusEl.style.color = jettState.eCharges > 0 ? '#38bdf8' : '#ff4655';
+    }
+  }
+
+  injectJettAbilityShop();
+  renderJettHUD();
+  requestAnimationFrame(updateJettSystems);
+})();
+</script>
 </body>
 </html>
