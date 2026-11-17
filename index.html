@@ -7081,9 +7081,27 @@
 
       const playerHeadPos = camera.position.clone();
 
-      for (const bot of brawlBots) {
+      for (let bIdx = 0; bIdx < brawlBots.length; bIdx++) {
+        const bot = brawlBots[bIdx];
         const bd = bot.userData;
         if (bd.dead) continue;
+
+        if (bd.blindTimer && bd.blindTimer > 0) {
+          bd.blindTimer = Math.max(0, bd.blindTimer - dt);
+          bot.rotation.y += (Math.sin(performance.now() * 0.007 + bIdx) * 2.4) * dt;
+          const wanderDir = new THREE.Vector3(Math.sin(bot.rotation.y), 0, Math.cos(bot.rotation.y));
+          moveBrawlBotWithCollision(bot, wanderDir.x * 2.2 * dt, wanderDir.z * 2.2 * dt);
+          if (bd.blindOrbGroup) {
+            bd.blindOrbGroup.visible = true;
+            bd.blindOrbGroup.rotation.y += dt * 7.5;
+            if (bd.blindOrbGroup.userData && bd.blindOrbGroup.userData.outer) {
+              bd.blindOrbGroup.userData.outer.rotation.x += dt * 5.0;
+            }
+          }
+          continue;
+        } else if (bd.blindOrbGroup) {
+          bd.blindOrbGroup.visible = false;
+        }
 
         const botEyePos = new THREE.Vector3(bot.position.x, bot.position.y + 1.85, bot.position.z);
         const distToLocalPlayer = botEyePos.distanceTo(playerHeadPos);
@@ -7540,6 +7558,10 @@
               remotePlayers[conn.peer].targetYaw = curYaw;
               remotePlayers[conn.peer].hasPosUpdate = true;
             }
+          }
+        } else if (msg.type === 'phoenix_flash') {
+          if (typeof window.__onRemotePhoenixFlash === 'function' && msg.pos) {
+            window.__onRemotePhoenixFlash(new THREE.Vector3(msg.pos.x, msg.pos.y, msg.pos.z), conn.peer);
           }
         } else if (msg.type === 'hit') {
           if ((!msg.targetId || msg.targetId === myPeerId) && !isDead) {
@@ -9657,6 +9679,7 @@
     tailwindWindowTimer: 0, // [수정 1] E 1단계 바람 활성화 10초 카운트다운
     ultPoints: 0,           // X 궁극기 포인트 (최대 8)
     bladeStormActive: false,
+    bladeStormEquipped: false,
     knivesRemaining: 0,
     roundPurchasedC: 0,
     roundPurchasedQ: 0,
@@ -9664,6 +9687,13 @@
     lastTrackedRound: 0,
     glideActive: false
   };
+
+  function isJettSkillLockedInPrep(slotKey) {
+    const isPrep = (typeof currentMap !== 'undefined' && currentMap === 'brawl' &&
+                    typeof roundPhase !== 'undefined' && roundPhase === 'PREP');
+    if (!isPrep) return false;
+    return slotKey !== 'Q'; // 준비 시간에는 제트 Q(상승 기류)만 허용
+  }
 
   const activeSmokes = [];
   const activeKnives = [];
@@ -10286,7 +10316,7 @@
   function syncBladeStormViewModel() {
     ensureBladeStormViewModel();
     if (!bladeStormViewGroup) return;
-    if (jettState.bladeStormActive) {
+    if (jettState.bladeStormActive && jettState.bladeStormEquipped) {
       if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
       bladeStormViewGroup.visible = true;
       bladeStormKnifeMeshes.forEach((mesh, idx) => {
@@ -10297,12 +10327,33 @@
     }
   }
 
+  function equipBladeStorm(playSound = false) {
+    if (!jettState.bladeStormActive || jettState.knivesRemaining <= 0) return;
+    jettState.bladeStormEquipped = true;
+    if (playSound) playJettSound('ult_cast');
+    syncBladeStormViewModel();
+    renderJettHUD();
+  }
+
+  function holsterBladeStorm() {
+    if (!jettState.bladeStormEquipped) return;
+    jettState.bladeStormEquipped = false;
+    bladeReticle.style.display = 'none';
+    syncBladeStormViewModel();
+    if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+    renderJettHUD();
+  }
+
   function activateBladeStorm() {
-    if (jettState.bladeStormActive) return;
+    if (jettState.bladeStormActive && jettState.knivesRemaining > 0) {
+      if (!jettState.bladeStormEquipped) equipBladeStorm(true);
+      return;
+    }
     if (jettState.ultPoints < JETT_CONFIG.X.maxPoints) return;
 
     jettState.ultPoints = 0;
     jettState.bladeStormActive = true;
+    jettState.bladeStormEquipped = true;
     jettState.knivesRemaining = JETT_CONFIG.X.knives;
     prevSlotBeforeUlt = typeof activeSlot !== 'undefined' ? activeSlot : 2;
     playJettSound('ult_cast');
@@ -10316,6 +10367,7 @@
   function deactivateBladeStorm(restoreSlot = true) {
     if (!jettState.bladeStormActive) return;
     jettState.bladeStormActive = false;
+    jettState.bladeStormEquipped = false;
     jettState.knivesRemaining = 0;
     bladeReticle.style.display = 'none';
     syncBladeStormViewModel();
@@ -10328,7 +10380,7 @@
   }
 
   function throwBladeStormKnives(burstAll = false) {
-    if (!jettState.bladeStormActive || jettState.knivesRemaining <= 0) return;
+    if (!jettState.bladeStormActive || !jettState.bladeStormEquipped || jettState.knivesRemaining <= 0) return;
     if (typeof isDead !== 'undefined' && isDead) return;
     if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase === 'PREP') return;
 
@@ -10511,6 +10563,7 @@
     jettState.roundPurchasedC = 0;
     jettState.roundPurchasedQ = 0;
     jettState.bladeStormActive = false;
+    jettState.bladeStormEquipped = false;
     jettState.knivesRemaining = 0;
     bladeReticle.style.display = 'none';
     tailwindGaugeWrap.style.display = 'none';
@@ -10561,7 +10614,8 @@
 
     // E 순풍 (1단계 바람 활성화 10초 게이지 표시)
     const hudE = document.getElementById('jettHudE');
-    if (jettState.tailwindWindowTimer > 0) {
+    const lockE = isJettSkillLockedInPrep('E');
+    if (jettState.tailwindWindowTimer > 0 && !lockE) {
       hudE.className = 'jett-slot wind-active';
       document.getElementById('jettPipsE').innerHTML = `<div class="jett-pip filled"></div>`;
       document.getElementById('jettSubE').innerText = `바람 활성 (${jettState.tailwindWindowTimer.toFixed(1)}s)`;
@@ -10572,33 +10626,40 @@
         `${Math.max(0, Math.min(100, (jettState.tailwindWindowTimer / 10.0) * 100)).toFixed(1)}%`;
     } else {
       tailwindGaugeWrap.style.display = 'none';
-      hudE.className = 'jett-slot ' + (jettState.eCharges > 0 ? 'ready' : 'empty');
+      hudE.className = 'jett-slot ' + (!lockE && jettState.eCharges > 0 ? 'ready' : 'empty');
       document.getElementById('jettPipsE').innerHTML =
         `<div class="jett-pip ${jettState.eCharges > 0 ? 'filled' : ''}"></div>`;
-      document.getElementById('jettSubE').innerText = jettState.eCharges > 0
-        ? '1 / 1 (준비완료)'
-        : `0 / 1 (${jettState.eKillsProgress}/2킬)`;
+      document.getElementById('jettSubE').innerText = lockE
+        ? '준비 시간 잠금'
+        : (jettState.eCharges > 0 ? '1 / 1 (준비완료)' : `0 / 1 (${jettState.eKillsProgress}/2킬)`);
     }
 
     // X 칼날 폭풍
     const hudX = document.getElementById('jettHudX');
+    const lockX = isJettSkillLockedInPrep('X');
     if (jettState.bladeStormActive) {
-      hudX.className = 'jett-slot ult-active';
+      hudX.className = 'jett-slot ' + (lockX ? 'empty' : (jettState.bladeStormEquipped ? 'ult-active' : 'ult-ready'));
       document.getElementById('jettPipsX').innerHTML = [0, 1, 2, 3, 4].map(i =>
         `<div class="jett-pip ${i < jettState.knivesRemaining ? 'filled' : ''}"></div>`
       ).join('');
-      document.getElementById('jettSubX').innerText = `단검 ${jettState.knivesRemaining} / 5`;
-      bladeReticle.style.display = 'block';
-      bladeReticle.innerText = `❖ 칼날 폭풍: 단검 ${jettState.knivesRemaining} / 5 ❖`;
+      document.getElementById('jettSubX').innerText = jettState.bladeStormEquipped
+        ? `단검 ${jettState.knivesRemaining} / 5`
+        : `보유 ${jettState.knivesRemaining}/5 [X 장착]`;
+      if (jettState.bladeStormEquipped && !lockX) {
+        bladeReticle.style.display = 'block';
+        bladeReticle.innerText = `❖ 칼날 폭풍: 단검 ${jettState.knivesRemaining} / 5 ❖`;
+      } else {
+        bladeReticle.style.display = 'none';
+      }
     } else {
       const ultReady = jettState.ultPoints >= JETT_CONFIG.X.maxPoints;
-      hudX.className = 'jett-slot ' + (ultReady ? 'ult-ready' : 'empty');
+      hudX.className = 'jett-slot ' + (!lockX && ultReady ? 'ult-ready' : 'empty');
       document.getElementById('jettPipsX').innerHTML = Array.from({ length: 8 }, (_, i) =>
         `<div class="jett-ult-pip ${i < jettState.ultPoints ? 'filled' : ''}"></div>`
       ).join('');
-      document.getElementById('jettSubX').innerText = ultReady
-        ? '궁극기 준비완료 [X]'
-        : `${jettState.ultPoints} / 8 PT`;
+      document.getElementById('jettSubX').innerText = lockX
+        ? '준비 시간 잠금'
+        : (ultReady ? '궁극기 준비완료 [X]' : `${jettState.ultPoints} / 8 PT`);
       bladeReticle.style.display = 'none';
     }
 
@@ -10631,7 +10692,7 @@
     if (typeof myAgent !== 'undefined' && myAgent !== 'jett') return;
 
     if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code) && jettState.bladeStormActive) {
-      deactivateBladeStorm(false);
+      holsterBladeStorm();
     }
 
     if (document.pointerLockElement !== document.body) return;
@@ -10648,11 +10709,17 @@
     } else if (e.code === 'KeyE') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (isJettSkillLockedInPrep('E')) return;
       castTailwind();
     } else if (e.code === 'KeyX') {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (!jettState.bladeStormActive) activateBladeStorm();
+      if (isJettSkillLockedInPrep('X')) return;
+      if (jettState.bladeStormActive && jettState.knivesRemaining > 0) {
+        equipBladeStorm(true);
+      } else if (!jettState.bladeStormActive) {
+        activateBladeStorm();
+      }
     }
   }, true);
 
@@ -10660,7 +10727,8 @@
     if (typeof myAgent !== 'undefined' && myAgent !== 'jett') return;
     if (document.pointerLockElement !== document.body) return;
     if (typeof isDead !== 'undefined' && isDead) return;
-    if (!jettState.bladeStormActive) return;
+    if (!jettState.bladeStormActive || !jettState.bladeStormEquipped) return;
+    if (isJettSkillLockedInPrep('X')) return;
 
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -10725,7 +10793,7 @@
     }
 
     // 제트 궁극기(X) 1인칭 양손 & 공중 부유 단검 5자루 애니메이션 동기화
-    if (isJett && jettState.bladeStormActive) {
+    if (isJett && jettState.bladeStormActive && jettState.bladeStormEquipped) {
       if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
       ensureBladeStormViewModel();
       if (bladeStormViewGroup) {
@@ -10986,7 +11054,22 @@
     #phoenixFlashOverlay {
       position: fixed;
       inset: 0;
-      background: radial-gradient(circle, #ffffff 55%, #fffbeb 100%);
+      background:
+        radial-gradient(circle at 50% 50%,
+          #ffffff 0%,
+          #fef08a 16%,
+          #fb923c 42%,
+          #ea580c 72%,
+          #9a3412 100%),
+        repeating-conic-gradient(
+          from 0deg at 50% 50%,
+          rgba(255, 251, 235, 0.92) 0deg 4deg,
+          rgba(249, 115, 22, 0.35) 4deg 9deg,
+          rgba(254, 240, 138, 0.85) 9deg 12deg,
+          rgba(234, 88, 12, 0.28) 12deg 18deg
+        );
+      background-blend-mode: screen, normal;
+      box-shadow: inset 0 0 120px rgba(255, 237, 213, 0.95);
       opacity: 0;
       pointer-events: none;
       z-index: 2500;
@@ -11502,54 +11585,157 @@
     renderPhoenixHUD();
   }
 
+  function isPhoenixSkillLockedInPrep() {
+    return (typeof currentMap !== 'undefined' && currentMap === 'brawl' &&
+            typeof roundPhase !== 'undefined' && roundPhase === 'PREP');
+  }
+
+  function isFlashOccludedByWallOrBlaze(eyePos, flashPos) {
+    const dir = new THREE.Vector3().subVectors(flashPos, eyePos);
+    const dist = dir.length();
+    if (dist <= 0.15) return false;
+    dir.normalize();
+
+    const occluders = [];
+    if (typeof wallMeshes !== 'undefined' && Array.isArray(wallMeshes)) {
+      occluders.push(...wallMeshes);
+    }
+    for (const w of activeBlazeWalls) {
+      if (w && w.group && w.group.children.length > 0) {
+        occluders.push(...w.group.children);
+      }
+    }
+    if (occluders.length === 0) return false;
+
+    const ray = new THREE.Raycaster(eyePos, dir, 0.15, dist);
+    return ray.intersectObjects(occluders, true).length > 0;
+  }
+
+  function computeFlashDurationByAngle(eyePos, lookDir, flashPos) {
+    const toFlash = new THREE.Vector3().subVectors(flashPos, eyePos);
+    const dist = toFlash.length();
+    if (dist > 34) return 0;
+    if (isFlashOccludedByWallOrBlaze(eyePos, flashPos)) return 0;
+
+    const dot = lookDir.clone().normalize().dot(toFlash.normalize());
+    if (dot >= 0.72) return 3.0; // 정면 정통
+    if (dot >= 0.20) return 2.0; // 화면 가장자리
+    return 1.0;                  // 등 돌림 / 시야 끝
+  }
+
+  function ensureEntityBlindOrb(entityMesh, headY = 1.92) {
+    if (!entityMesh || !entityMesh.userData) return null;
+    if (!entityMesh.userData.blindOrbGroup) {
+      const orbGrp = new THREE.Group();
+      orbGrp.position.set(0, headY, 0);
+
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.24, 14, 14),
+        new THREE.MeshBasicMaterial({ color: 0xfef08a })
+      );
+      const outer = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.36, 1),
+        new THREE.MeshStandardMaterial({
+          color: 0xf97316,
+          emissive: 0xea580c,
+          emissiveIntensity: 1.9,
+          transparent: true,
+          opacity: 0.85,
+          wireframe: true
+        })
+      );
+      const halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.30, 0.44, 20),
+        new THREE.MeshBasicMaterial({ color: 0xfb923c, side: THREE.DoubleSide })
+      );
+      halo.rotation.x = Math.PI / 2;
+
+      orbGrp.add(core, outer, halo);
+      orbGrp.userData = { core, outer, halo };
+      entityMesh.add(orbGrp);
+      entityMesh.userData.blindOrbGroup = orbGrp;
+    }
+    return entityMesh.userData.blindOrbGroup;
+  }
+
+  function applyBotBlindEffect(bot, duration) {
+    if (!bot || !bot.userData || duration <= 0) return;
+    bot.userData.blindTimer = Math.max(bot.userData.blindTimer || 0, duration);
+    bot.userData.fireCooldown = Math.max(bot.userData.fireCooldown || 0, duration);
+    bot.userData.strafeTimer = Math.max(bot.userData.strafeTimer || 0, duration);
+    const orb = ensureEntityBlindOrb(bot, 1.92);
+    if (orb) orb.visible = true;
+  }
+
+  function applyFlashReactionAt(pos, includeSelf = true, sourcePeerId = null) {
+    if (includeSelf && (typeof isDead === 'undefined' || !isDead)) {
+      const lookDir = new THREE.Vector3();
+      camera.getWorldDirection(lookDir);
+      const myBlindDur = computeFlashDurationByAngle(camera.position, lookDir, pos);
+      if (myBlindDur > 0) {
+        flashOverlayMax = myBlindDur;
+        flashOverlayTimer = Math.max(flashOverlayTimer, myBlindDur);
+      }
+    }
+
+    if (typeof brawlBots !== 'undefined') {
+      brawlBots.forEach((bot) => {
+        if (!bot || !bot.userData || bot.userData.dead || bot.userData.team === myTeam) return;
+        const botEye = bot.position.clone().add(new THREE.Vector3(0, 1.55, 0));
+        const botForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), bot.rotation.y || 0);
+        const dur = computeFlashDurationByAngle(botEye, botForward, pos);
+        if (dur > 0) applyBotBlindEffect(bot, dur);
+      });
+    }
+
+    if (typeof bots !== 'undefined') {
+      bots.forEach((bot) => {
+        if (!bot || !bot.userData) return;
+        const botEye = bot.position.clone().add(new THREE.Vector3(0, 1.55, 0));
+        const botForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), bot.rotation.y || 0);
+        const dur = computeFlashDurationByAngle(botEye, botForward, pos);
+        if (dur > 0) applyBotBlindEffect(bot, dur);
+      });
+    }
+
+    if (typeof remotePlayers !== 'undefined') {
+      Object.keys(remotePlayers).forEach((pid) => {
+        const rp = remotePlayers[pid];
+        if (!rp || !rp.mesh || rp.isDead) return;
+        if (sourcePeerId && pid === sourcePeerId) return;
+        if (rp.team === myTeam && !sourcePeerId) return;
+        const rpEye = rp.mesh.position.clone().add(new THREE.Vector3(0, 1.55, 0));
+        const rpForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), rp.mesh.rotation.y || 0);
+        const dur = computeFlashDurationByAngle(rpEye, rpForward, pos);
+        if (dur > 0) {
+          rp.mesh.userData.blindTimer = Math.max(rp.mesh.userData.blindTimer || 0, dur);
+          const orb = ensureEntityBlindOrb(rp.mesh, 1.92);
+          if (orb) orb.visible = true;
+        }
+      });
+    }
+  }
+
+  window.__onRemotePhoenixFlash = function (pos, sourcePeerId) {
+    playPhoenixSound('flash');
+    applyFlashReactionAt(pos, true, sourcePeerId);
+  };
+
   function detonateCurveball(pos) {
     playPhoenixSound('flash');
 
     const burst = new THREE.Mesh(
       new THREE.SphereGeometry(0.95, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 })
+      new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.95 })
     );
     burst.position.copy(pos);
     scene.add(burst);
     setTimeout(() => scene.remove(burst), 140);
 
-    // [수정 6] 커브볼 섬광 폭발 시 눈부심 지속 시간 정확히 2.5초 고정
-    const toFlash = new THREE.Vector3().subVectors(pos, camera.position);
-    const dist = toFlash.length();
-    if (dist <= 32) {
-      const lookDir = new THREE.Vector3();
-      camera.getWorldDirection(lookDir);
-      const dot = lookDir.dot(toFlash.clone().normalize());
-      let occluded = false;
-      if (typeof wallMeshes !== 'undefined') {
-        const ray = new THREE.Raycaster(camera.position, toFlash.clone().normalize(), 0.2, dist);
-        const wHits = ray.intersectObjects(wallMeshes);
-        if (wHits.length > 0) occluded = true;
-      }
-      if (!occluded && dot > 0.25) {
-        flashOverlayMax = 2.5;
-        flashOverlayTimer = 2.5;
-      }
-    }
+    applyFlashReactionAt(pos, true, null);
 
-    // 적 AI 봇 / 훈련봇 경직 및 섬광 판정 (2.5초)
-    if (typeof brawlBots !== 'undefined') {
-      brawlBots.forEach((bot) => {
-        if (!bot || !bot.userData || bot.userData.dead || bot.userData.team === myTeam) return;
-        const d = bot.position.distanceTo(pos);
-        if (d <= 18) {
-          bot.userData.fireCooldown = Math.max(bot.userData.fireCooldown || 0, 2.5);
-          bot.userData.strafeTimer = 2.5;
-        }
-      });
-    }
-    if (typeof bots !== 'undefined') {
-      bots.forEach((bot) => {
-        if (!bot || !bot.userData) return;
-        if (bot.position.distanceTo(pos) <= 18) {
-          bot.userData.strafeTimer = 2.5;
-        }
-      });
+    if (typeof broadcastData === 'function') {
+      broadcastData({ type: 'phoenix_flash', pos: { x: pos.x, y: pos.y, z: pos.z } });
     }
   }
 
@@ -11785,29 +11971,31 @@
       abilityPrompt.style.display = 'none';
     }
 
+    const phxPrepLocked = isPhoenixSkillLockedInPrep();
+
     // C 불길
     const hudC = document.getElementById('phxHudC');
-    hudC.className = 'phx-slot ' + (phoenixState.equippedAbility === 'C' ? 'equipped-skill' : (phoenixState.cCharges > 0 ? 'ready' : 'empty'));
+    hudC.className = 'phx-slot ' + (phxPrepLocked ? 'empty' : (phoenixState.equippedAbility === 'C' ? 'equipped-skill' : (phoenixState.cCharges > 0 ? 'ready' : 'empty')));
     document.getElementById('phxPipsC').innerHTML =
       `<div class="phx-pip ${phoenixState.cCharges > 0 ? 'filled' : ''}"></div>`;
-    document.getElementById('phxSubC').innerText = `${phoenixState.cCharges} / 1 (150¤)`;
+    document.getElementById('phxSubC').innerText = phxPrepLocked ? '준비 시간 잠금' : `${phoenixState.cCharges} / 1 (150¤)`;
 
     // Q 뜨거운 손
     const hudQ = document.getElementById('phxHudQ');
-    hudQ.className = 'phx-slot ' + (phoenixState.equippedAbility === 'Q' ? 'equipped-skill' : (phoenixState.qCharges > 0 ? 'ready' : 'empty'));
+    hudQ.className = 'phx-slot ' + (phxPrepLocked ? 'empty' : (phoenixState.equippedAbility === 'Q' ? 'equipped-skill' : (phoenixState.qCharges > 0 ? 'ready' : 'empty')));
     document.getElementById('phxPipsQ').innerHTML =
       `<div class="phx-pip ${phoenixState.qCharges > 0 ? 'filled' : ''}"></div>`;
-    document.getElementById('phxSubQ').innerText = `${phoenixState.qCharges} / 1 (200¤)`;
+    document.getElementById('phxSubQ').innerText = phxPrepLocked ? '준비 시간 잠금' : `${phoenixState.qCharges} / 1 (200¤)`;
 
     // E 커브볼
     const hudE = document.getElementById('phxHudE');
-    hudE.className = 'phx-slot ' + (phoenixState.equippedAbility === 'E' ? 'equipped-skill' : (phoenixState.eCharges > 0 ? 'ready' : 'empty'));
+    hudE.className = 'phx-slot ' + (phxPrepLocked ? 'empty' : (phoenixState.equippedAbility === 'E' ? 'equipped-skill' : (phoenixState.eCharges > 0 ? 'ready' : 'empty')));
     document.getElementById('phxPipsE').innerHTML = [0, 1].map(i =>
       `<div class="phx-pip ${i < phoenixState.eCharges ? 'filled' : ''}"></div>`
     ).join('');
-    document.getElementById('phxSubE').innerText = phoenixState.eCharges >= 2
-      ? '2 / 2 (준비완료)'
-      : `${phoenixState.eCharges} / 2 (${phoenixState.eKillsProgress}/2킬)`;
+    document.getElementById('phxSubE').innerText = phxPrepLocked
+      ? '준비 시간 잠금'
+      : (phoenixState.eCharges >= 2 ? '2 / 2 (준비완료)' : `${phoenixState.eCharges} / 2 (${phoenixState.eKillsProgress}/2킬)`);
 
     // X 역습 (6포인트)
     const hudX = document.getElementById('phxHudX');
@@ -11819,13 +12007,13 @@
       document.getElementById('phxSubX').innerText = `역습 중 (${phoenixState.runItBackTimer.toFixed(1)}s)`;
     } else {
       const ultReady = phoenixState.ultPoints >= PHOENIX_CONFIG.X.maxPoints;
-      hudX.className = 'phx-slot ' + (ultReady ? 'ult-ready' : 'empty');
+      hudX.className = 'phx-slot ' + (!phxPrepLocked && ultReady ? 'ult-ready' : 'empty');
       document.getElementById('phxPipsX').innerHTML = Array.from({ length: 6 }, (_, i) =>
         `<div class="phx-ult-pip ${i < phoenixState.ultPoints ? 'filled' : ''}"></div>`
       ).join('');
-      document.getElementById('phxSubX').innerText = ultReady
-        ? '궁극기 준비완료 [X]'
-        : `${phoenixState.ultPoints} / 6 PT`;
+      document.getElementById('phxSubX').innerText = phxPrepLocked
+        ? '준비 시간 잠금'
+        : (ultReady ? '궁극기 준비완료 [X]' : `${phoenixState.ultPoints} / 6 PT`);
     }
 
     // 상점 카드 갱신
@@ -11878,18 +12066,22 @@
     if (e.code === 'KeyC') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (isPhoenixSkillLockedInPrep()) return;
       equipBlaze();
     } else if (e.code === 'KeyQ') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (isPhoenixSkillLockedInPrep()) return;
       equipHotHands();
     } else if (e.code === 'KeyE') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (isPhoenixSkillLockedInPrep()) return;
       equipCurveball();
     } else if (e.code === 'KeyX') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (isPhoenixSkillLockedInPrep()) return;
       if (!phoenixState.runItBackActive) {
         setPhoenixEquippedAbility(null);
         activateRunItBack();
@@ -11913,6 +12105,11 @@
 
     e.preventDefault();
     e.stopImmediatePropagation();
+
+    if (isPhoenixSkillLockedInPrep()) {
+      setPhoenixEquippedAbility(null);
+      return;
+    }
 
     if (phoenixState.equippedAbility === 'C' && e.button === 0) {
       castBlaze();
@@ -12005,13 +12202,43 @@
       }
     }
 
-    // [수정 6] 섬광 화면 페이드아웃 (2.5초)
+    // 섬광 화면 페이드아웃 (각도별 1.0 / 2.0 / 3.0초)
     if (flashOverlayTimer > 0) {
       flashOverlayTimer = Math.max(0, flashOverlayTimer - dt);
       const ratio = flashOverlayTimer / Math.max(0.1, flashOverlayMax);
-      flashOverlay.style.opacity = Math.min(1, ratio * 1.45).toFixed(3);
+      flashOverlay.style.opacity = Math.min(1, ratio * 1.55).toFixed(3);
     } else if (flashOverlay.style.opacity !== '0') {
       flashOverlay.style.opacity = '0';
+    }
+
+    // 훈련봇 및 멀티플레이 상대 머리 위 실명 구체 이펙트 갱신
+    if (typeof bots !== 'undefined') {
+      bots.forEach((bot) => {
+        if (!bot || !bot.userData) return;
+        if (bot.userData.blindTimer && bot.userData.blindTimer > 0) {
+          bot.userData.blindTimer = Math.max(0, bot.userData.blindTimer - dt);
+          if (bot.userData.blindOrbGroup) {
+            bot.userData.blindOrbGroup.visible = true;
+            bot.userData.blindOrbGroup.rotation.y += dt * 7.5;
+          }
+        } else if (bot.userData.blindOrbGroup) {
+          bot.userData.blindOrbGroup.visible = false;
+        }
+      });
+    }
+    if (typeof remotePlayers !== 'undefined') {
+      Object.values(remotePlayers).forEach((rp) => {
+        if (!rp || !rp.mesh || !rp.mesh.userData) return;
+        if (rp.mesh.userData.blindTimer && rp.mesh.userData.blindTimer > 0) {
+          rp.mesh.userData.blindTimer = Math.max(0, rp.mesh.userData.blindTimer - dt);
+          if (rp.mesh.userData.blindOrbGroup) {
+            rp.mesh.userData.blindOrbGroup.visible = true;
+            rp.mesh.userData.blindOrbGroup.rotation.y += dt * 7.5;
+          }
+        } else if (rp.mesh.userData.blindOrbGroup) {
+          rp.mesh.userData.blindOrbGroup.visible = false;
+        }
+      });
     }
 
     // [X] 역습 상태 감시
