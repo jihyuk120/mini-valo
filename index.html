@@ -12897,5 +12897,830 @@
 })();
 </script>
 
+<script>
+(function initReynaAndNeonSystems() {
+  // =========================================================
+  // 1. 공통 유틸리티 및 기존 게임 루프·이동·발사 후킹
+  // =========================================================
+  const isPrepPhase = () => (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase === 'PREP');
+  const getEnemyTeam = () => (typeof myTeam !== 'undefined' && myTeam === 'red') ? 'blue' : 'red';
+
+  function showSkillNotice(msg, color = '#00ffcc') {
+    if (typeof addKillFeed === 'function') {
+      addKillFeed(msg, false);
+    }
+    let toast = document.getElementById('agentSkillToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'agentSkillToast';
+      toast.style.cssText = 'position:fixed; top:22%; left:50%; transform:translateX(-50%); padding:8px 18px; background:rgba(15,25,35,0.88); border:1px solid #00ffcc; border-radius:4px; font-weight:bold; font-size:14px; z-index:9999; pointer-events:none; transition:opacity 0.2s;';
+      document.body.appendChild(toast);
+    }
+    toast.style.color = color;
+    toast.style.borderColor = color;
+    toast.innerText = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 1400);
+  }
+
+  // 기존 moveWithCollision 후킹 (네온 고속 기어 / 슬라이딩 / 레이나 무시 이속 / 뇌진탕 감속 반영)
+  const origMoveWithCollision = window.moveWithCollision;
+  if (typeof origMoveWithCollision === 'function') {
+    window.moveWithCollision = function(dx, dz) {
+      let mult = 1.0;
+      if (typeof myAgent !== 'undefined' && myAgent === 'neon') {
+        if (neonState.slideTimer > 0) return; // 슬라이딩 중에는 전용 벡터 이동
+        if (neonState.highGearActive) mult *= 1.48;
+        if (neonState.overdriveActive) mult *= 1.25;
+      }
+      if (typeof myAgent !== 'undefined' && myAgent === 'reyna') {
+        if (reynaState.dismissTimer > 0) mult *= 1.42;
+      }
+      if (neonState.selfConcussTimer > 0) mult *= 0.58; // 뇌진탕 이동 속도 저하
+      origMoveWithCollision(dx * mult, dz * mult);
+    };
+  }
+
+  // 기존 fireWeapon 후킹 (레이나 무시 중 사격 금지, 여제 연사력 증가, 뇌진탕 연사 저하)
+  const origFireWeapon = window.fireWeapon;
+  if (typeof origFireWeapon === 'function') {
+    window.fireWeapon = function(isHeavyAttack = false) {
+      if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && reynaState.dismissTimer > 0) {
+        return; // 무시(E) 중에는 사격 불가
+      }
+      origFireWeapon(isHeavyAttack);
+      if (typeof fireCooldown !== 'undefined' && fireCooldown > 0) {
+        if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && reynaState.empressTimer > 0) {
+          fireCooldown *= 0.68; // 여제 활성화 시 발사 속도 대폭 증가
+        }
+        if (neonState.selfConcussTimer > 0) {
+          fireCooldown *= 1.45; // 뇌진탕 시 연사 속도 저하
+        }
+      }
+    };
+  }
+
+  // 기존 startReload 후킹 (여제 활성화 시 재장전 속도 대폭 증가)
+  const origStartReload = window.startReload;
+  if (typeof origStartReload === 'function') {
+    window.startReload = function() {
+      origStartReload();
+      if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && reynaState.empressTimer > 0 && typeof reloadTimer !== 'undefined') {
+        // 재장전 시간을 50% 단축하여 즉시 완료 유도
+        const curK = typeof getCurrentWeaponKey === 'function' ? getCurrentWeaponKey() : null;
+        if (curK && WEAPONS[curK]) {
+          clearTimeout(reloadTimer);
+          reloadTimer = setTimeout(() => {
+            ammoState[curK] = WEAPONS[curK].magSize;
+            isReloading = false;
+            if (typeof updateHUD === 'function') updateHUD();
+          }, (WEAPONS[curK].reloadTime || 2.0) * 500);
+        }
+      }
+    };
+  }
+
+  // =========================================================
+  // 2. 레이나 (REYNA) 시스템 (궁극기 6포인트)
+  // =========================================================
+  const REYNA_CONFIG = {
+    C: { name: '눈총', maxCharges: 2, cost: 250 },
+    QE: { name: '포식 / 무시', maxCharges: 2, cost: 200 },
+    X: { name: '여제', maxPoints: 6 }
+  };
+
+  const reynaState = {
+    cCharges: 0,
+    qeCharges: 1, // 라운드 시작 시 1개 무료 지급
+    ultPoints: 0,
+    empressTimer: 0,
+    dismissTimer: 0,
+    devourTimer: 0,
+    devourHealLeft: 0,
+    lastTrackedKills: 0,
+    lastRoundNum: -1,
+    soulOrbs: [],
+    leers: []
+  };
+
+  // 적 화면 외곽 보라색 안개(근시) 오버레이 생성
+  const nearsightOverlay = document.createElement('div');
+  nearsightOverlay.id = 'reynaNearsightOverlay';
+  nearsightOverlay.style.cssText = 'position:fixed; inset:0; pointer-events:none; z-index:900; display:none; background:radial-gradient(circle at center, transparent 18%, rgba(88,28,135,0.82) 52%, rgba(24,5,46,0.98) 82%); box-shadow:inset 0 0 140px 60px #3b0764;';
+  document.body.appendChild(nearsightOverlay);
+
+  // 레이나 무시(E) 반투명 / 완전 투명 상태 표시 테두리
+  const dismissOverlay = document.createElement('div');
+  dismissOverlay.id = 'reynaDismissOverlay';
+  dismissOverlay.style.cssText = 'position:fixed; inset:0; pointer-events:none; z-index:899; display:none; border:6px solid rgba(217,70,239,0.75); box-shadow:inset 0 0 70px rgba(192,38,211,0.45);';
+  document.body.appendChild(dismissOverlay);
+
+  function spawnSoulOrb(pos) {
+    const orbGroup = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.36, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xe879f9, transparent: true, opacity: 0.92 })
+    );
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(0.45, 0.65, 24),
+      new THREE.MeshBasicMaterial({ color: 0x9333ea, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+    );
+    orbGroup.add(core, halo);
+    orbGroup.position.set(pos.x, (pos.y || 0) + 1.35, pos.z);
+    scene.add(orbGroup);
+    reynaState.soulOrbs.push({ mesh: orbGroup, halo, life: 4.5 });
+  }
+
+  function getLookedAtSoulOrb() {
+    if (reynaState.soulOrbs.length === 0) return null;
+    const camPos = new THREE.Vector3();
+    const camDir = new THREE.Vector3();
+    camera.getWorldPosition(camPos);
+    camera.getWorldDirection(camDir);
+
+    let bestOrb = null;
+    let bestDot = 0.88; // 시야 정면 약 28도 이내로 구슬을 바라볼 때만 활성화
+    for (const orb of reynaState.soulOrbs) {
+      const toOrb = orb.mesh.position.clone().sub(camPos);
+      const dist = toOrb.length();
+      if (dist > 35) continue;
+      toOrb.normalize();
+      const dot = camDir.dot(toOrb);
+      if (dot > bestDot) {
+        bestDot = dot;
+        bestOrb = orb;
+      }
+    }
+    return bestOrb;
+  }
+
+  // C: 눈총 (벽 통과 보라색 눈 구체 소환, 바라보는 적 화면 외곽 보라색 근시)
+  function castReynaLeer() {
+    if (isPrepPhase()) {
+      showSkillNotice('준비 시간에는 공격 스킬(눈총)을 사용할 수 없습니다.', '#ff4655');
+      return;
+    }
+    if (reynaState.cCharges <= 0 || isDead) return;
+    reynaState.cCharges -= 1;
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.normalize();
+
+    const eyeGroup = new THREE.Group();
+    const outer = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 20, 20),
+      new THREE.MeshBasicMaterial({ color: 0x7e22ce, transparent: true, opacity: 0.85, depthTest: false })
+    );
+    const pupil = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xf5d0fe, depthTest: false })
+    );
+    pupil.position.z = 0.36;
+    eyeGroup.add(outer, pupil);
+
+    const startPos = new THREE.Vector3();
+    camera.getWorldPosition(startPos);
+    eyeGroup.position.copy(startPos).addScaledVector(dir, 1.5);
+    scene.add(eyeGroup);
+
+    reynaState.leers.push({
+      mesh: eyeGroup,
+      dir,
+      traveled: 0,
+      maxDist: 16,
+      life: 3.2
+    });
+    showSkillNotice('눈총(C) 발동! 벽을 통과해 적의 시야를 차단합니다.', '#e879f9');
+  }
+
+  // Q: 포식 (체력 100 급속 회복, 최대 150 오버힐)
+  function castReynaDevour(fromAutoEmpress = false) {
+    if (!fromAutoEmpress) {
+      if (isPrepPhase()) return;
+      if (reynaState.qeCharges <= 0 || isDead) return;
+      const targetOrb = getLookedAtSoulOrb();
+      if (!targetOrb) {
+        showSkillNotice('보라색 영혼 구슬을 바라봐야 포식(Q)을 사용할 수 있습니다.', '#e879f9');
+        return;
+      }
+      scene.remove(targetOrb.mesh);
+      reynaState.soulOrbs.splice(reynaState.soulOrbs.indexOf(targetOrb), 1);
+      reynaState.qeCharges -= 1;
+    }
+    reynaState.devourTimer = 1.6;
+    reynaState.devourHealLeft = 100;
+    showSkillNotice(fromAutoEmpress ? '여제 자동 포식 발동! (최대 150 오버힐)' : '포식(Q) 시전! 체력 100 급속 회복 (최대 150)', '#e879f9');
+  }
+
+  // E: 무시 (2초 무적 + 이속 증가 + 사격 불가 / 여제 시 완전 투명, 평상시 반투명 보라 실루엣)
+  function castReynaDismiss() {
+    if (isPrepPhase() || reynaState.qeCharges <= 0 || isDead) return;
+    const targetOrb = getLookedAtSoulOrb();
+    if (!targetOrb) {
+      showSkillNotice('보라색 영혼 구슬을 바라봐야 무시(E)를 사용할 수 있습니다.', '#e879f9');
+      return;
+    }
+    scene.remove(targetOrb.mesh);
+    reynaState.soulOrbs.splice(reynaState.soulOrbs.indexOf(targetOrb), 1);
+    reynaState.qeCharges -= 1;
+    reynaState.dismissTimer = 2.0;
+
+    const isFullInvis = reynaState.empressTimer > 0;
+    if (typeof broadcastData === 'function') {
+      broadcastData({ type: 'reyna_dismiss', invis: isFullInvis, duration: 2.0 });
+    }
+    showSkillNotice(isFullInvis ? '무시(E) - 여제 강화: 2초간 완전 투명 & 무적!' : '무시(E) - 2초간 반투명 실루엣 & 무적!', '#d946ef');
+  }
+
+  // X: 여제 (궁극기 6포인트)
+  function castReynaEmpress() {
+    if (isPrepPhase()) {
+      showSkillNotice('준비 시간에는 궁극기를 사용할 수 없습니다.', '#ff4655');
+      return;
+    }
+    if (reynaState.ultPoints < REYNA_CONFIG.X.maxPoints || isDead) return;
+    reynaState.ultPoints = 0;
+    reynaState.empressTimer = 25.0;
+    showSkillNotice('여제(X) 각성! 연사·재장전 대폭 상승 / 킬 시 자동 포식 / 무시 완전 투명화', '#f0abfc');
+  }
+
+  // =========================================================
+  // 3. 네온 (NEON) 시스템 (궁극기 8포인트)
+  // =========================================================
+  const NEON_CONFIG = {
+    C: { name: '추월 차선', maxCharges: 1, cost: 300 },
+    Q: { name: '릴레이 볼트', maxCharges: 1, cost: 250 },
+    E: { name: '고속 기어', maxBattery: 100 },
+    X: { name: '오버드라이브', maxPoints: 8 }
+  };
+
+  const neonState = {
+    cCharges: 0,
+    qCharges: 0,
+    battery: 100,
+    highGearActive: false,
+    slidesRemaining: 1,
+    slideKillsTracker: 0,
+    slideTimer: 0,
+    slideDir: new THREE.Vector3(),
+    ultPoints: 0,
+    overdriveActive: false,
+    overdriveTimer: 0,
+    overdriveBeamTimer: 0,
+    selfConcussTimer: 0,
+    lastTrackedKills: 0,
+    lastRoundNum: -1,
+    fastLanes: [],
+    relayBolts: [],
+    concussZones: [],
+    lightningBeams: []
+  };
+
+  // 뇌진탕 화면 시각 효과 오버레이 (첨부 스크린샷처럼 화면 외곽 흔들림·흐림·비네트)
+  const concussOverlay = document.createElement('div');
+  concussOverlay.id = 'neonConcussOverlay';
+  concussOverlay.style.cssText = 'position:fixed; inset:0; pointer-events:none; z-index:901; display:none; backdrop-filter:blur(4px); background:radial-gradient(circle at center, transparent 35%, rgba(148,163,184,0.55) 75%, rgba(15,23,42,0.85) 100%);';
+  document.body.appendChild(concussOverlay);
+
+  // C: 추월 차선 (전방 양옆으로 시야를 가리는 푸른색 전기 장벽 2줄 길게 발사)
+  function castNeonFastLane() {
+    if (isPrepPhase()) {
+      showSkillNotice('준비 시간에는 추월 차선(C)을 사용할 수 없습니다.', '#ff4655');
+      return;
+    }
+    if (neonState.cCharges <= 0 || isDead) return;
+    neonState.cCharges -= 1;
+
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    const origin = new THREE.Vector3();
+    camera.getWorldPosition(origin);
+    origin.y = Math.max(0, origin.y - 1.8);
+
+    [-2.4, 2.4].forEach(offset => {
+      const wallGeo = new THREE.PlaneGeometry(34, 3.6);
+      const wallMat = new THREE.MeshBasicMaterial({
+        color: 0x0ea5e9,
+        emissive: 0x38bdf8,
+        transparent: true,
+        opacity: 0.78,
+        side: THREE.DoubleSide
+      });
+      const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+      wallMesh.position.copy(origin).addScaledVector(right, offset).addScaledVector(forward, 18);
+      wallMesh.position.y += 1.8;
+      wallMesh.lookAt(wallMesh.position.clone().add(right));
+      scene.add(wallMesh);
+      neonState.fastLanes.push({ mesh: wallMesh, life: 6.0 });
+    });
+
+    showSkillNotice('추월 차선(C) 전개! 전방 양옆 푸른 전기 장벽 생성', '#38bdf8');
+  }
+
+  // Q: 릴레이 볼트 (벽에 1회 반사된 뒤 바닥에 2개의 전기 폭발 장판 -> 범위 내 적 뇌진탕 부여)
+  function castNeonRelayBolt() {
+    if (isPrepPhase()) {
+      showSkillNotice('준비 시간에는 릴레이 볼트(Q)를 사용할 수 없습니다.', '#ff4655');
+      return;
+    }
+    if (neonState.qCharges <= 0 || isDead) return;
+    neonState.qCharges -= 1;
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.normalize();
+    const startPos = new THREE.Vector3();
+    camera.getWorldPosition(startPos);
+
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.24, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0x22d3ee })
+    );
+    orb.position.copy(startPos).addScaledVector(dir, 0.8);
+    scene.add(orb);
+
+    neonState.relayBolts.push({
+      mesh: orb,
+      vel: dir.multiplyScalar(32),
+      bounced: false,
+      life: 3.5
+    });
+    showSkillNotice('릴레이 볼트(Q) 투척! 반사 후 2연속 뇌진탕 장판 폭발', '#22d3ee');
+  }
+
+  function triggerRelayBoltZones(impactPos, bounceDir) {
+    const forwardFlat = new THREE.Vector3(bounceDir.x, 0, bounceDir.z);
+    if (forwardFlat.lengthSq() < 0.001) forwardFlat.set(0, 0, -1);
+    forwardFlat.normalize();
+
+    const spots = [
+      impactPos.clone(),
+      impactPos.clone().addScaledVector(forwardFlat, 4.8)
+    ];
+
+    spots.forEach(pt => {
+      const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl') ? getFloorHeightAt(pt.x, pt.z, pt.y) : 0;
+      const ring = new THREE.Mesh(
+        new THREE.CylinderGeometry(3.4, 3.4, 0.15, 28),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 })
+      );
+      ring.position.set(pt.x, floorY + 0.08, pt.z);
+      scene.add(ring);
+      neonState.concussZones.push({ mesh: ring, pos: ring.position.clone(), radius: 3.5, life: 3.2 });
+
+      // 범위 내 적(봇)에게 뇌진탕(이동·연사 속도 저하) 부여
+      if (typeof brawlBots !== 'undefined') {
+        for (const b of brawlBots) {
+          if (!b.userData.dead && b.userData.team !== myTeam) {
+            if (b.position.distanceTo(ring.position) <= 3.6) {
+              b.userData.concussedTimer = 3.5;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // E: 고속 기어 토글 & 달리는 중 마우스 우클릭 WASD 방향 고속 슬라이딩
+  function toggleNeonHighGear() {
+    if (isDead) return;
+    if (neonState.highGearActive) {
+      neonState.highGearActive = false;
+      showSkillNotice('고속 기어(E) 해제', '#94a3b8');
+    } else if (neonState.battery > 10) {
+      neonState.highGearActive = true;
+      showSkillNotice('고속 기어(E) 가동! 질주 중 우클릭으로 고속 슬라이딩', '#22d3ee');
+    }
+  }
+
+  function triggerNeonSlide() {
+    if (!neonState.highGearActive || neonState.slidesRemaining <= 0 || neonState.slideTimer > 0 || isDead) return;
+    if (typeof getMoveVectors !== 'function') return;
+    const { forward, right } = getMoveVectors();
+    const move = new THREE.Vector3();
+    if (keys['KeyW']) move.add(forward);
+    if (keys['KeyS']) move.sub(forward);
+    if (keys['KeyD']) move.add(right);
+    if (keys['KeyA']) move.sub(right);
+    if (move.lengthSq() === 0) return; // WASD 이동 중일 때만 슬라이딩 발동
+    move.normalize();
+
+    neonState.slidesRemaining -= 1;
+    neonState.slideTimer = 0.42;
+    neonState.slideDir.copy(move);
+    showSkillNotice('고속 슬라이딩!', '#38bdf8');
+  }
+
+  // X: 오버드라이브 (궁극기 8포인트 - 손끝에서 연속 푸른 번개 광선 발사)
+  function castNeonOverdrive() {
+    if (isPrepPhase()) {
+      showSkillNotice('준비 시간에는 오버드라이브(X)를 사용할 수 없습니다.', '#ff4655');
+      return;
+    }
+    if (neonState.ultPoints < NEON_CONFIG.X.maxPoints || isDead) return;
+    neonState.ultPoints = 0;
+    neonState.overdriveActive = true;
+    neonState.overdriveTimer = 18.0;
+    neonState.battery = 100;
+    neonState.slidesRemaining = 1;
+    showSkillNotice('오버드라이브(X) 활성화! 좌클릭으로 초고속 푸른 번개 광선 발사', '#22d3ee');
+  }
+
+  function fireNeonLightningBeam() {
+    if (!neonState.overdriveActive || isDead || isPrepPhase()) return;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+    const targets = (typeof currentMap !== 'undefined' && currentMap === 'range')
+      ? (window.botHitboxes || [])
+      : [...(window.remoteHitboxes || []), ...(window.brawlBotHitboxes || [])];
+
+    const hits = ray.intersectObjects(targets);
+    const start = new THREE.Vector3();
+    camera.getWorldPosition(start);
+    start.y -= 0.12;
+    let end = ray.ray.origin.clone().addScaledVector(ray.ray.direction, 55);
+
+    if (hits.length > 0) {
+      end = hits[0].point;
+      const ud = hits[0].object.userData;
+      const dmg = ud.part === 'head' ? 44 : 22;
+      if (ud.targetType === 'brawlBot' && ud.botRoot && !ud.botRoot.userData.dead && ud.botRoot.userData.team !== myTeam) {
+        const bd = ud.botRoot.userData;
+        bd.hp -= dmg;
+        if (bd.hp <= 0) {
+          bd.dead = true;
+          ud.botRoot.visible = false;
+          if (typeof playerStats !== 'undefined') playerStats.k += 1;
+          if (typeof addKillFeed === 'function') addKillFeed(`[오버드라이브] ➔ ${bd.nick}`, true);
+        }
+      } else if (ud.targetType === 'bot' && ud.botRoot) {
+        ud.botRoot.userData.hp -= dmg;
+        if (ud.botRoot.userData.hp <= 0 && typeof respawnBot === 'function') respawnBot(ud.botRoot);
+      }
+    }
+
+    // 푸른 번개 광선 빔 렌더링
+    const points = [start, end];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 3 });
+    const line = new THREE.Line(geo, mat);
+    scene.add(line);
+    neonState.lightningBeams.push({ mesh: line, life: 0.09 });
+  }
+
+  // =========================================================
+  // 4. 상점 & 하단 HUD UI 구축 및 동기화
+  // =========================================================
+  function ensureAgentHUDAndShop() {
+    // 상점 내 요원 스킬 바
+    const shopModalEl = document.getElementById('shopModal');
+    if (shopModalEl && !document.getElementById('reynaNeonShopBar')) {
+      const bar = document.createElement('div');
+      bar.id = 'reynaNeonShopBar';
+      bar.style.cssText = 'width:1160px; max-width:96vw; margin-top:10px; display:none; grid-template-columns:repeat(4,1fr); gap:10px; background:rgba(15,25,35,0.92); padding:10px 14px; border-top:3px solid #38bdf8;';
+      bar.innerHTML = `
+        <div class="shop-item" id="rnShopC" style="cursor:pointer; margin:0;"><strong id="rnShopCTitle">C 스킬</strong><div id="rnShopCDesc" style="font-size:12px; color:#ccc;"></div></div>
+        <div class="shop-item" id="rnShopQ" style="cursor:pointer; margin:0;"><strong id="rnShopQTitle">Q 스킬</strong><div id="rnShopQDesc" style="font-size:12px; color:#ccc;"></div></div>
+        <div class="shop-item" id="rnShopE" style="cursor:pointer; margin:0;"><strong id="rnShopETitle">E 스킬</strong><div id="rnShopEDesc" style="font-size:12px; color:#ccc;"></div></div>
+        <div class="shop-item" style="margin:0; opacity:0.85;"><strong id="rnShopXTitle">X 궁극기</strong><div id="rnShopXDesc" style="font-size:12px; color:#ccc;"></div></div>
+      `;
+      shopModalEl.appendChild(bar);
+
+      document.getElementById('rnShopC').onclick = () => {
+        if (myAgent === 'reyna' && reynaState.cCharges < 2 && credits >= 250) {
+          credits -= 250; reynaState.cCharges++; if (typeof updateHUD === 'function') updateHUD();
+        } else if (myAgent === 'neon' && neonState.cCharges < 1 && credits >= 300) {
+          credits -= 300; neonState.cCharges++; if (typeof updateHUD === 'function') updateHUD();
+        }
+      };
+      document.getElementById('rnShopQ').onclick = () => {
+        if (myAgent === 'reyna' && reynaState.qeCharges < 2 && credits >= 200) {
+          credits -= 200; reynaState.qeCharges++; if (typeof updateHUD === 'function') updateHUD();
+        } else if (myAgent === 'neon' && neonState.qCharges < 1 && credits >= 250) {
+          credits -= 250; neonState.qCharges++; if (typeof updateHUD === 'function') updateHUD();
+        }
+      };
+    }
+
+    // 하단 중앙 스킬 HUD
+    if (!document.getElementById('reynaNeonBottomHud')) {
+      const hud = document.createElement('div');
+      hud.id = 'reynaNeonBottomHud';
+      hud.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); display:none; flex-direction:column; align-items:center; gap:6px; z-index:500; pointer-events:none;';
+      hud.innerHTML = `
+        <div id="neonBatteryWrap" style="width:240px; height:8px; background:rgba(15,25,35,0.85); border:1px solid #38bdf8; border-radius:4px; overflow:hidden; display:none;">
+          <div id="neonBatteryFill" style="width:100%; height:100%; background:linear-gradient(90deg,#0284c7,#22d3ee);"></div>
+        </div>
+        <div style="display:flex; gap:10px; background:rgba(15,25,35,0.88); padding:8px 16px; border-bottom:3px solid #38bdf8; border-radius:4px; color:#fff; font-size:12px; text-align:center;">
+          <div id="rnHudC" style="min-width:74px;"></div>
+          <div id="rnHudQ" style="min-width:74px;"></div>
+          <div id="rnHudE" style="min-width:74px;"></div>
+          <div id="rnHudX" style="min-width:82px;"></div>
+        </div>
+      `;
+      document.body.appendChild(hud);
+    }
+  }
+
+  function renderReynaNeonUI() {
+    ensureAgentHUDAndShop();
+    const agent = typeof myAgent !== 'undefined' ? myAgent : 'jett';
+    const isReyna = agent === 'reyna';
+    const isNeon = agent === 'neon';
+    const shopBar = document.getElementById('reynaNeonShopBar');
+    const bottomHud = document.getElementById('reynaNeonBottomHud');
+
+    if (!isReyna && !isNeon) {
+      if (shopBar) shopBar.style.display = 'none';
+      if (bottomHud) bottomHud.style.display = 'none';
+      return;
+    }
+
+    if (shopBar) shopBar.style.display = 'grid';
+    if (bottomHud) bottomHud.style.display = 'flex';
+    const lockTag = isPrepPhase() ? ' <span style="color:#ff4655;">[잠금]</span>' : '';
+
+    if (isReyna) {
+      document.getElementById('neonBatteryWrap').style.display = 'none';
+      document.getElementById('rnShopCTitle').innerText = `C 눈총 (${reynaState.cCharges}/2)`;
+      document.getElementById('rnShopCDesc').innerText = '250 ¤ · 벽 관통 시야 차단 눈 구체';
+      document.getElementById('rnShopQTitle').innerText = `Q/E 영혼 충전 (${reynaState.qeCharges}/2)`;
+      document.getElementById('rnShopQDesc').innerText = '200 ¤ · 포식/무시 공유 (기본 1개 무료)';
+      document.getElementById('rnShopETitle').innerText = `E 무시 (Q와 충전 공유)`;
+      document.getElementById('rnShopEDesc').innerText = '구슬 시야 조준 시 2초 무적·이속 증가';
+      document.getElementById('rnShopXTitle').innerText = `X 여제 (${reynaState.ultPoints}/6 pt)`;
+      document.getElementById('rnShopXDesc').innerText = '연사·재장전 급증 / 킬 자동 포식 / 완전 투명';
+
+      const orbReady = getLookedAtSoulOrb() !== null;
+      const qeColor = (reynaState.qeCharges > 0 && orbReady && !isPrepPhase()) ? '#e879f9' : '#64748b';
+      document.getElementById('rnHudC').innerHTML = `<div style="color:#e879f9;font-weight:bold;">[C] 눈총${lockTag}</div><div>${reynaState.cCharges} / 2</div>`;
+      document.getElementById('rnHudQ').innerHTML = `<div style="color:${qeColor};font-weight:bold;">[Q] 포식</div><div>${reynaState.qeCharges} / 2</div>`;
+      document.getElementById('rnHudE').innerHTML = `<div style="color:${qeColor};font-weight:bold;">[E] 무시</div><div>${reynaState.qeCharges} / 2</div>`;
+      document.getElementById('rnHudX').innerHTML = `<div style="color:#f0abfc;font-weight:bold;">[X] 여제${lockTag}</div><div>${reynaState.empressTimer > 0 ? reynaState.empressTimer.toFixed(1) + 's' : reynaState.ultPoints + ' / 6'}</div>`;
+    } else if (isNeon) {
+      document.getElementById('neonBatteryWrap').style.display = 'block';
+      document.getElementById('neonBatteryFill').style.width = `${Math.round(neonState.battery)}%`;
+      document.getElementById('rnShopCTitle').innerText = `C 추월 차선 (${neonState.cCharges}/1)`;
+      document.getElementById('rnShopCDesc').innerText = '300 ¤ · 전방 양옆 푸른 전기 장벽 2줄';
+      document.getElementById('rnShopQTitle').innerText = `Q 릴레이 볼트 (${neonState.qCharges}/1)`;
+      document.getElementById('rnShopQDesc').innerText = '250 ¤ · 1회 반사 후 2개 뇌진탕 장판';
+      document.getElementById('rnShopETitle').innerText = `E 고속 기어 (무료 기본)`;
+      document.getElementById('rnShopEDesc').innerText = '질주 + 달리는 중 우클릭 WASD 슬라이딩';
+      document.getElementById('rnShopXTitle').innerText = `X 오버드라이브 (${neonState.ultPoints}/8 pt)`;
+      document.getElementById('rnShopXDesc').innerText = '손끝 연속 푸른 번개 광선 초고속 타격';
+
+      document.getElementById('rnHudC').innerHTML = `<div style="color:#38bdf8;font-weight:bold;">[C] 추월차선${lockTag}</div><div>${neonState.cCharges} / 1</div>`;
+      document.getElementById('rnHudQ').innerHTML = `<div style="color:#22d3ee;font-weight:bold;">[Q] 릴레이${lockTag}</div><div>${neonState.qCharges} / 1</div>`;
+      document.getElementById('rnHudE').innerHTML = `<div style="color:${neonState.highGearActive ? '#22d3ee' : '#94a3b8'};font-weight:bold;">[E] 고속기어</div><div>${Math.round(neonState.battery)}% · 슬라이드:${neonState.slidesRemaining}</div>`;
+      document.getElementById('rnHudX').innerHTML = `<div style="color:#38bdf8;font-weight:bold;">[X] 오버드라이브${lockTag}</div><div>${neonState.overdriveActive ? neonState.overdriveTimer.toFixed(1) + 's' : neonState.ultPoints + ' / 8'}</div>`;
+    }
+  }
+
+  // =========================================================
+  // 5. 입력 이벤트(C, Q, E, X, 우클릭 슬라이딩, 좌클릭 번개)
+  // =========================================================
+  document.addEventListener('keydown', (e) => {
+    if (document.pointerLockElement !== document.body || isDead) return;
+    if (myAgent === 'reyna') {
+      if (e.code === 'KeyC') castReynaLeer();
+      else if (e.code === 'KeyQ') castReynaDevour(false);
+      else if (e.code === 'KeyE') castReynaDismiss();
+      else if (e.code === 'KeyX') castReynaEmpress();
+    } else if (myAgent === 'neon') {
+      if (e.code === 'KeyC') castNeonFastLane();
+      else if (e.code === 'KeyQ') castNeonRelayBolt();
+      else if (e.code === 'KeyE') toggleNeonHighGear();
+      else if (e.code === 'KeyX') castNeonOverdrive();
+    }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (document.pointerLockElement !== document.body || isDead) return;
+    if (myAgent === 'neon') {
+      // 달리는 중 마우스 우클릭(Right Click) 시 현재 이동 중인 WASD 방향으로 고속 슬라이딩
+      if (e.button === 2 && neonState.highGearActive) {
+        triggerNeonSlide();
+      }
+      // 오버드라이브 활성화 중 좌클릭 시 푸른 번개 광선 발사
+      if (e.button === 0 && neonState.overdriveActive) {
+        fireNeonLightningBeam();
+      }
+    }
+  }, true);
+
+  // =========================================================
+  // 6. 프레임 루프 업데이트 (라운드 초기화, 킬 연동, 투사체/장판/버프)
+  // =========================================================
+  let lastTick = performance.now();
+  function updateReynaAndNeonLoop(now) {
+    requestAnimationFrame(updateReynaAndNeonLoop);
+    const dt = Math.min(0.05, (now - lastTick) / 1000);
+    lastTick = now;
+
+    // 라운드 변경 시 초기화
+    if (typeof currentRound !== 'undefined') {
+      if (reynaState.lastRoundNum !== currentRound) {
+        reynaState.lastRoundNum = currentRound;
+        reynaState.qeCharges = Math.max(1, reynaState.qeCharges); // 라운드 시작 시 최소 1개 무료 지급
+        reynaState.empressTimer = 0;
+        reynaState.dismissTimer = 0;
+        reynaState.soulOrbs.forEach(o => scene.remove(o.mesh));
+        reynaState.soulOrbs = [];
+      }
+      if (neonState.lastRoundNum !== currentRound) {
+        neonState.lastRoundNum = currentRound;
+        neonState.battery = 100;
+        neonState.highGearActive = false;
+        neonState.slidesRemaining = 1;
+        neonState.slideKillsTracker = 0;
+        neonState.overdriveActive = false;
+      }
+    }
+
+    // 킬 발생 감지 (궁극기 포인트 획득, 레이나 구슬/여제 자동 포식, 네온 2킬 슬라이드 재충전)
+    if (typeof playerStats !== 'undefined') {
+      if (playerStats.k > reynaState.lastTrackedKills) {
+        const gained = playerStats.k - reynaState.lastTrackedKills;
+        reynaState.lastTrackedKills = playerStats.k;
+        if (myAgent === 'reyna') {
+          reynaState.ultPoints = Math.min(REYNA_CONFIG.X.maxPoints, reynaState.ultPoints + gained);
+          // 처치된 봇 위치에 영혼 구슬 생성
+          if (typeof brawlBots !== 'undefined') {
+            for (const b of brawlBots) {
+              if (b.userData.dead && !b.userData._orbSpawned) {
+                b.userData._orbSpawned = true;
+                spawnSoulOrb(b.position);
+              }
+            }
+          }
+          if (reynaState.empressTimer > 0) {
+            castReynaDevour(true); // 여제 중 킬 시 자동 포식
+          }
+        }
+      }
+      if (playerStats.k > neonState.lastTrackedKills) {
+        const gained = playerStats.k - neonState.lastTrackedKills;
+        neonState.lastTrackedKills = playerStats.k;
+        if (myAgent === 'neon') {
+          neonState.ultPoints = Math.min(NEON_CONFIG.X.maxPoints, neonState.ultPoints + gained);
+          neonState.slideKillsTracker += gained;
+          // 2명 처치 시 슬라이딩 횟수 즉시 재충전
+          if (neonState.slideKillsTracker >= 2) {
+            neonState.slideKillsTracker %= 2;
+            neonState.slidesRemaining = 1;
+            showSkillNotice('2명 처치 달성! 고속 슬라이딩 횟수 즉시 재충전', '#22d3ee');
+          }
+        }
+      }
+    }
+
+    // 레이나 상태 업데이트
+    if (reynaState.empressTimer > 0) reynaState.empressTimer = Math.max(0, reynaState.empressTimer - dt);
+    if (reynaState.dismissTimer > 0) {
+      reynaState.dismissTimer = Math.max(0, reynaState.dismissTimer - dt);
+      dismissOverlay.style.display = 'block';
+      dismissOverlay.style.opacity = reynaState.empressTimer > 0 ? '0.95' : '0.55';
+    } else {
+      dismissOverlay.style.display = 'none';
+    }
+
+    if (reynaState.devourTimer > 0 && reynaState.devourHealLeft > 0 && !isDead) {
+      reynaState.devourTimer -= dt;
+      const healStep = Math.min(reynaState.devourHealLeft, 65 * dt);
+      reynaState.devourHealLeft -= healStep;
+      if (typeof playerHp !== 'undefined') {
+        playerHp = Math.min(150, playerHp + healStep); // 최대 150 오버힐 적용
+        if (typeof updateHUD === 'function') updateHUD();
+      }
+    }
+
+    // 영혼 구슬 수명 및 회전
+    for (let i = reynaState.soulOrbs.length - 1; i >= 0; i--) {
+      const o = reynaState.soulOrbs[i];
+      o.life -= dt;
+      o.halo.rotation.z += dt * 3.0;
+      if (o.life <= 0) {
+        scene.remove(o.mesh);
+        reynaState.soulOrbs.splice(i, 1);
+      }
+    }
+
+    // 눈총 구체 이동 및 적 시야 근시 판정
+    for (let i = reynaState.leers.length - 1; i >= 0; i--) {
+      const l = reynaState.leers[i];
+      l.life -= dt;
+      if (l.traveled < l.maxDist) {
+        const step = 18 * dt;
+        l.mesh.position.addScaledVector(l.dir, step);
+        l.traveled += step;
+      }
+      l.mesh.lookAt(camera.position);
+      // 적 AI 봇이 눈총을 바라보면 명중률/반응 저하
+      if (typeof brawlBots !== 'undefined') {
+        for (const b of brawlBots) {
+          if (!b.userData.dead && b.userData.team !== myTeam) {
+            if (b.position.distanceTo(l.mesh.position) < 24) {
+              b.userData.nearsighted = true;
+            }
+          }
+        }
+      }
+      if (l.life <= 0) {
+        scene.remove(l.mesh);
+        reynaState.leers.splice(i, 1);
+      }
+    }
+
+    // 네온 배터리 및 슬라이딩, 오버드라이브 업데이트
+    if (neonState.highGearActive && !isDead) {
+      neonState.battery = Math.max(0, neonState.battery - 14 * dt);
+      if (neonState.battery <= 0) neonState.highGearActive = false;
+    } else {
+      neonState.battery = Math.min(100, neonState.battery + 10 * dt);
+    }
+
+    if (neonState.slideTimer > 0 && !isDead && typeof origMoveWithCollision === 'function') {
+      neonState.slideTimer -= dt;
+      origMoveWithCollision(neonState.slideDir.x * 24 * dt, neonState.slideDir.z * 24 * dt);
+    }
+
+    if (neonState.overdriveActive) {
+      neonState.overdriveTimer -= dt;
+      neonState.overdriveBeamTimer -= dt;
+      if (typeof isMouseDown !== 'undefined' && isMouseDown && neonState.overdriveBeamTimer <= 0) {
+        neonState.overdriveBeamTimer = 0.085;
+        fireNeonLightningBeam();
+      }
+      if (neonState.overdriveTimer <= 0) neonState.overdriveActive = false;
+    }
+
+    // 추월 차선 전기 장벽 수명
+    for (let i = neonState.fastLanes.length - 1; i >= 0; i--) {
+      neonState.fastLanes[i].life -= dt;
+      if (neonState.fastLanes[i].life <= 0) {
+        scene.remove(neonState.fastLanes[i].mesh);
+        neonState.fastLanes.splice(i, 1);
+      }
+    }
+
+    // 릴레이 볼트 투사체 벽 1회 반사 및 바닥 폭발
+    for (let i = neonState.relayBolts.length - 1; i >= 0; i--) {
+      const rb = neonState.relayBolts[i];
+      rb.life -= dt;
+      rb.vel.y -= 14 * dt;
+      const nextPos = rb.mesh.position.clone().addScaledVector(rb.vel, dt);
+
+      if (!rb.bounced && typeof wallColliders !== 'undefined') {
+        for (const c of wallColliders) {
+          if (nextPos.x > c.minX && nextPos.x < c.maxX && nextPos.z > c.minZ && nextPos.z < c.maxZ && nextPos.y < (c.maxY || 4)) {
+            rb.bounced = true;
+            rb.vel.x = -rb.vel.x * 0.85;
+            rb.vel.z = -rb.vel.z * 0.85;
+            break;
+          }
+        }
+      }
+
+      rb.mesh.position.addScaledVector(rb.vel, dt);
+      if (rb.mesh.position.y <= 0.25 || rb.life <= 0) {
+        triggerRelayBoltZones(rb.mesh.position, rb.vel);
+        scene.remove(rb.mesh);
+        neonState.relayBolts.splice(i, 1);
+      }
+    }
+
+    // 뇌진탕 장판 및 번개 광선 정리
+    for (let i = neonState.concussZones.length - 1; i >= 0; i--) {
+      neonState.concussZones[i].life -= dt;
+      if (neonState.concussZones[i].life <= 0) {
+        scene.remove(neonState.concussZones[i].mesh);
+        neonState.concussZones.splice(i, 1);
+      }
+    }
+    for (let i = neonState.lightningBeams.length - 1; i >= 0; i--) {
+      neonState.lightningBeams[i].life -= dt;
+      if (neonState.lightningBeams[i].life <= 0) {
+        scene.remove(neonState.lightningBeams[i].mesh);
+        neonState.lightningBeams.splice(i, 1);
+      }
+    }
+
+    concussOverlay.style.display = neonState.selfConcussTimer > 0 ? 'block' : 'none';
+    if (neonState.selfConcussTimer > 0) neonState.selfConcussTimer = Math.max(0, neonState.selfConcussTimer - dt);
+
+    renderReynaNeonUI();
+  }
+
+  requestAnimationFrame(updateReynaAndNeonLoop);
+})();
+</script>
+
 </body>
 </html>
