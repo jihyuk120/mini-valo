@@ -79,74 +79,162 @@
     .item-title { font-size: 15px; font-weight: bold; }
     .item-desc { font-size: 12px; color: #bbb; margin-top: 2px; }
     .item-price { font-size: 14px; font-weight: bold; color: #00ffcc; }
+
+    /* === MINI-VALO SOCIAL & PARTY LOBBY === */
+    #overlay { padding: 0; overflow: hidden; }
+    .social-topbar { position: fixed; top: 14px; right: 20px; display: flex; align-items: center; gap: 10px; z-index: 25; background: rgba(12, 20, 28, 0.94); border: 1px solid rgba(0,255,204,0.35); padding: 8px 14px; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+    .profile-tag-pill { background: #162635; color: #00ffcc; border: 1px solid #00ffcc; padding: 3px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; }
+    .profile-tag-pill:hover { background: #1f374d; }
+    .social-sidebar { width: 310px; min-width: 290px; height: 100%; background: rgba(11, 18, 26, 0.96); border-left: 1px solid rgba(255,255,255,0.14); display: flex; flex-direction: column; padding: 66px 14px 14px 14px; box-sizing: border-box; text-align: left; }
+    .friend-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px 10px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+    .st-online { background: #10b981; box-shadow: 0 0 6px #10b981; }
+    .st-lobby { background: #00ffcc; box-shadow: 0 0 6px #00ffcc; }
+    .st-ingame { background: #ff4655; box-shadow: 0 0 6px #ff4655; }
+    .st-offline { background: #64748b; }
+    .lobby-slot { background: rgba(15, 25, 35, 0.85); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 7px 10px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+    .lobby-slot.human { border-color: rgba(0, 255, 204, 0.55); background: rgba(0, 255, 204, 0.08); }
+    .lobby-slot.bot { border-style: dashed; color: #94a3b8; }
+    .lobby-slot.empty { border-style: dotted; color: #555; }
+    .history-item { font-size: 11px; padding: 5px 8px; border-radius: 4px; background: rgba(255,255,255,0.04); margin-bottom: 4px; display: flex; justify-content: space-between; }
+
   </style>
 </head>
 <body>
+  <!-- 최초 접속 기기별 영구 계정 설정 모달 -->
+  <div id="accountSetupModal" class="modal" style="display:none; z-index:45; background:rgba(8,14,20,0.97);">
+    <div class="panel-box" style="width:430px; text-align:center; border-color:#00ffcc;">
+      <h2 style="color:#00ffcc; margin:0 0 8px 0; letter-spacing:2px;">요원 계정 생성</h2>
+      <p style="font-size:13px; color:#cbd5e1; margin:0 0 14px 0;">이 기기(localStorage)에 영구 저장될 닉네임과 고유 태그를 설정하세요.</p>
+      <div class="row" style="margin-bottom:14px;">
+        <input type="text" id="setupNickInput" placeholder="닉네임 (최대 10자)" maxlength="10" style="width:155px;">
+        <span style="font-size:20px; font-weight:bold; color:#00ffcc;">#</span>
+        <input type="text" id="setupTagInput" placeholder="4자리" maxlength="4" style="width:85px;">
+      </div>
+      <button class="btn-primary" style="width:100%;" onclick="confirmAccountSetup()">계정 저장 및 로비 입장</button>
+    </div>
+  </div>
+
+  <!-- 친구 초대 수신 알림 팝업 -->
+  <div id="inviteToastModal" style="display:none; position:fixed; bottom:24px; right:330px; width:300px; background:#0f1923; border:2px solid #00ffcc; border-radius:8px; padding:15px; z-index:40; box-shadow:0 8px 28px rgba(0,0,0,0.85); color:white;">
+    <div style="font-size:11px; color:#00ffcc; font-weight:bold; letter-spacing:1px;">PARTY INVITE · 파티 초대</div>
+    <div id="inviteSenderText" style="font-size:15px; font-weight:bold; margin:6px 0 12px 0;">플레이어#1234 님의 로비 초대</div>
+    <div class="row" style="justify-content:flex-end;">
+      <button class="btn-secondary" style="padding:6px 12px; font-size:12px;" onclick="declinePartyInvite()">거절</button>
+      <button class="btn-primary" style="padding:6px 14px; font-size:12px;" onclick="acceptPartyInvite()">수락 및 합류</button>
+    </div>
+  </div>
+
   <div id="overlay" class="modal">
-    <h1>MINI-VALO</h1>
-    <p id="menuSubtitle" style="color:#ccc; margin:0 0 10px 0;">일반전 (13선승 · 전반 12라운드 공수교대 · 크레드 규칙) & 사격장</p>
+    <!-- 우측 상단 영구 프로필 패널 -->
+    <div class="social-topbar">
+      <span style="font-size:12px; color:#94a3b8;">내 계정:</span>
+      <span id="profileRiotIdDisplay" style="font-weight:bold; color:#ece8e1; font-size:14px;">플레이어#0000</span>
+      <button class="profile-tag-pill" onclick="copyMyRiotTag()" title="클릭하여 닉네임#태그 복사">태그 복사</button>
+      <button class="btn-secondary" style="padding:4px 9px; font-size:12px;" onclick="promptRenameAccount()">닉네임 변경</button>
+      <input type="hidden" id="nickInput" value="플레이어">
+    </div>
 
-    <div class="panel-box">
-      <div class="row" style="justify-content:space-between;">
-        <div>
-          닉네임: <input type="text" id="nickInput" value="플레이어" maxlength="10" style="width:120px;">
+    <div style="display:flex; width:100%; height:100%; box-sizing:border-box;">
+      <!-- 중앙: 파티 로비 및 매치 설정 -->
+      <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; overflow-y:auto;">
+        <h1>MINI-VALO</h1>
+        <p id="menuSubtitle" style="color:#ccc; margin:0 0 10px 0;">파티 로비 · 일반전 (13선승 · 전반 12라운드 공수교대 · 크레드 규칙) & 사격장</p>
+
+        <div class="panel-box" style="width:760px; max-width:96%;">
+          <div class="row" style="justify-content:space-between;">
+            <div>
+              <span style="font-size:13px; color:#bbb;">인원 규모:</span>
+              <select id="lobbyTeamSizeSelect" onchange="onHostLobbyConfigChange()" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:6px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
+                <option value="1">1 vs 1</option>
+                <option value="2">2 vs 2</option>
+                <option value="3">3 vs 3</option>
+                <option value="4">4 vs 4</option>
+                <option value="5" selected>5 vs 5</option>
+              </select>
+              <select id="brawlModeSelect" style="display:none;">
+                <option value="5v5" selected>5v5</option>
+                <option value="2v2">2v2</option>
+                <option value="pvp">pvp</option>
+              </select>
+            </div>
+            <label style="font-size:13px; color:#ece8e1; cursor:pointer; display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" id="lobbyFillBotsCheck" checked onchange="onHostLobbyConfigChange()">
+              빈자리 AI 봇 자동 채움
+            </label>
+            <div>
+              <span style="font-size:13px; color:#bbb;">내 요원:</span>
+              <select id="agentSelect" onchange="selectAgent(this.value)" style="background:#0f1923; border:1px solid #ff4655; color:#ff4655; padding:6px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
+                <option value="jett" selected>제트 (Jett)</option>
+                <option value="phoenix">피닉스 (Phoenix)</option>
+                <option value="reyna">레이나 (Reyna)</option>
+                <option value="sova">소바 (Sova)</option>
+                <option value="clove">클로브 (Clove)</option>
+                <option value="neon">네온 (Neon)</option>
+                <option value="chamber">체임버 (Chamber)</option>
+              </select>
+            </div>
+            <div>
+              감도: <span id="sensValue" style="color:#00ffcc; font-weight:bold;">1.00</span>
+              <input type="range" id="sensSlider" min="0.1" max="3.0" step="0.05" value="1.0" style="width:95px; vertical-align:middle;">
+            </div>
+            <button id="btnFullscreen" class="btn-secondary" style="padding:6px 10px; font-size:12px;">전체화면</button>
+          </div>
+          <div id="roomStatusBox" style="margin-top:8px; text-align:center; font-size:13px; color:#ffcc00;">
+            파티 로비 대기 중 · 우측 Social 패널에서 친구를 초대하거나 혼자 시작할 수 있습니다.
+          </div>
+          <div id="playerListBox" style="display:none;"></div>
         </div>
-        <div>
-          감도: <span id="sensValue" style="color:#00ffcc; font-weight:bold;">1.00</span>
-          <input type="range" id="sensSlider" min="0.1" max="3.0" step="0.05" value="1.0" style="width:130px; vertical-align:middle;">
+
+        <!-- 공격팀 / 수비팀 파티 슬롯 보드 -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; width:760px; max-width:96%; margin:6px 0;">
+          <div class="panel-box" style="width:100%; margin:0; padding:12px 16px; border-top:3px solid #10b981;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="color:#10b981; font-weight:bold; font-size:14px;">공격팀 (GREEN · ATTACK)</span>
+              <button id="teamRedBtn" class="btn-team-blue active" style="padding:4px 10px; font-size:12px;" onclick="selectTeam('red')">공격팀으로 이동</button>
+            </div>
+            <div id="attackerSlotsContainer"></div>
+          </div>
+          <div class="panel-box" style="width:100%; margin:0; padding:12px 16px; border-top:3px solid #ff4655;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="color:#ff4655; font-weight:bold; font-size:14px;">수비팀 (RED · DEFEND)</span>
+              <button id="teamBlueBtn" class="btn-team-red" style="padding:4px 10px; font-size:12px;" onclick="selectTeam('blue')">수비팀으로 이동</button>
+            </div>
+            <div id="defenderSlotsContainer"></div>
+          </div>
         </div>
-        <button id="btnFullscreen" class="btn-secondary" style="padding:8px 12px; font-size:13px;">전체화면</button>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="btnResumeGame" class="btn-secondary" style="font-size:16px; padding:12px 22px; display:none; border-color:#ffcc00; color:#ffcc00;">↩ 게임으로 돌아가기</button>
+          <button id="btnLeaveRoomLobby" class="btn-secondary" style="font-size:15px; padding:12px 18px; display:none; border-color:#ff4655; color:#ff4655;" onclick="leaveRoomAndReturnToTitle()">파티 나가기</button>
+          <button id="btnLeaveRoomEsc" class="btn-secondary" style="font-size:15px; padding:12px 18px; display:none; border-color:#ff4655; color:#ff4655;" onclick="leaveRoomAndReturnToTitle()">🚪 매치/파티 나가기</button>
+          <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:13px 30px;">게임 시작 (일반전 13선승)</button>
+          <button id="btnStartRange" class="btn-secondary" style="font-size:16px; padding:13px 24px;">사격장</button>
+        </div>
+
+        <p style="color:#999; font-size:12px; margin-top:10px;">
+          WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | TAB: 전황표 | F: 상호작용
+        </p>
       </div>
-      <div class="row" style="margin-top:12px;">
-        <span style="font-size:14px; color:#bbb;">내 팀 선택:</span>
-        <button id="teamRedBtn" class="btn-team-red active" onclick="selectTeam('red')">공격팀 (GREEN · 초록)</button>
-        <button id="teamBlueBtn" class="btn-team-blue" onclick="selectTeam('blue')">수비팀 (RED · 빨강)</button>
-        <span style="color:#555;">|</span>
-        <span style="font-size:14px; color:#bbb;">내 요원:</span>
-        <select id="agentSelect" onchange="selectAgent(this.value)" style="background:#0f1923; border:1px solid #ff4655; color:#ff4655; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
-          <option value="jett" selected>제트 (Jett)</option>
-          <option value="phoenix">피닉스 (Phoenix)</option>
-          <option value="reyna">레이나 (Reyna)</option>
-          <option value="sova">소바 (Sova)</option>
-          <option value="clove">클로브 (Clove)</option>
-          <option value="neon">네온 (Neon)</option>
-          <option value="chamber">체임버 (Chamber)</option>
-        </select>
-        <span style="color:#555;">|</span>
-        <span style="font-size:14px; color:#bbb;">인원 구성:</span>
-        <select id="brawlModeSelect" style="background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:7px 10px; font-weight:bold; border-radius:4px; cursor:pointer;">
-          <option value="5v5" selected>5 vs 5 (어센트 폭파전 · AI 봇)</option>
-          <option value="2v2">2 vs 2 (소규모 폭파전)</option>
-          <option value="pvp">친구 PvP 전용 (AI 없음)</option>
-        </select>
+
+      <!-- 우측 사이드바: Social 친구 목록 & 최근 전적 -->
+      <div class="social-sidebar">
+        <div style="font-weight:bold; color:#00ffcc; font-size:15px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+          <span>SOCIAL · 친구 목록</span>
+          <span id="socialNetworkBadge" style="font-size:11px; color:#10b981;">● 연결됨</span>
+        </div>
+        <div style="display:flex; gap:6px; margin-bottom:10px;">
+          <input type="text" id="addFriendInput" placeholder="닉네임#태그 입력" style="flex:1; width:auto; padding:7px 9px; font-size:13px; text-align:left;">
+          <button class="btn-primary" style="padding:7px 12px; font-size:13px;" onclick="addFriendByTag()">추가</button>
+        </div>
+        <div id="friendListContainer" style="flex:1; overflow-y:auto; padding-right:2px;"></div>
+
+        <div style="border-top:1px solid rgba(255,255,255,0.12); padding-top:8px; margin-top:8px;">
+          <div style="font-size:12px; font-weight:bold; color:#cbd5e1; margin-bottom:6px;">최근 전적 (기기 저장)</div>
+          <div id="recentMatchesContainer" style="max-height:115px; overflow-y:auto;"></div>
+        </div>
       </div>
     </div>
-
-    <div class="panel-box">
-      <div style="font-weight:bold; color:#00ffcc; margin-bottom:10px; text-align:center;">친구와 1v1 / 2v2 일반전 방 연결 (최대 4인)</div>
-      <div class="row">
-        <button id="btnCreateRoom" class="btn-primary">방 만들기 (호스트)</button>
-        <span style="color:#666;">|</span>
-        <input type="text" id="joinCodeInput" placeholder="친구 방 코드 입력">
-        <button id="btnJoinRoom" class="btn-secondary">방 참가하기</button>
-        <button id="btnLeaveRoomLobby" class="btn-secondary" style="display:none; border-color:#ff4655; color:#ff4655;" onclick="leaveRoomAndReturnToTitle()">방 나가기</button>
-      </div>
-      <div id="roomStatusBox" style="margin-top:10px; text-align:center; font-size:14px; color:#ffcc00;">
-        현재 상태: 솔로 모드 (방 만들기 또는 코드 입력으로 친구와 연결 가능)
-      </div>
-      <div id="playerListBox" style="margin-top:6px; text-align:center; font-size:13px; color:#aaa;"></div>
-    </div>
-
-    <div class="row" style="margin-top:10px;">
-      <button id="btnResumeGame" class="btn-secondary" style="font-size:17px; padding:14px 26px; display:none; border-color:#ffcc00; color:#ffcc00;">↩ 게임으로 돌아가기 (뒤로 가기)</button>
-      <button id="btnLeaveRoomEsc" class="btn-secondary" style="font-size:17px; padding:14px 24px; display:none; border-color:#ff4655; color:#ff4655;" onclick="leaveRoomAndReturnToTitle()">🚪 방 나가기 (메인 타이틀)</button>
-      <button id="btnStartBrawl" class="btn-primary" style="font-size:17px; padding:14px 32px;">일반전 새 게임 시작 (13선승)</button>
-      <button id="btnStartRange" class="btn-secondary" style="font-size:17px; padding:14px 28px;">사격장 (훈련봇 연습)</button>
-    </div>
-
-    <p style="color:#999; font-size:12px; margin-top:14px;">
-      WASD: 이동 | Shift: 걷기 | Ctrl: 앉기 | Space: 점프 | E: 대시 | R: 재장전 | Y: 자세히 보기 | B: 상점 | TAB: 전황표 | F: 상호작용(철문·스파이크·무기 줍기)
-    </p>
   </div>
 
   <div id="shopModal" class="modal" style="justify-content:flex-start; padding-top:16px;">
@@ -5124,6 +5212,7 @@
         updateHUD();
         if (getCurrentWeaponKey() === 'melee') updateGunVisual();
       }
+      if (typeof saveAccountSkins === 'function') saveAccountSkins();
     };
 
     function updateGunVisual() {
@@ -6252,13 +6341,14 @@
     let spectateTargetIndex = 0;
 
     function syncBrawlRoster() {
-      const modeEl = document.getElementById('brawlModeSelect');
-      const mode = modeEl ? modeEl.value : '5v5';
-      if (mode === 'pvp') {
+      const sizeEl = document.getElementById('lobbyTeamSizeSelect');
+      const fillEl = document.getElementById('lobbyFillBotsCheck');
+      const targetPerTeam = sizeEl ? Math.max(1, Math.min(5, parseInt(sizeEl.value, 10) || 5)) : 5;
+      const fillBots = fillEl ? fillEl.checked : true;
+      if (!fillBots) {
         initBrawlBots(0, 0);
         return;
       }
-      const targetPerTeam = mode === '2v2' ? 2 : 5;
       let redHumans = (myTeam === 'red' ? 1 : 0);
       let blueHumans = (myTeam === 'blue' ? 1 : 0);
       Object.values(remotePlayers).forEach(rp => {
@@ -6504,11 +6594,15 @@
 
       if (redScore >= 13 || blueScore >= 13) {
         isMatchOver = true;
+        const didIWin = (myTeam === 'red' && redScore >= 13) || (myTeam === 'blue' && blueScore >= 13);
+        if (typeof recordMatchHistory === 'function') {
+          recordMatchHistory(didIWin ? 'WIN' : 'LOSS', `${redScore}:${blueScore}`, `${playerStats.k}/${playerStats.d}/${playerStats.a}`);
+        }
         const champTeam = redScore >= 13 ? 'GREEN TEAM (공격)' : 'RED TEAM (수비)';
         const champColor = redScore >= 13 ? '#10b981' : '#ff4655';
         showRoundBanner(
           `MATCH VICTORY! ${champTeam}`,
-          `최종 스코어 ${redScore} : ${blueScore} (13선승 달성!) — ESC를 눌러 새 게임 시작`,
+          `최종 스코어 ${redScore} : ${blueScore} (13선승 달성!) — ESC를 눌러 로비로 복귀`,
           champColor,
           0
         );
@@ -7358,21 +7452,398 @@
       });
     }
 
-    function updatePlayerListUI() {
-      const myNick = document.getElementById('nickInput').value || '플레이어';
-      const list = [`[나] ${myNick} (${myTeam === 'red' ? '공격·GREEN' : '수비·RED'})`];
-      Object.values(remotePlayers).forEach(rp => {
-        list.push(`${rp.nick} (${rp.team === 'red' ? '공격·GREEN' : '수비·RED'})`);
+    // =========================================================================
+    // 1. 기기별 영구 계정(localStorage) & 2. 친구 추가/온라인 상태/로비 초대 & 3. 파티 로비
+    // =========================================================================
+    const ACCOUNT_STORAGE_KEY = 'minivalo_persistent_account_v1';
+    let userAccount = null;
+    let partyHostId = '';
+    let pendingInvite = null;
+    const friendPresenceMap = {}; // riotId -> { status: 'online'|'lobby'|'ingame'|'offline', peerId, inParty }
+    const friendPingConns = {};
+
+    function riotIdToPeerId(riotId) {
+      const hex = Array.from(riotId).map(ch => ch.charCodeAt(0).toString(16)).join('');
+      return 'mv-acct-' + hex;
+    }
+
+    function loadUserAccount() {
+      try {
+        const raw = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.nick && parsed.tag) {
+            parsed.friends = Array.isArray(parsed.friends) ? parsed.friends : [];
+            parsed.history = Array.isArray(parsed.history) ? parsed.history : [];
+            if (parsed.skins) Object.assign(equippedSkins, parsed.skins);
+            return parsed;
+          }
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function saveUserAccount() {
+      if (!userAccount) return;
+      userAccount.skins = { ...equippedSkins };
+      try {
+        localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(userAccount));
+      } catch (e) {}
+    }
+
+    window.saveAccountSkins = function() {
+      saveUserAccount();
+    };
+
+    window.recordMatchHistory = function(result, scoreStr, kdaStr) {
+      if (!userAccount) return;
+      const sizeEl = document.getElementById('lobbyTeamSizeSelect');
+      const sz = sizeEl ? sizeEl.value : '5';
+      userAccount.history.unshift({
+        result,
+        score: scoreStr,
+        kda: kdaStr,
+        mode: `${sz}v${sz}`,
+        date: new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
       });
-      document.getElementById('playerListBox').innerText = '참가자 (' + list.length + '/4): ' + list.join('  |  ');
+      if (userAccount.history.length > 10) userAccount.history.length = 10;
+      saveUserAccount();
+      renderRecentMatchesUI();
+    };
+
+    function getMyRiotId() {
+      return userAccount ? `${userAccount.nick}#${userAccount.tag}` : '플레이어#0000';
+    }
+
+    function syncAccountUI() {
+      if (!userAccount) return;
+      const fullId = getMyRiotId();
+      const disp = document.getElementById('profileRiotIdDisplay');
+      if (disp) disp.innerText = fullId;
+      const nickInp = document.getElementById('nickInput');
+      if (nickInp) nickInp.value = fullId;
+      renderFriendListUI();
+      renderRecentMatchesUI();
+      renderLobbySlotsUI();
+    }
+
+    window.confirmAccountSetup = function() {
+      const n = (document.getElementById('setupNickInput').value || '').trim().replace(/#/g, '');
+      let t = (document.getElementById('setupTagInput').value || '').trim().replace(/[^0-9a-zA-Z]/g, '');
+      if (!n) { alert('닉네임을 입력해주세요.'); return; }
+      if (!t) t = String(Math.floor(1000 + Math.random() * 9000));
+      userAccount = {
+        nick: n.slice(0, 10),
+        tag: t.slice(0, 4).toUpperCase(),
+        skins: { ...equippedSkins },
+        friends: [],
+        history: []
+      };
+      saveUserAccount();
+      document.getElementById('accountSetupModal').style.display = 'none';
+      syncAccountUI();
+      initAccountPeerNode();
+    };
+
+    window.copyMyRiotTag = function() {
+      const id = getMyRiotId();
+      if (navigator.clipboard) navigator.clipboard.writeText(id).catch(() => {});
+      document.getElementById('roomStatusBox').innerText = `내 고유 태그 [${id}] 가 클립보드에 복사되었습니다!`;
+    };
+
+    window.promptRenameAccount = function() {
+      if (!userAccount) return;
+      const nextNick = prompt('새 닉네임을 입력하세요 (고유 #' + userAccount.tag + ' 태그는 유지됩니다):', userAccount.nick);
+      if (!nextNick) return;
+      const cleaned = nextNick.trim().replace(/#/g, '').slice(0, 10);
+      if (!cleaned) return;
+      userAccount.nick = cleaned;
+      saveUserAccount();
+      syncAccountUI();
+      broadcastData({ type: 'info', nick: getMyRiotId(), team: myTeam, agentKey: myAgent });
+    };
+
+    window.addFriendByTag = function() {
+      if (!userAccount) return;
+      const raw = (document.getElementById('addFriendInput').value || '').trim();
+      if (!raw.includes('#')) {
+        alert('상대방의 "닉네임#태그" 형식으로 입력해주세요. (예: 플레이어#1234)');
+        return;
+      }
+      const [fNick, fTag] = raw.split('#');
+      if (!fNick || !fTag) { alert('올바른 닉네임#태그를 입력해주세요.'); return; }
+      const formatted = `${fNick.trim()}#${fTag.trim().toUpperCase()}`;
+      if (formatted === getMyRiotId()) { alert('자기 자신은 친구로 추가할 수 없습니다.'); return; }
+      if (!userAccount.friends.includes(formatted)) {
+        userAccount.friends.push(formatted);
+        saveUserAccount();
+      }
+      document.getElementById('addFriendInput').value = '';
+      renderFriendListUI();
+      probeAllFriendsPresence();
+    };
+
+    window.removeFriendByTag = function(targetTag) {
+      if (!userAccount) return;
+      userAccount.friends = userAccount.friends.filter(f => f !== targetTag);
+      saveUserAccount();
+      renderFriendListUI();
+    };
+
+    function getMyCurrentStatus() {
+      if (hasEnteredGame && currentMap === 'brawl') return 'ingame';
+      if (Object.keys(connections).length > 0) return 'lobby';
+      return 'online';
+    }
+
+    function probeAllFriendsPresence() {
+      if (!userAccount || !peer || !peer.open) return;
+      userAccount.friends.forEach(fId => {
+        if (Object.values(remotePlayers).some(rp => rp.nick === fId)) {
+          friendPresenceMap[fId] = { status: 'lobby', peerId: riotIdToPeerId(fId) };
+          renderFriendListUI();
+          return;
+        }
+        const targetPeer = riotIdToPeerId(fId);
+        try {
+          const c = peer.connect(targetPeer, { metadata: { kind: 'presence' } });
+          const timer = setTimeout(() => {
+            if (!friendPresenceMap[fId] || friendPresenceMap[fId].status === 'offline') {
+              friendPresenceMap[fId] = { status: 'offline', peerId: targetPeer };
+              renderFriendListUI();
+            }
+            try { c.close(); } catch (e) {}
+          }, 3000);
+          c.on('open', () => {
+            c.send({ type: 'presencePing', fromRiotId: getMyRiotId(), status: getMyCurrentStatus() });
+          });
+          c.on('data', (d) => {
+            if (d && d.type === 'presencePong') {
+              clearTimeout(timer);
+              friendPresenceMap[fId] = { status: d.status || 'online', peerId: targetPeer };
+              renderFriendListUI();
+              setTimeout(() => { try { c.close(); } catch (e) {} }, 200);
+            }
+          });
+          c.on('error', () => {
+            clearTimeout(timer);
+            friendPresenceMap[fId] = { status: 'offline', peerId: targetPeer };
+            renderFriendListUI();
+          });
+        } catch (e) {}
+      });
+    }
+
+    window.inviteFriendToParty = function(friendRiotId) {
+      if (!peer || !peer.open) {
+        alert('네트워크 연결 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      if (Object.keys(connections).length === 0) {
+        isHost = true;
+        partyHostId = myPeerId;
+      }
+      if (!isHost) {
+        alert('파티장만 친구를 초대할 수 있습니다.');
+        return;
+      }
+      const sizeEl = document.getElementById('lobbyTeamSizeSelect');
+      const maxPlayers = (sizeEl ? parseInt(sizeEl.value, 10) : 5) * 2;
+      if (1 + Object.keys(connections).length >= maxPlayers) {
+        alert(`현재 설정(${sizeEl.value}v${sizeEl.value})의 최대 인원(${maxPlayers}명)이 가득 찼습니다.`);
+        return;
+      }
+      const targetPeer = riotIdToPeerId(friendRiotId);
+      const invConn = peer.connect(targetPeer, { metadata: { kind: 'invite' } });
+      document.getElementById('roomStatusBox').innerText = `${friendRiotId} 님에게 파티 초대를 전송했습니다...`;
+      invConn.on('open', () => {
+        invConn.send({
+          type: 'partyInvite',
+          fromRiotId: getMyRiotId(),
+          hostPeerId: myPeerId,
+          teamSize: sizeEl ? sizeEl.value : '5',
+          fillBots: document.getElementById('lobbyFillBotsCheck').checked
+        });
+        setTimeout(() => { try { invConn.close(); } catch (e) {} }, 600);
+      });
+      invConn.on('error', () => {
+        document.getElementById('roomStatusBox').innerText = `${friendRiotId} 님이 현재 오프라인 상태입니다.`;
+      });
+    };
+
+    window.acceptPartyInvite = function() {
+      document.getElementById('inviteToastModal').style.display = 'none';
+      if (!pendingInvite || !peer || !peer.open) return;
+      const inv = pendingInvite;
+      pendingInvite = null;
+
+      Object.values(connections).forEach(c => { try { c.close(); } catch (e) {} });
+      Object.keys(connections).forEach(k => delete connections[k]);
+      Object.keys(remotePlayers).forEach(pid => removeRemoteAvatar(pid));
+
+      isHost = false;
+      partyHostId = inv.hostPeerId;
+      const conn = peer.connect(inv.hostPeerId, { metadata: { kind: 'party' } });
+      setupConnection(conn);
+      document.getElementById('roomStatusBox').innerText = `${inv.fromRiotId} 님의 파티 로비에 합류했습니다!`;
+      updateLeaveRoomButtonsVisibility();
+      renderLobbySlotsUI();
+    };
+
+    window.declinePartyInvite = function() {
+      pendingInvite = null;
+      document.getElementById('inviteToastModal').style.display = 'none';
+    };
+
+    function renderFriendListUI() {
+      const box = document.getElementById('friendListContainer');
+      if (!box || !userAccount) return;
+      if (userAccount.friends.length === 0) {
+        box.innerHTML = '<div style="font-size:12px; color:#64748b; text-align:center; padding:18px 6px;">추가된 친구가 없습니다.<br>상단에 친구의 닉네임#태그를 입력하세요.</div>';
+        return;
+      }
+      box.innerHTML = userAccount.friends.map(fId => {
+        const inMyParty = Object.values(remotePlayers).some(rp => rp.nick === fId);
+        const info = friendPresenceMap[fId] || { status: 'offline' };
+        const st = inMyParty ? 'lobby' : info.status;
+        const stLabel = st === 'ingame' ? '게임중' : (st === 'lobby' ? '대기중(파티)' : (st === 'online' ? '온라인' : '오프라인'));
+        const dotCls = st === 'ingame' ? 'st-ingame' : (st === 'lobby' ? 'st-lobby' : (st === 'online' ? 'st-online' : 'st-offline'));
+        const actionHtml = inMyParty
+          ? '<span style="font-size:11px; color:#00ffcc; font-weight:bold;">파티 합류됨</span>'
+          : `<button class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="inviteFriendToParty('${fId}')">파티 초대</button>`;
+        return `
+          <div class="friend-card">
+            <div>
+              <div style="font-size:13px; font-weight:bold; color:#ece8e1;">${fId}</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:2px;"><span class="status-dot ${dotCls}"></span>${stLabel}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:4px;">
+              ${actionHtml}
+              <button onclick="removeFriendByTag('${fId}')" title="친구 삭제" style="background:transparent; border:none; color:#64748b; cursor:pointer; font-size:12px;">✕</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderRecentMatchesUI() {
+      const box = document.getElementById('recentMatchesContainer');
+      if (!box || !userAccount) return;
+      if (!userAccount.history || userAccount.history.length === 0) {
+        box.innerHTML = '<div style="font-size:11px; color:#64748b;">아직 완료된 일반전 전적이 없습니다.</div>';
+        return;
+      }
+      box.innerHTML = userAccount.history.map(h => {
+        const win = h.result === 'WIN';
+        return `<div class="history-item" style="border-left:3px solid ${win ? '#10b981' : '#ff4655'};">
+          <span style="font-weight:bold; color:${win ? '#10b981' : '#ff4655'};">${win ? '승리' : '패배'} (${h.score})</span>
+          <span style="color:#cbd5e1;">${h.mode || '5v5'} · KDA ${h.kda}</span>
+          <span style="color:#64748b;">${h.date || ''}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function renderLobbySlotsUI() {
+      const atkBox = document.getElementById('attackerSlotsContainer');
+      const defBox = document.getElementById('defenderSlotsContainer');
+      if (!atkBox || !defBox) return;
+
+      const sizeEl = document.getElementById('lobbyTeamSizeSelect');
+      const fillEl = document.getElementById('lobbyFillBotsCheck');
+      const teamSize = sizeEl ? Math.max(1, Math.min(5, parseInt(sizeEl.value, 10) || 5)) : 5;
+      const fillBots = fillEl ? fillEl.checked : true;
+
+      const inParty = Object.keys(connections).length > 0;
+      const canControlSettings = !inParty || isHost;
+      if (sizeEl) sizeEl.disabled = !canControlSettings;
+      if (fillEl) fillEl.disabled = !canControlSettings;
+
+      const startBtn = document.getElementById('btnStartBrawl');
+      if (startBtn) {
+        startBtn.disabled = inParty && !isHost;
+        startBtn.innerText = (inParty && !isHost) ? '방장이 게임 시작 대기중...' : `게임 시작 (${teamSize} vs ${teamSize} 일반전)`;
+        startBtn.style.opacity = (inParty && !isHost) ? '0.6' : '1';
+      }
+
+      const redHumans = [];
+      const blueHumans = [];
+      const meEntry = {
+        id: myPeerId || '__local__',
+        nick: getMyRiotId(),
+        agent: myAgent,
+        isMe: true,
+        isLeader: !inParty || isHost
+      };
+      if (myTeam === 'red') redHumans.push(meEntry);
+      else blueHumans.push(meEntry);
+
+      Object.entries(remotePlayers).forEach(([pid, rp]) => {
+        const entry = {
+          id: pid,
+          nick: rp.nick,
+          agent: rp.agentKey || 'jett',
+          isMe: false,
+          isLeader: !isHost && pid === partyHostId
+        };
+        if (rp.team === 'red') redHumans.push(entry);
+        else blueHumans.push(entry);
+      });
+
+      const buildTeamHtml = (humans, teamCode) => {
+        let html = '';
+        for (let i = 0; i < teamSize; i++) {
+          if (humans[i]) {
+            const p = humans[i];
+            const hostSwapBtn = (isHost && !p.isMe)
+              ? `<button class="btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="hostMovePlayerTeam('${p.id}', '${teamCode === 'red' ? 'blue' : 'red'}')">팀 이동</button>`
+              : '';
+            html += `<div class="lobby-slot human">
+              <span>${p.isLeader ? '👑 ' : ''}<strong style="color:#ece8e1;">${p.nick}</strong> ${p.isMe ? '<span style="color:#00ffcc;">(나)</span>' : ''}</span>
+              <span style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; color:#cbd5e1;">${p.agent.toUpperCase()}</span>${hostSwapBtn}</span>
+            </div>`;
+          } else if (fillBots) {
+            html += `<div class="lobby-slot bot"><span>🤖 AI 전술 봇 (자동 채움)</span><span style="font-size:11px;">BOT</span></div>`;
+          } else {
+            html += `<div class="lobby-slot empty"><span>빈 슬롯 (친구 초대 가능)</span><span style="font-size:11px;">EMPTY</span></div>`;
+          }
+        }
+        return html;
+      };
+
+      atkBox.innerHTML = buildTeamHtml(redHumans, 'red');
+      defBox.innerHTML = buildTeamHtml(blueHumans, 'blue');
+    }
+
+    window.onHostLobbyConfigChange = function() {
+      renderLobbySlotsUI();
+      if (isHost && Object.keys(connections).length > 0) {
+        broadcastData({
+          type: 'lobbyConfig',
+          teamSize: document.getElementById('lobbyTeamSizeSelect').value,
+          fillBots: document.getElementById('lobbyFillBotsCheck').checked
+        });
+      }
+    };
+
+    window.hostMovePlayerTeam = function(targetPeerId, newTeam) {
+      if (!isHost || !remotePlayers[targetPeerId]) return;
+      remotePlayers[targetPeerId].team = newTeam;
+      renderLobbySlotsUI();
+      if (connections[targetPeerId] && connections[targetPeerId].open) {
+        connections[targetPeerId].send({ type: 'forceTeam', team: newTeam });
+      }
+    };
+
+    function updatePlayerListUI() {
+      renderLobbySlotsUI();
+      renderFriendListUI();
     }
 
     window.selectTeam = function(team) {
       myTeam = team;
       document.getElementById('teamRedBtn').classList.toggle('active', team === 'red');
       document.getElementById('teamBlueBtn').classList.toggle('active', team === 'blue');
-      updatePlayerListUI();
-      broadcastData({ type: 'info', nick: document.getElementById('nickInput').value || '플레이어', team: myTeam, agentKey: myAgent });
+      renderLobbySlotsUI();
+      broadcastData({ type: 'info', nick: getMyRiotId(), team: myTeam, agentKey: myAgent });
       if (currentMap === 'brawl') {
         startBrawlRound(1);
       }
@@ -7493,17 +7964,27 @@
     function setupConnection(conn) {
       conn.on('open', () => {
         connections[conn.peer] = conn;
-        const myNick = document.getElementById('nickInput').value || '플레이어';
-        conn.send({ type: 'info', nick: myNick, team: myTeam, agentKey: myAgent, isDead, k: playerStats.k, d: playerStats.d, a: playerStats.a, credits });
+        conn.send({ type: 'info', nick: getMyRiotId(), team: myTeam, agentKey: myAgent, isDead, k: playerStats.k, d: playerStats.d, a: playerStats.a, credits });
 
         if (isHost) {
           const otherPeers = Object.keys(connections).filter(id => id !== conn.peer);
-          conn.send({ type: 'peerList', peers: otherPeers, redScore, blueScore });
+          conn.send({
+            type: 'peerList',
+            peers: otherPeers,
+            redScore,
+            blueScore,
+            hostPeerId: myPeerId,
+            teamSize: document.getElementById('lobbyTeamSizeSelect').value,
+            fillBots: document.getElementById('lobbyFillBotsCheck').checked
+          });
           if (currentMap === 'brawl') {
             syncBrawlRoster();
             sendHostRoundSync(conn);
           }
         }
+        updateLeaveRoomButtonsVisibility();
+        renderLobbySlotsUI();
+        renderFriendListUI();
       });
 
       conn.on('data', (msg) => {
@@ -7519,17 +8000,39 @@
             if (typeof msg.a === 'number') remotePlayers[conn.peer].a = msg.a;
             if (typeof msg.credits === 'number') remotePlayers[conn.peer].credits = msg.credits;
           }
+          renderLobbySlotsUI();
+          renderFriendListUI();
           if (currentMap === 'brawl') {
             syncBrawlRoster();
             if (isHost) sendHostRoundSync();
           }
+        } else if (msg.type === 'lobbyConfig') {
+          if (msg.teamSize) document.getElementById('lobbyTeamSizeSelect').value = msg.teamSize;
+          if (typeof msg.fillBots === 'boolean') document.getElementById('lobbyFillBotsCheck').checked = msg.fillBots;
+          renderLobbySlotsUI();
+        } else if (msg.type === 'forceTeam') {
+          if (msg.team === 'red' || msg.team === 'blue') {
+            selectTeam(msg.team);
+          }
+        } else if (msg.type === 'startMatch') {
+          if (msg.teamSize) document.getElementById('lobbyTeamSizeSelect').value = msg.teamSize;
+          if (typeof msg.fillBots === 'boolean') document.getElementById('lobbyFillBotsCheck').checked = msg.fillBots;
+          loadMap('brawl');
+          isShopOpen = false;
+          shopModal.style.display = 'none';
+          overlay.style.display = 'none';
+          try { document.body.requestPointerLock(); } catch (e) {}
         } else if (msg.type === 'peerList') {
           redScore = msg.redScore || 0;
           blueScore = msg.blueScore || 0;
+          if (msg.hostPeerId) partyHostId = msg.hostPeerId;
+          if (msg.teamSize) document.getElementById('lobbyTeamSizeSelect').value = msg.teamSize;
+          if (typeof msg.fillBots === 'boolean') document.getElementById('lobbyFillBotsCheck').checked = msg.fillBots;
           updateScoreboard();
+          renderLobbySlotsUI();
           msg.peers.forEach(pid => {
             if (pid !== myPeerId && !connections[pid] && peer) {
-              const c = peer.connect(pid);
+              const c = peer.connect(pid, { metadata: { kind: 'party' } });
               setupConnection(c);
             }
           });
@@ -7635,14 +8138,22 @@
       conn.on('close', () => {
         delete connections[conn.peer];
         removeRemoteAvatar(conn.peer);
+        if (Object.keys(connections).length === 0) {
+          isHost = false;
+          partyHostId = '';
+        }
+        updateLeaveRoomButtonsVisibility();
+        renderLobbySlotsUI();
+        renderFriendListUI();
       });
     }
 
     function updateLeaveRoomButtonsVisibility() {
-      const inRoomOrMatch = Boolean(peer || Object.keys(connections).length > 0 || hasEnteredGame);
+      const inParty = Object.keys(connections).length > 0;
+      const inRoomOrMatch = Boolean(inParty || hasEnteredGame);
       const lobbyLeaveBtn = document.getElementById('btnLeaveRoomLobby');
       const escLeaveBtn = document.getElementById('btnLeaveRoomEsc');
-      if (lobbyLeaveBtn) lobbyLeaveBtn.style.display = (peer || Object.keys(connections).length > 0) ? 'inline-block' : 'none';
+      if (lobbyLeaveBtn) lobbyLeaveBtn.style.display = inParty ? 'inline-block' : 'none';
       if (escLeaveBtn) escLeaveBtn.style.display = inRoomOrMatch ? 'inline-block' : 'none';
     }
 
@@ -7653,13 +8164,8 @@
         });
       } catch (e) {}
       Object.keys(connections).forEach(k => delete connections[k]);
-
-      if (peer) {
-        try { peer.destroy(); } catch (e) {}
-        peer = null;
-      }
-      myPeerId = '';
       isHost = false;
+      partyHostId = '';
 
       Object.keys(remotePlayers).forEach(pid => removeRemoteAvatar(pid));
 
@@ -7707,10 +8213,7 @@
       const lb = document.getElementById('tabLeaderboard');
       if (lb) lb.style.display = 'none';
 
-      document.getElementById('roomStatusBox').innerText = '현재 상태: 솔로 모드 (방 만들기 또는 코드 입력으로 친구와 연결 가능)';
-      document.getElementById('playerListBox').innerText = '';
-      const joinInput = document.getElementById('joinCodeInput');
-      if (joinInput) joinInput.value = '';
+      document.getElementById('roomStatusBox').innerText = '파티 로비 대기 중 · 우측 Social 패널에서 친구를 초대하거나 혼자 시작할 수 있습니다.';
 
       const resumeBtn = document.getElementById('btnResumeGame');
       if (resumeBtn) resumeBtn.style.display = 'none';
@@ -7723,65 +8226,87 @@
       updateScoreboard();
       updateHUD();
       updateLeaveRoomButtonsVisibility();
+      renderLobbySlotsUI();
+      renderFriendListUI();
       if (overlay) overlay.style.display = 'flex';
     };
 
-    document.getElementById('btnCreateRoom').addEventListener('click', () => {
-      if (typeof Peer === 'undefined') {
-        alert('네트워크 모듈 로딩 중입니다. 잠시 후 다시 눌러주세요.');
+    function initAccountPeerNode() {
+      if (typeof Peer === 'undefined' || !userAccount) return;
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
+      const fixedId = riotIdToPeerId(getMyRiotId());
+      peer = new Peer(fixedId);
+      const badge = document.getElementById('socialNetworkBadge');
+      if (badge) { badge.innerText = '● 연결 중...'; badge.style.color = '#ffcc00'; }
+
+      peer.on('open', (id) => {
+        myPeerId = id;
+        if (badge) { badge.innerText = '● 온라인'; badge.style.color = '#10b981'; }
+        probeAllFriendsPresence();
+      });
+
+      peer.on('error', (err) => {
+        if (err && err.type === 'unavailable-id') {
+          peer = new Peer();
+          peer.on('open', (id) => {
+            myPeerId = id;
+            if (badge) { badge.innerText = '● 온라인(보조)'; badge.style.color = '#10b981'; }
+            probeAllFriendsPresence();
+          });
+          peer.on('connection', handleIncomingSocialConnection);
+        }
+      });
+
+      peer.on('connection', handleIncomingSocialConnection);
+    }
+
+    function handleIncomingSocialConnection(conn) {
+      const kind = conn.metadata && conn.metadata.kind;
+      if (kind === 'presence') {
+        conn.on('data', (msg) => {
+          if (msg && msg.type === 'presencePing') {
+            if (msg.fromRiotId) {
+              friendPresenceMap[msg.fromRiotId] = { status: msg.status || 'online', peerId: conn.peer };
+              renderFriendListUI();
+            }
+            conn.send({ type: 'presencePong', status: getMyCurrentStatus() });
+          }
+        });
         return;
       }
-      if (peer) {
-        try { peer.destroy(); } catch (e) {}
+      if (kind === 'invite') {
+        conn.on('data', (msg) => {
+          if (msg && msg.type === 'partyInvite') {
+            pendingInvite = msg;
+            document.getElementById('inviteSenderText').innerText = `${msg.fromRiotId} 님의 파티 초대 (${msg.teamSize}v${msg.teamSize})`;
+            document.getElementById('inviteToastModal').style.display = 'block';
+          }
+        });
+        return;
+      }
+      const sizeEl = document.getElementById('lobbyTeamSizeSelect');
+      const maxPlayers = (sizeEl ? parseInt(sizeEl.value, 10) : 5) * 2;
+      if (1 + Object.keys(connections).length >= maxPlayers) {
+        conn.close();
+        return;
       }
       isHost = true;
-      const randomCode = 'valo-' + Math.floor(1000 + Math.random() * 9000);
-      peer = new Peer(randomCode);
-      document.getElementById('roomStatusBox').innerText = '방 생성 중...';
-      updateLeaveRoomButtonsVisibility();
+      partyHostId = myPeerId;
+      setupConnection(conn);
+    }
 
-      peer.on('open', (id) => {
-        myPeerId = id;
-        document.getElementById('roomStatusBox').innerHTML = `방 생성 완료! 친구에게 알려줄 코드: <span style="color:#00ffcc; font-size:18px; user-select:all;">${id}</span>`;
-        updatePlayerListUI();
-        updateLeaveRoomButtonsVisibility();
-      });
-
-      peer.on('connection', (conn) => {
-        if (Object.keys(connections).length >= 3) {
-          conn.close();
-          return;
-        }
-        setupConnection(conn);
-        updateLeaveRoomButtonsVisibility();
-      });
-    });
-
-    document.getElementById('btnJoinRoom').addEventListener('click', () => {
-      const code = document.getElementById('joinCodeInput').value.trim();
-      if (!code) { alert('친구의 방 코드를 입력하세요!'); return; }
-      if (peer) {
-        try { peer.destroy(); } catch (e) {}
-      }
-      isHost = false;
-      peer = new Peer();
-      document.getElementById('roomStatusBox').innerText = '방 접속 중...';
-      updateLeaveRoomButtonsVisibility();
-
-      peer.on('open', (id) => {
-        myPeerId = id;
-        const conn = peer.connect(code);
-        setupConnection(conn);
-        document.getElementById('roomStatusBox').innerHTML = `방(${code})에 연결되었습니다!`;
-        updatePlayerListUI();
-        updateLeaveRoomButtonsVisibility();
-      });
-
-      peer.on('connection', (conn) => {
-        setupConnection(conn);
-        updateLeaveRoomButtonsVisibility();
-      });
-    });
+    // Boot persistent account check
+    userAccount = loadUserAccount();
+    if (!userAccount) {
+      document.getElementById('setupTagInput').value = String(Math.floor(1000 + Math.random() * 9000));
+      document.getElementById('accountSetupModal').style.display = 'flex';
+    } else {
+      syncAccountUI();
+      setTimeout(initAccountPeerNode, 150);
+    }
+    setInterval(probeAllFriendsPresence, 15000);
 
     function addKillFeed(text, isHighlight = false) {
       const killfeed = document.getElementById('killfeed');
@@ -8374,6 +8899,18 @@
     });
 
     document.getElementById('btnStartBrawl').addEventListener('click', () => {
+      const inParty = Object.keys(connections).length > 0;
+      if (inParty && !isHost) {
+        alert('파티장만 게임을 시작할 수 있습니다.');
+        return;
+      }
+      if (inParty && isHost) {
+        broadcastData({
+          type: 'startMatch',
+          teamSize: document.getElementById('lobbyTeamSizeSelect').value,
+          fillBots: document.getElementById('lobbyFillBotsCheck').checked
+        });
+      }
       loadMap('brawl');
       isShopOpen = false;
       shopModal.style.display = 'none';
