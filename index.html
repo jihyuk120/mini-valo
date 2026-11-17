@@ -14582,5 +14582,168 @@
 })();
 </script>
 
+
+<script>
+(function applyFinalNineFixes() {
+  // 3. 스킬 사용 시 상단 텍스트 알림(55m 폭발, 진탕 등) 완전 삭제
+  const toastEl = document.getElementById('agentSkillToast');
+  if (toastEl) toastEl.style.display = 'none';
+  if (typeof showSkillNotice === 'function') {
+    window.showSkillNotice = function() {};
+  }
+
+  // 2. 네온 Q 릴레이 볼트 2지점 동시 폭발(1.2초 지연) 구현
+  if (typeof neonState !== 'undefined' && typeof scene !== 'undefined') {
+    neonState.pendingRelayZones = neonState.pendingRelayZones || [];
+
+    window.triggerRelayBoltZones = function(impactPos, bounceDir) {
+      const forwardFlat = new THREE.Vector3(bounceDir.x, 0, bounceDir.z);
+      if (forwardFlat.lengthSq() < 0.001) forwardFlat.set(0, 0, -1);
+      forwardFlat.normalize();
+
+      const zoneRadius = 5.5;
+      const spots = [
+        impactPos.clone(),
+        impactPos.clone().addScaledVector(forwardFlat, 8.2)
+      ];
+
+      spots.forEach(pt => {
+        const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl')
+          ? getFloorHeightAt(pt.x, pt.z, pt.y) : 0;
+
+        // 1.2초 뒤 동시 폭발 예고 원형 표식 생성
+        const warnRing = new THREE.Mesh(
+          new THREE.RingGeometry(zoneRadius * 0.88, zoneRadius, 48),
+          new THREE.MeshBasicMaterial({ color: 0x22d3ee, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+        );
+        warnRing.rotation.x = -Math.PI / 2;
+        warnRing.position.set(pt.x, floorY + 0.08, pt.z);
+
+        const warnDisc = new THREE.Mesh(
+          new THREE.CircleGeometry(zoneRadius, 48),
+          new THREE.MeshBasicMaterial({ color: 0x0284c7, side: THREE.DoubleSide, transparent: true, opacity: 0.25 })
+        );
+        warnDisc.rotation.x = -Math.PI / 2;
+        warnDisc.position.set(pt.x, floorY + 0.05, pt.z);
+
+        scene.add(warnRing, warnDisc);
+        neonState.pendingRelayZones.push({
+          pos: new THREE.Vector3(pt.x, floorY, pt.z),
+          radius: zoneRadius,
+          delay: 1.2,
+          warnRing,
+          warnDisc
+        });
+      });
+    };
+  }
+
+  // 7. 아군 처치 시에도 우측 상단 팀 킬로그 출력 강조
+  if (typeof addKillFeed === 'function') {
+    const _origAddKillFeed = addKillFeed;
+    window.addKillFeed = function(text, isHighlight = false) {
+      const isTeamKill = typeof text === 'string' && text.includes('➔') &&
+        ((typeof myTeam !== 'undefined' && myTeam === 'red' && text.includes('[공격]')) ||
+         (typeof myTeam !== 'undefined' && myTeam === 'blue' && text.includes('[수비]')));
+      _origAddKillFeed(text, isHighlight || isTeamKill);
+    };
+  }
+
+  // 4. 상점(B키) 마우스 우클릭 스킬 되팔기(환불) 지원 보강 (제트/피닉스/레이나/네온 전체)
+  function ensureAllShopRightClickRefunds() {
+    const refundTargets = [
+      { id: 'shopSkillC', fn: () => typeof refundJettAbility === 'function' && refundJettAbility('C') },
+      { id: 'shopSkillQ', fn: () => typeof refundJettAbility === 'function' && refundJettAbility('Q') },
+      { id: 'phxShopC',   fn: () => typeof refundPhoenixAbility === 'function' && refundPhoenixAbility('C') },
+      { id: 'phxShopQ',   fn: () => typeof refundPhoenixAbility === 'function' && refundPhoenixAbility('Q') },
+      { id: 'phxShopE',   fn: () => typeof refundPhoenixAbility === 'function' && refundPhoenixAbility('E') },
+      { id: 'rnShopC',    fn: () => {
+        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
+        if (myAgent === 'reyna' && reynaState.cCharges > 0) {
+          reynaState.cCharges--; credits = Math.min(9000, credits + 250); updateHUD();
+        } else if (myAgent === 'neon' && neonState.cCharges > 0) {
+          neonState.cCharges--; credits = Math.min(9000, credits + 300); updateHUD();
+        }
+      }},
+      { id: 'rnShopQ',    fn: () => {
+        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
+        if (myAgent === 'reyna' && reynaState.qeCharges > 1) {
+          reynaState.qeCharges--; credits = Math.min(9000, credits + 200); updateHUD();
+        } else if (myAgent === 'neon' && neonState.qCharges > 0) {
+          neonState.qCharges--; credits = Math.min(9000, credits + 250); updateHUD();
+        }
+      }}
+    ];
+    refundTargets.forEach(item => {
+      const el = document.getElementById(item.id);
+      if (el && !el._rightClickRefundAttached) {
+        el._rightClickRefundAttached = true;
+        el.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          item.fn();
+        });
+      }
+    });
+  }
+
+  // 1, 2, 5, 6, 8, 9 통합 루프 보강
+  let prevTick = performance.now();
+  function unifiedNineFixLoop(now) {
+    requestAnimationFrame(unifiedNineFixLoop);
+    const dt = Math.min(0.05, (now - prevTick) / 1000);
+    prevTick = now;
+
+    ensureAllShopRightClickRefunds();
+
+    // 1 & 5. 제트 X 칼날 폭풍 및 레이나 E 무시 활성 시 총기/칼 모델 겹침 완벽 제거
+    if (typeof myAgent !== 'undefined' && typeof gunGroup !== 'undefined') {
+      if (myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) {
+        gunGroup.visible = false;
+      }
+      if (myAgent === 'reyna' && typeof reynaState !== 'undefined' && reynaState.dismissTimer > 0) {
+        gunGroup.visible = false;
+      }
+    }
+
+    // 2. 네온 릴레이 볼트 1.2초 지연 후 2지점 동시 폭발 및 진탕 판정
+    if (typeof neonState !== 'undefined' && Array.isArray(neonState.pendingRelayZones)) {
+      for (let i = neonState.pendingRelayZones.length - 1; i >= 0; i--) {
+        const pz = neonState.pendingRelayZones[i];
+        pz.delay -= dt;
+        const pulse = 1.0 + Math.sin((1.2 - pz.delay) * 14) * 0.04;
+        pz.warnRing.scale.set(pulse, pulse, 1);
+        if (pz.delay <= 0) {
+          scene.remove(pz.warnRing);
+          scene.remove(pz.warnDisc);
+          const zoneMesh = createLargeRelayConcussZoneMesh(pz.radius);
+          zoneMesh.position.copy(pz.pos);
+          scene.add(zoneMesh);
+          neonState.concussZones.push({ mesh: zoneMesh, pos: pz.pos.clone(), radius: pz.radius, life: 3.4, maxLife: 3.4 });
+
+          if (typeof brawlBots !== 'undefined') {
+            for (const b of brawlBots) {
+              if (!b.userData.dead && b.userData.team !== myTeam) {
+                if (Math.hypot(b.position.x - pz.pos.x, b.position.z - pz.pos.z) <= pz.radius) {
+                  b.userData.concussedTimer = 3.8;
+                }
+              }
+            }
+          }
+          if (typeof window.practiceBots !== 'undefined' && Array.isArray(window.practiceBots)) {
+            for (const pb of window.practiceBots) {
+              if (Math.hypot(pb.position.x - pz.pos.x, pb.position.z - pz.pos.z) <= pz.radius) {
+                pb.userData.concussedTimer = 3.8;
+              }
+            }
+          }
+          neonState.pendingRelayZones.splice(i, 1);
+        }
+      }
+    }
+  }
+  requestAnimationFrame(unifiedNineFixLoop);
+})();
+</script>
+
 </body>
 </html>
