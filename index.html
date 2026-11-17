@@ -94,7 +94,7 @@
     .item-price { font-size: 14px; font-weight: bold; color: #00ffcc; }
 
     /* === MINI-VALO SOCIAL & PARTY LOBBY === */
-    #overlay { padding: 0; overflow: hidden; }
+    #overlay { padding: 0; overflow: hidden; z-index: 50 !important; pointer-events: auto !important; }
     .social-topbar { position: fixed; top: 14px; right: 20px; display: flex; align-items: center; gap: 10px; z-index: 25; background: rgba(12, 20, 28, 0.94); border: 1px solid rgba(0,255,204,0.35); padding: 8px 14px; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
     .profile-tag-pill { background: #162635; color: #00ffcc; border: 1px solid #00ffcc; padding: 3px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; }
     .profile-tag-pill:hover { background: #1f374d; }
@@ -115,7 +115,7 @@
 </head>
 <body>
   <!-- 발로란트 스타일 아이디·비밀번호 로그인 / 회원가입 모달 -->
-  <div id="accountSetupModal" class="modal" style="display:none; z-index:45; background:rgba(8,14,20,0.97);">
+  <div id="accountSetupModal" class="modal" style="display:none; pointer-events:none; z-index:60; background:rgba(8,14,20,0.97);">
     <div class="panel-box" style="width:440px; text-align:left; border-color:#ff4655; padding:26px 30px; box-shadow:0 12px 40px rgba(0,0,0,0.85);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div>
@@ -174,7 +174,7 @@
     </div>
   </div>
 
-  <div id="overlay" class="modal">
+  <div id="overlay" class="modal" style="z-index: 50; pointer-events: auto;">
     <!-- 우측 상단 영구 프로필 패널 -->
     <div class="social-topbar">
       <span style="font-size:12px; color:#94a3b8;">내 계정:</span>
@@ -292,7 +292,7 @@
     </div>
   </div>
 
-  <div id="shopModal" class="modal" style="justify-content:flex-start; padding-top:16px;">
+  <div id="shopModal" class="modal" style="display: none; pointer-events: none; justify-content:flex-start; padding-top:16px;">
     <div class="shop-header" style="width:1160px; max-width:96vw; margin-bottom:8px;">
       <h1 style="font-size:28px; margin:0;">발로란트 전 무기 무기고 (SHOP)</h1>
       <div style="font-size:18px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">800</span> ¤ <span id="shopCreditHint" style="font-size:12px; color:#ffcc00;">(일반전 크레드 규칙)</span></div>
@@ -15058,7 +15058,20 @@
     localStorage.setItem(SESSION_KEY, userObj.id);
 
     const modal = document.getElementById('accountSetupModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.style.display = 'none';
+      modal.style.pointerEvents = 'none';
+    }
+    document.querySelectorAll('.ch-modal-backdrop, .modal').forEach(function (el) {
+      if (el.id !== 'overlay' && window.getComputedStyle(el).display === 'none') {
+        el.style.pointerEvents = 'none';
+      }
+    });
+    const overlayEl = document.getElementById('overlay');
+    if (overlayEl) {
+      overlayEl.style.zIndex = '50';
+      overlayEl.style.pointerEvents = 'auto';
+    }
 
     const fullId = `${userObj.nick}#${userObj.tag}`;
     const disp = document.getElementById('profileRiotIdDisplay');
@@ -15147,7 +15160,7 @@
   window.logoutAccount = function () {
     localStorage.removeItem(SESSION_KEY);
     const modal = document.getElementById('accountSetupModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) { modal.style.display = 'flex'; modal.style.pointerEvents = 'auto'; modal.style.zIndex = '60'; }
     window.switchAuthTab('login');
   };
 
@@ -15158,7 +15171,7 @@
       enterLobbyWithUser(users[savedId]);
     } else {
       const modal = document.getElementById('accountSetupModal');
-      if (modal) modal.style.display = 'flex';
+      if (modal) { modal.style.display = 'flex'; modal.style.pointerEvents = 'auto'; modal.style.zIndex = '60'; }
       window.switchAuthTab('login');
     }
   });
