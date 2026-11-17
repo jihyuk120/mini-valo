@@ -14474,7 +14474,8 @@
     }
 
     // 사망 시 궁극기/테더 해제
-    if (isDead) {
+    // 사망 시 궁극기/테더 해제
+    if (typeof isDead !== 'undefined' && isDead) {
       if (reynaState.empressActive) reynaState.empressActive = false;
       if (reynaState.devourBeam || reynaState.devourTimer > 0) clearReynaDevourTether(false);
       if (neonState.overdriveActive) neonState.overdriveActive = false;
