@@ -7718,17 +7718,6 @@
       renderLobbySlotsUI();
     }
 
-    window.switchAuthTab = function(mode) {
-      authMode = mode;
-      const isSignup = mode === 'signup';
-      document.getElementById('authModalTitle').innerText = isSignup ? '새 요원 계정 가입' : '요원 계정 로그인';
-      document.getElementById('signupExtraFields').style.display = isSignup ? 'flex' : 'none';
-      document.getElementById('authSubmitBtn').innerText = isSignup ? '회원가입 완료 및 로비 입장' : '로그인 및 로비 입장';
-      document.getElementById('tabLoginBtn').className = isSignup ? 'btn-secondary' : 'btn-primary';
-      document.getElementById('tabSignupBtn').className = isSignup ? 'btn-primary' : 'btn-secondary';
-      document.getElementById('authErrorMsg').innerText = '';
-    };
-
     function applyAccountSession(userId, keepLogin) {
       currentUserId = userId;
       userAccount = usersDB[userId];
@@ -7761,57 +7750,7 @@
       if (typeof initAccountPeerNode === 'function') initAccountPeerNode();
     }
 
-    window.submitAuthForm = function() {
-      loadUsersDB();
-      const id = (document.getElementById('authIdInput').value || '').trim();
-      const pw = (document.getElementById('authPwInput').value || '').trim();
-      const keepLogin = !!document.getElementById('keepLoggedInCheck').checked;
-      const errEl = document.getElementById('authErrorMsg');
-      errEl.style.color = '#ff4655';
-      errEl.innerText = '';
-
-      if (!id || !pw) {
-        errEl.innerText = '아이디와 비밀번호를 모두 입력하세요.';
-        return;
-      }
-
-      if (authMode === 'signup') {
-        if (Object.prototype.hasOwnProperty.call(usersDB, id)) {
-          errEl.innerText = '이미 존재하는 아이디입니다.';
-          return;
-        }
-        const rawNick = (document.getElementById('setupNickInput').value || '').trim().replace(/#/g, '');
-        let rawTag = (document.getElementById('setupTagInput').value || '').trim().replace(/[^0-9a-zA-Z]/g, '');
-        if (!rawNick) {
-          errEl.innerText = '사용할 닉네임을 입력하세요.';
-          return;
-        }
-        if (!rawTag) rawTag = String(Math.floor(1000 + Math.random() * 9000));
-
-        const cleanNick = rawNick.slice(0, 10);
-        const cleanTag = rawTag.slice(0, 4).toUpperCase();
-        const savedCrosshair = (typeof crosshairConfig === 'object' && crosshairConfig)
-          ? { ...crosshairConfig }
-          : (typeof DEFAULT_CROSSHAIR === 'object' && DEFAULT_CROSSHAIR ? { ...DEFAULT_CROSSHAIR } : {});
-
-        usersDB[id] = {
-          id: id,
-          userId: id,
-          pw: pw,
-          password: pw,
-          nickname: cleanNick,
-          nick: cleanNick,
-          tag: cleanTag,
-          vp: 0,
-          radianite: 0,
-          ownedSkins: [],
-          skins: { ...equippedSkins },
-          friends: [],
-          history: [],
-          sensitivity: sensitivity || 1.0,
-          crosshair: savedCrosshair
-        };
-        saveUsersDB();
+    saveUsersDB();
         applyAccountSession(id, keepLogin);
       } else {
         if (!Object.prototype.hasOwnProperty.call(usersDB, id) || !usersDB[id]) {
@@ -7828,16 +7767,6 @@
         if (!record.nickname && record.nick) record.nickname = record.nick;
         applyAccountSession(id, keepLogin);
       }
-    };
-
-    window.logoutAccount = function() {
-      localStorage.removeItem(SESSION_KEY);
-      currentUserId = null;
-      userAccount = null;
-      document.getElementById('authPwInput').value = '';
-      document.getElementById('authErrorMsg').innerText = '';
-      switchAuthTab('login');
-      document.getElementById('accountSetupModal').style.display = 'flex';
     };
 
     window.resetAccountStorageData = function() {
@@ -8608,16 +8537,7 @@
       setupConnection(conn);
     }
 
-    // Boot persistent account check
-    userAccount = loadUserAccount();
-    if (!userAccount) {
-      document.getElementById('setupTagInput').value = String(Math.floor(1000 + Math.random() * 9000));
-      document.getElementById('accountSetupModal').style.display = 'flex';
-    } else {
-      syncAccountUI();
-      setTimeout(initAccountPeerNode, 150);
-    }
-    setInterval(probeAllFriendsPresence, 15000);
+    
 
     function addKillFeed(text, isHighlight = false) {
       const killfeed = document.getElementById('killfeed');
@@ -15105,5 +15025,145 @@
   requestAnimationFrame(balanceAndSlideFixTick);
 })();
 </script>
+
+<script>
+(function () {
+  const USERS_KEY = 'mv_users';
+  const SESSION_KEY = 'mv_current_user';
+  let authMode = 'login';
+
+  function getUsers() {
+    try {
+      const raw = localStorage.getItem(USERS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }
+
+  function enterLobbyWithUser(userObj) {
+    window.userAccount = {
+      id: userObj.id,
+      nick: userObj.nick,
+      tag: userObj.tag,
+      skins: (typeof equippedSkins !== 'undefined') ? { ...equippedSkins } : {},
+      friends: [],
+      history: []
+    };
+    localStorage.setItem(SESSION_KEY, userObj.id);
+
+    const modal = document.getElementById('accountSetupModal');
+    if (modal) modal.style.display = 'none';
+
+    const fullId = `${userObj.nick}#${userObj.tag}`;
+    const disp = document.getElementById('profileRiotIdDisplay');
+    if (disp) disp.innerText = fullId;
+    const nickInp = document.getElementById('nickInput');
+    if (nickInp) nickInp.value = fullId;
+
+    if (typeof syncAccountUI === 'function') syncAccountUI();
+    if (typeof initAccountPeerNode === 'function') {
+      setTimeout(initAccountPeerNode, 100);
+    }
+  }
+
+  window.switchAuthTab = function (mode) {
+    authMode = (mode === 'signup') ? 'signup' : 'login';
+    const title = document.getElementById('authModalTitle');
+    const signupFields = document.getElementById('signupExtraFields');
+    const loginBtn = document.getElementById('tabLoginBtn');
+    const signupBtn = document.getElementById('tabSignupBtn');
+    const submitBtn = document.getElementById('authSubmitBtn');
+    const errBox = document.getElementById('authErrorMsg');
+
+    if (errBox) errBox.innerText = '';
+    if (authMode === 'signup') {
+      if (title) title.innerText = '신규 요원 회원가입';
+      if (signupFields) signupFields.style.display = 'block';
+      if (loginBtn) loginBtn.className = 'btn-secondary';
+      if (signupBtn) signupBtn.className = 'btn-primary';
+      if (submitBtn) submitBtn.innerText = '계정 생성 및 로비 입장';
+      const tagInp = document.getElementById('setupTagInput');
+      if (tagInp && !tagInp.value) {
+        tagInp.value = String(Math.floor(1000 + Math.random() * 9000));
+      }
+    } else {
+      if (title) title.innerText = '요원 계정 로그인';
+      if (signupFields) signupFields.style.display = 'none';
+      if (loginBtn) loginBtn.className = 'btn-primary';
+      if (signupBtn) signupBtn.className = 'btn-secondary';
+      if (submitBtn) submitBtn.innerText = '로그인 및 로비 입장';
+    }
+  };
+
+  window.submitAuthForm = function () {
+    const idEl = document.getElementById('authIdInput');
+    const pwEl = document.getElementById('authPwInput');
+    const nickEl = document.getElementById('setupNickInput');
+    const tagEl = document.getElementById('setupTagInput');
+    const errBox = document.getElementById('authErrorMsg');
+
+    const id = (idEl ? idEl.value : '').trim();
+    const pw = (pwEl ? pwEl.value : '').trim();
+
+    if (!id || !pw) {
+      if (errBox) errBox.innerText = '아이디와 비밀번호를 모두 입력해주세요.';
+      else alert('아이디와 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    const users = getUsers();
+
+    if (authMode === 'signup') {
+      if (Object.hasOwn(users, id)) {
+        if (errBox) errBox.innerText = '이미 존재하는 아이디입니다.';
+        else alert('이미 존재하는 아이디입니다.');
+        return;
+      }
+      const rawNick = (nickEl ? nickEl.value : '').trim().replace(/#/g, '');
+      const rawTag = (tagEl ? tagEl.value : '').trim().replace(/[^0-9a-zA-Z]/g, '');
+      const nick = (rawNick || id).slice(0, 10);
+      const tag = (rawTag || String(Math.floor(1000 + Math.random() * 9000))).slice(0, 4).toUpperCase();
+
+      const newUser = { id, pw, nick, tag };
+      users[id] = newUser;
+      saveUsers(users);
+      enterLobbyWithUser(newUser);
+    } else {
+      if (!Object.hasOwn(users, id) || users[id].pw !== pw) {
+        if (errBox) errBox.innerText = '아이디가 없거나 비밀번호가 일치하지 않습니다.';
+        else alert('아이디가 없거나 비밀번호가 일치하지 않습니다.');
+        return;
+      }
+      enterLobbyWithUser(users[id]);
+    }
+  };
+
+  window.logoutAccount = function () {
+    localStorage.removeItem(SESSION_KEY);
+    const modal = document.getElementById('accountSetupModal');
+    if (modal) modal.style.display = 'flex';
+    window.switchAuthTab('login');
+  };
+
+  window.addEventListener('DOMContentLoaded', function () {
+    const users = getUsers();
+    const savedId = localStorage.getItem(SESSION_KEY);
+    if (savedId && Object.hasOwn(users, savedId)) {
+      enterLobbyWithUser(users[savedId]);
+    } else {
+      const modal = document.getElementById('accountSetupModal');
+      if (modal) modal.style.display = 'flex';
+      window.switchAuthTab('login');
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
