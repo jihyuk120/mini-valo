@@ -9801,14 +9801,6 @@
             let moveSpeed = curWeapon.moveSpeed || 7.4;
             if (isCrouching) moveSpeed = Math.min(3.4, moveSpeed * 0.48);
             else if (isWalking || zoomLevel > 0) moveSpeed = Math.min(4.4, moveSpeed * 0.62);
-            if (typeof myAgent !== 'undefined') {
-              if (myAgent === 'neon' && typeof neonState !== 'undefined' && (neonState.highGearActive || neonState.overdriveActive)) {
-                moveSpeed *= 1.48;
-              } else if (myAgent === 'reyna' && typeof reynaState !== 'undefined') {
-                if (reynaState.dismissTimer > 0) moveSpeed *= 1.9;
-                else if (reynaState.empressActive) moveSpeed *= 1.25;
-              }
-            }
             moveSpeed *= tagSlowMultiplier;
 
             moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
@@ -10211,9 +10203,6 @@
         });
       }
 
-      if (typeof myAgent !== 'undefined' && myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) {
-        if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
-      }
       renderer.render(scene, camera);
     }
     animate();
@@ -13221,14 +13210,14 @@
     showSkillNotice('눈총(C) 발동! 벽을 통과해 적의 시야를 차단합니다.', '#e879f9');
   }
 
-  // Q: 포식 (거리·시야 각도·벽 차단 제한 없이 맵에 영혼 구슬 존재 시 즉시 발동, 보라색 3D 광선 연결 + 초당 50 연속 회복)
+  // Q: 포식 (보라색 광선 연결 + 초당 50씩 약 2초간 연속 회복, 최대 150 오버힐, 벽/수명 종료 시 즉시 중단)
   function castReynaDevour(fromAutoEmpress = false, overrideOrb = null) {
     if (!fromAutoEmpress) {
       if (isPrepPhase()) return;
       if (reynaState.qeCharges <= 0 || isDead) return;
-      const targetOrb = overrideOrb || getAnyActiveSoulOrb();
+      const targetOrb = overrideOrb || getLookedAtSoulOrb();
       if (!targetOrb) {
-        showSkillNotice('맵에 활성화된 영혼 구슬이 있어야 포식(Q)을 사용할 수 있습니다.', '#e879f9');
+        showSkillNotice('시야 내 활성화된 영혼 구슬이 있어야 포식(Q)을 사용할 수 있습니다.', '#e879f9');
         return;
       }
       clearReynaDevourTether(true);
@@ -13567,24 +13556,7 @@
         const zoneMesh = createLargeRelayConcussZoneMesh(m.radius);
         zoneMesh.position.copy(m.pos);
         scene.add(zoneMesh);
-        scene.remove(zoneMesh);
-
-        // 번개 폭발 이펙트 생성 후 단발성 제거
-        const boltGroup = new THREE.Group();
-        const pillar = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.28, 1.35, 8.0, 16),
-          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.92 })
-        );
-        pillar.position.set(m.pos.x, m.pos.y + 4.0, m.pos.z);
-        const shockRing = new THREE.Mesh(
-          new THREE.RingGeometry(0.5, m.radius, 36),
-          new THREE.MeshBasicMaterial({ color: 0x22d3ee, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
-        );
-        shockRing.rotation.x = -Math.PI / 2;
-        shockRing.position.set(m.pos.x, m.pos.y + 0.12, m.pos.z);
-        boltGroup.add(pillar, shockRing);
-        scene.add(boltGroup);
-        setTimeout(() => scene.remove(boltGroup), 280);
+        neonState.concussZones.push({ mesh: zoneMesh, pos: m.pos.clone(), radius: m.radius, life: 3.4, maxLife: 3.4 });
 
         if (typeof brawlBots !== 'undefined') {
           for (const b of brawlBots) {
@@ -13604,53 +13576,6 @@
         }
       });
     }, 1200);
-  }
-
-  const origMoveWithCollision = typeof moveWithCollision === 'function' ? moveWithCollision : null;
-
-  // E: 고속 기어 토글 (팔 달리기 자세 전력 질주)
-  function toggleNeonHighGear() {
-    if (isDead) return;
-    if (neonState.overdriveActive) return;
-    if (!neonState.highGearActive) {
-      if (neonState.battery <= 5) {
-        showSkillNotice('배터리가 부족해 고속 기어(E)를 사용할 수 없습니다.', '#ff4655');
-        return;
-      }
-      neonState.highGearActive = true;
-      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
-      showSkillNotice('고속 기어(E) 활성화! 우클릭으로 이동 방향 슬라이딩', '#22d3ee');
-    } else {
-      neonState.highGearActive = false;
-      showSkillNotice('고속 기어(E) 해제', '#94a3b8');
-    }
-  }
-
-  // 우클릭: 달리는 중 이동 방향 고속 슬라이딩
-  function triggerNeonSlide() {
-    if (isDead || !neonState.highGearActive) return;
-    if (neonState.slidesRemaining <= 0 || neonState.slideTimer > 0) return;
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-    forward.y = 0;
-    if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
-    forward.normalize();
-    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
-    const dir = new THREE.Vector3();
-    if (typeof keys !== 'undefined') {
-      if (keys['KeyW']) dir.add(forward);
-      if (keys['KeyS']) dir.sub(forward);
-      if (keys['KeyD']) dir.add(right);
-      if (keys['KeyA']) dir.sub(right);
-    }
-    if (dir.lengthSq() < 0.001) dir.copy(forward);
-    dir.normalize();
-
-    neonState.slidesRemaining -= 1;
-    neonState.slideDir.copy(dir);
-    neonState.slideTimer = 0.34;
-    showSkillNotice('고속 슬라이딩!', '#38bdf8');
   }
 
   // X: 오버드라이브 (배터리 100% 연동, 처치 시 100% 즉시 재충전)
@@ -13947,7 +13872,7 @@
       document.getElementById('rnShopXTitle').innerText = `X 여제 (${reynaState.ultPoints}/6 pt)`;
       document.getElementById('rnShopXDesc').innerText = '라운드 무한 지속 / 연사·재장전 급증 / 자동 포식';
 
-      const qOrbReady = getAnyActiveSoulOrb() !== null;
+      const qOrbReady = getLookedAtSoulOrb() !== null;
       const eOrbReady = getAnyActiveSoulOrb() !== null;
       const qColor = (reynaState.qeCharges > 0 && qOrbReady && !isPrepPhase()) ? '#e879f9' : '#64748b';
       const eColor = (reynaState.qeCharges > 0 && eOrbReady && !isPrepPhase()) ? '#d946ef' : '#64748b';
@@ -14145,10 +14070,13 @@
       let connectionValid = true;
       if (reynaState.devourOrb) {
         const orbAlive = reynaState.soulOrbs.includes(reynaState.devourOrb) && reynaState.devourOrb.life > 0;
-        if (!orbAlive) {
+        const camPos = new THREE.Vector3();
+        camera.getWorldPosition(camPos);
+        const wallBlocked = isSegmentBlockedByWall(camPos, reynaState.devourOrb.mesh.position);
+        if (!orbAlive || wallBlocked) {
           connectionValid = false;
-          clearReynaDevourTether(true);
-          showSkillNotice('영혼 구슬이 소멸하여 포식(Q)이 중단되었습니다.', '#c084fc');
+          clearReynaDevourTether(!orbAlive);
+          showSkillNotice(wallBlocked ? '벽에 시야가 가로막혀 포식(Q) 연결이 끊어졌습니다!' : '영혼 구슬이 소멸하여 포식(Q)이 중단되었습니다.', '#c084fc');
         }
       }
 
@@ -14481,5 +14409,138 @@
 </script>
 
 
+<script>
+(function applyReynaNeonBalanceFix() {
+  // 1. 매 라운드 시작 시 레이나 Q/E 공유 충전량 기본 1개 무료 지급 보장
+  if (typeof window.resetBrawlAgentStateForRound === 'function') {
+    const _origResetRound = window.resetBrawlAgentStateForRound;
+    window.resetBrawlAgentStateForRound = function(...args) {
+      const res = _origResetRound.apply(this, args);
+      if (typeof reynaState !== 'undefined') {
+        reynaState.qeCharges = Math.max(1, reynaState.qeCharges || 0);
+      }
+      if (typeof updateHUD === 'function') updateHUD();
+      return res;
+    };
+  }
+
+  let _lastTrackedPhase = null;
+  let _lastTrackedRound = null;
+
+  // 2. 네온 슬라이딩 시작 시 즉시 총 꺼내기(무기 장착 복귀) + 팔 애니메이션 숨김
+  function restoreNeonWeaponOnSlide() {
+    if (typeof myAgent === 'undefined' || myAgent !== 'neon') return;
+    if (typeof neonState === 'undefined') return;
+
+    // 고속 기어 전력 질주 팔 그룹 숨기기
+    if (typeof neonSprintArmsData !== 'undefined' && neonSprintArmsData && neonSprintArmsData.armsGrp) {
+      neonSprintArmsData.armsGrp.visible = false;
+    }
+
+    // 숨겨져 있던 주무기/보조무기 즉시 손에 장착 복귀
+    if (typeof gunGroup !== 'undefined' && gunGroup) {
+      gunGroup.visible = true;
+    }
+    if (typeof currentWeaponSlot !== 'undefined' && typeof equipWeaponSlot === 'function') {
+      if (currentWeaponSlot === 'knife') {
+        if (typeof ownedPrimary !== 'undefined' && ownedPrimary) {
+          equipWeaponSlot('primary');
+        } else {
+          equipWeaponSlot('secondary');
+        }
+      }
+    }
+  }
+
+  // 마우스 우클릭(슬라이딩 트리거) 감지 시 즉시 무기 복귀 실행
+  window.addEventListener('mousedown', (e) => {
+    if (e.button === 2 && typeof myAgent !== 'undefined' && myAgent === 'neon') {
+      if (typeof neonState !== 'undefined' && (neonState.highGearActive || neonState.slideTimer > 0)) {
+        setTimeout(restoreNeonWeaponOnSlide, 0);
+      }
+    }
+  }, true);
+
+  // 3. 프레임 루프 보정:
+  // - 라운드/준비 페이즈 전환 시 레이나 qeCharges 기본 1개 무료 지급 보장
+  // - 레이나 E(무시) 이동 속도 대폭 상향 (기본 이속의 2.2배 수준)
+  // - 네온 E(고속 기어) 달리기 속도 기존 대비 2배 상향
+  // - 네온 슬라이딩(slideTimer > 0) 중 총기 표시 및 사격 가능 상태 유지
+  let _prevTime = performance.now();
+  function balanceAndSlideFixTick(now) {
+    requestAnimationFrame(balanceAndSlideFixTick);
+    const dt = Math.min(0.05, (now - _prevTime) / 1000);
+    _prevTime = now;
+
+    // (1) 라운드 시작(PREP 진입 또는 라운드 번호 변경) 시 레이나 Q/E 공유 충전량 최소 1개 무료 보장
+    if (typeof reynaState !== 'undefined') {
+      const curPhase = typeof roundPhase !== 'undefined' ? roundPhase : null;
+      const curRound = typeof roundNum !== 'undefined' ? roundNum : null;
+      if ((curPhase === 'PREP' && _lastTrackedPhase !== 'PREP') || (curRound !== null && curRound !== _lastTrackedRound)) {
+        reynaState.qeCharges = Math.max(1, reynaState.qeCharges || 0);
+        if (typeof updateHUD === 'function') updateHUD();
+      }
+      _lastTrackedPhase = curPhase;
+      _lastTrackedRound = curRound;
+    }
+
+    // (2) 레이나 E(무시) 발동 중 이동 속도 2.2배 수준 보강
+    // 기존 1.65배/1.9배 배율에 추가 가속을 더해 기본 이속의 약 2.2배 체감 속도로 질주
+    if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined') {
+      if (reynaState.dismissTimer > 0 && typeof playerVelocity !== 'undefined') {
+        const extraRatio = 2.2 / 1.65; // 기존 1.65배 기준 2.2배로 보정
+        const boostFactor = (extraRatio - 1.0);
+        if (typeof camera !== 'undefined' && typeof keys !== 'undefined') {
+          let fwd = 0, str = 0;
+          if (keys['KeyW']) fwd += 1;
+          if (keys['KeyS']) fwd -= 1;
+          if (keys['KeyD']) str += 1;
+          if (keys['KeyA']) str -= 1;
+          if (fwd !== 0 || str !== 0) {
+            const yaw = camera.rotation.y;
+            const len = Math.hypot(fwd, str);
+            const nx = (-Math.sin(yaw) * (fwd / len)) + (Math.cos(yaw) * (str / len));
+            const nz = (-Math.cos(yaw) * (fwd / len)) + (-Math.sin(yaw) * (str / len));
+            const baseWalkSpeed = 7.2;
+            playerVelocity.x += nx * baseWalkSpeed * boostFactor * dt * 12;
+            playerVelocity.z += nz * baseWalkSpeed * boostFactor * dt * 12;
+          }
+        }
+      }
+    }
+
+    // (3) 네온 E(고속 기어) 달리기 속도 기존 대비 2배 상향 + 슬라이딩 시 즉시 총 꺼내기
+    if (typeof myAgent !== 'undefined' && myAgent === 'neon' && typeof neonState !== 'undefined') {
+      // 슬라이딩 중이면 즉시 무기 장착 유지 (달리기 팔 숨김 + 총기 표시)
+      if (neonState.slideTimer > 0) {
+        restoreNeonWeaponOnSlide();
+      }
+
+      // 고속 기어 전력 질주(슬라이딩 중 제외) 시 기존 속도의 2배로 가속
+      if (neonState.highGearActive && (!neonState.slideTimer || neonState.slideTimer <= 0)) {
+        if (typeof camera !== 'undefined' && typeof keys !== 'undefined' && typeof playerVelocity !== 'undefined') {
+          let fwd = 0, str = 0;
+          if (keys['KeyW']) fwd += 1;
+          if (keys['KeyS']) fwd -= 1;
+          if (keys['KeyD']) str += 1;
+          if (keys['KeyA']) str -= 1;
+          if (fwd !== 0 || str !== 0) {
+            const yaw = camera.rotation.y;
+            const len = Math.hypot(fwd, str);
+            const nx = (-Math.sin(yaw) * (fwd / len)) + (Math.cos(yaw) * (str / len));
+            const nz = (-Math.cos(yaw) * (fwd / len)) + (-Math.sin(yaw) * (str / len));
+            const currentHighGearSpeed = 7.2 * 1.48; // 기존 고속 기어 속도
+            // 기존 속도의 2배가 되도록 동일 속도만큼 추가 추진력 부여
+            playerVelocity.x += nx * currentHighGearSpeed * dt * 12;
+            playerVelocity.z += nz * currentHighGearSpeed * dt * 12;
+          }
+        }
+      }
+    }
+  }
+
+  requestAnimationFrame(balanceAndSlideFixTick);
+})();
+</script>
 </body>
 </html>
