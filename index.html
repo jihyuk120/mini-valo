@@ -3,101 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>MINI-VALO 3D - 일반전 (13선승) & 사격장</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
-// [FIX #2] 네온 E 고속 기어 토글 복구
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyE' && !e.repeat && typeof myAgent !== 'undefined' && myAgent === 'neon') {
-    if (typeof isDead !== 'undefined' && isDead) return;
-    if (typeof isPrepPhase === 'function' && isPrepPhase()) return;
-    if (typeof neonState !== 'undefined') {
-      if (!neonState.highGearActive && (neonState.energy ?? 100) <= 5) {
-        if (typeof showSkillNotice === 'function') showSkillNotice('배터리가 부족합니다.', '#ff4655');
-        return;
-      }
-      neonState.highGearActive = !neonState.highGearActive;
-      if (neonState.highGearActive && typeof gunGroup !== 'undefined') {
-        gunGroup.visible = false;
-      }
-    }
-  }
-}, true);
-
-
-// [FIX #5] 레이나 Q 포식: 거리/시야 제한 없이 활성 영혼 구슬 즉시 흡수 + 3D 보라색 광선 + 오버힐 150
-(function installReynaDevourFix() {
-  let devourBeam = null;
-  let devourTimer = 0;
-  let devourTargetOrb = null;
-
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyQ' && !e.repeat && typeof myAgent !== 'undefined' && myAgent === 'reyna') {
-      if (typeof isDead !== 'undefined' && isDead) return;
-      if (typeof isPrepPhase === 'function' && isPrepPhase()) return;
-      if (typeof reynaState === 'undefined' || (reynaState.soulCharges ?? 2) <= 0) return;
-
-      const orbs = (reynaState.soulOrbs || []).filter(o => o && o.active !== false && o.mesh);
-      if (orbs.length === 0) {
-        if (typeof showSkillNotice === 'function') showSkillNotice('활성화된 영혼 구슬이 없습니다.', '#a855f7');
-        return;
-      }
-
-      const orb = orbs[0];
-      orb.active = false;
-      reynaState.soulCharges = Math.max(0, (reynaState.soulCharges ?? 2) - 1);
-      devourTargetOrb = orb;
-      devourTimer = 2.0;
-
-      if (devourBeam) {
-        scene.remove(devourBeam);
-      }
-      const beamGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-      const beamMat = new THREE.LineBasicMaterial({ color: 0xc084fc, linewidth: 3 });
-      devourBeam = new THREE.Line(beamGeo, beamMat);
-      scene.add(devourBeam);
-
-      if (typeof showSkillNotice === 'function') showSkillNotice('포식(Q) 발동! 체력 회복 중...', '#c084fc');
-    }
-  }, true);
-
-  const _origAnimate = window.animate;
-  if (typeof _origAnimate === 'function') {
-    window.animate = function(...args) {
-      _origAnimate.apply(this, args);
-      if (devourTimer > 0 && devourTargetOrb && devourTargetOrb.mesh) {
-        const dt = 1 / 60;
-        devourTimer -= dt;
-
-        const camPos = new THREE.Vector3();
-        camera.getWorldPosition(camPos);
-        const orbPos = devourTargetOrb.mesh.position.clone();
-
-        // 벽 차폐 검사
-        const dir = orbPos.clone().sub(camPos);
-        const dist = dir.length();
-        const ray = new THREE.Raycaster(camPos, dir.normalize(), 0.2, dist);
-        const hits = (typeof mapMeshes !== 'undefined' && Array.isArray(mapMeshes))
-          ? ray.intersectObjects(mapMeshes, true)
-          : [];
-
-        if (hits.length > 0 || devourTimer <= 0) {
-          if (devourBeam) { scene.remove(devourBeam); devourBeam = null; }
-          if (devourTargetOrb.mesh) scene.remove(devourTargetOrb.mesh);
-          devourTimer = 0;
-          devourTargetOrb = null;
-        } else {
-          // 초당 50 회복 (최대 150 오버힐)
-          if (typeof playerHealth !== 'undefined') {
-            playerHealth = Math.min(150, playerHealth + 50 * dt);
-          }
-          const lowerCam = camPos.clone().add(new THREE.Vector3(0, -0.35, 0));
-          devourBeam.geometry.setFromPoints([lowerCam, orbPos]);
-        }
-      }
-    };
-  }
-})();
-
-</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
@@ -9789,13 +9695,7 @@ window.addEventListener('keydown', (e) => {
     const clock = new THREE.Clock();
     let netSyncTimer = 0;
 
-    
-  if (typeof myAgent !== 'undefined' && myAgent === 'jett' &&
-      ((typeof jettState !== 'undefined' && jettState.bladeStormActive) || (typeof isBladeStormActive !== 'undefined' && isBladeStormActive))) {
-    if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
-  }
-
-function animate() {
+    function animate() {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
 
@@ -9901,6 +9801,14 @@ function animate() {
             let moveSpeed = curWeapon.moveSpeed || 7.4;
             if (isCrouching) moveSpeed = Math.min(3.4, moveSpeed * 0.48);
             else if (isWalking || zoomLevel > 0) moveSpeed = Math.min(4.4, moveSpeed * 0.62);
+            if (typeof myAgent !== 'undefined') {
+              if (myAgent === 'neon' && typeof neonState !== 'undefined' && (neonState.highGearActive || neonState.overdriveActive)) {
+                moveSpeed *= 1.48;
+              } else if (myAgent === 'reyna' && typeof reynaState !== 'undefined') {
+                if (reynaState.dismissTimer > 0) moveSpeed *= 1.9;
+                else if (reynaState.empressActive) moveSpeed *= 1.25;
+              }
+            }
             moveSpeed *= tagSlowMultiplier;
 
             moveWithCollision(move.x * moveSpeed * dt, move.z * moveSpeed * dt);
@@ -10303,6 +10211,9 @@ function animate() {
         });
       }
 
+      if (typeof myAgent !== 'undefined' && myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) {
+        if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      }
       renderer.render(scene, camera);
     }
     animate();
@@ -11537,11 +11448,6 @@ function animate() {
   injectJettAbilityShop();
   renderJettHUD();
   requestAnimationFrame(updateJettSystems);
-  if (typeof myAgent !== 'undefined' && myAgent === 'jett' &&
-      ((typeof jettState !== 'undefined' && jettState.bladeStormActive) || (typeof isBladeStormActive !== 'undefined' && isBladeStormActive))) {
-    if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
-  }
-
 })();
 </script>
 
@@ -13315,14 +13221,14 @@ function animate() {
     showSkillNotice('눈총(C) 발동! 벽을 통과해 적의 시야를 차단합니다.', '#e879f9');
   }
 
-  // Q: 포식 (보라색 광선 연결 + 초당 50씩 약 2초간 연속 회복, 최대 150 오버힐, 벽/수명 종료 시 즉시 중단)
+  // Q: 포식 (거리·시야 각도·벽 차단 제한 없이 맵에 영혼 구슬 존재 시 즉시 발동, 보라색 3D 광선 연결 + 초당 50 연속 회복)
   function castReynaDevour(fromAutoEmpress = false, overrideOrb = null) {
     if (!fromAutoEmpress) {
       if (isPrepPhase()) return;
       if (reynaState.qeCharges <= 0 || isDead) return;
-      const targetOrb = overrideOrb || getLookedAtSoulOrb();
+      const targetOrb = overrideOrb || getAnyActiveSoulOrb();
       if (!targetOrb) {
-        showSkillNotice('시야 내 활성화된 영혼 구슬이 있어야 포식(Q)을 사용할 수 있습니다.', '#e879f9');
+        showSkillNotice('맵에 활성화된 영혼 구슬이 있어야 포식(Q)을 사용할 수 있습니다.', '#e879f9');
         return;
       }
       clearReynaDevourTether(true);
@@ -13661,7 +13567,24 @@ function animate() {
         const zoneMesh = createLargeRelayConcussZoneMesh(m.radius);
         zoneMesh.position.copy(m.pos);
         scene.add(zoneMesh);
-        neonState.concussZones.push({ mesh: zoneMesh, pos: m.pos.clone(), radius: m.radius, life: 3.4, maxLife: 3.4 });
+        scene.remove(zoneMesh);
+
+        // 번개 폭발 이펙트 생성 후 단발성 제거
+        const boltGroup = new THREE.Group();
+        const pillar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.28, 1.35, 8.0, 16),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.92 })
+        );
+        pillar.position.set(m.pos.x, m.pos.y + 4.0, m.pos.z);
+        const shockRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.5, m.radius, 36),
+          new THREE.MeshBasicMaterial({ color: 0x22d3ee, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+        );
+        shockRing.rotation.x = -Math.PI / 2;
+        shockRing.position.set(m.pos.x, m.pos.y + 0.12, m.pos.z);
+        boltGroup.add(pillar, shockRing);
+        scene.add(boltGroup);
+        setTimeout(() => scene.remove(boltGroup), 280);
 
         if (typeof brawlBots !== 'undefined') {
           for (const b of brawlBots) {
@@ -13681,6 +13604,53 @@ function animate() {
         }
       });
     }, 1200);
+  }
+
+  const origMoveWithCollision = typeof moveWithCollision === 'function' ? moveWithCollision : null;
+
+  // E: 고속 기어 토글 (팔 달리기 자세 전력 질주)
+  function toggleNeonHighGear() {
+    if (isDead) return;
+    if (neonState.overdriveActive) return;
+    if (!neonState.highGearActive) {
+      if (neonState.battery <= 5) {
+        showSkillNotice('배터리가 부족해 고속 기어(E)를 사용할 수 없습니다.', '#ff4655');
+        return;
+      }
+      neonState.highGearActive = true;
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      showSkillNotice('고속 기어(E) 활성화! 우클릭으로 이동 방향 슬라이딩', '#22d3ee');
+    } else {
+      neonState.highGearActive = false;
+      showSkillNotice('고속 기어(E) 해제', '#94a3b8');
+    }
+  }
+
+  // 우클릭: 달리는 중 이동 방향 고속 슬라이딩
+  function triggerNeonSlide() {
+    if (isDead || !neonState.highGearActive) return;
+    if (neonState.slidesRemaining <= 0 || neonState.slideTimer > 0) return;
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    if (forward.lengthSq() < 0.001) forward.set(0, 0, -1);
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    const dir = new THREE.Vector3();
+    if (typeof keys !== 'undefined') {
+      if (keys['KeyW']) dir.add(forward);
+      if (keys['KeyS']) dir.sub(forward);
+      if (keys['KeyD']) dir.add(right);
+      if (keys['KeyA']) dir.sub(right);
+    }
+    if (dir.lengthSq() < 0.001) dir.copy(forward);
+    dir.normalize();
+
+    neonState.slidesRemaining -= 1;
+    neonState.slideDir.copy(dir);
+    neonState.slideTimer = 0.34;
+    showSkillNotice('고속 슬라이딩!', '#38bdf8');
   }
 
   // X: 오버드라이브 (배터리 100% 연동, 처치 시 100% 즉시 재충전)
@@ -13977,7 +13947,7 @@ function animate() {
       document.getElementById('rnShopXTitle').innerText = `X 여제 (${reynaState.ultPoints}/6 pt)`;
       document.getElementById('rnShopXDesc').innerText = '라운드 무한 지속 / 연사·재장전 급증 / 자동 포식';
 
-      const qOrbReady = getLookedAtSoulOrb() !== null;
+      const qOrbReady = getAnyActiveSoulOrb() !== null;
       const eOrbReady = getAnyActiveSoulOrb() !== null;
       const qColor = (reynaState.qeCharges > 0 && qOrbReady && !isPrepPhase()) ? '#e879f9' : '#64748b';
       const eColor = (reynaState.qeCharges > 0 && eOrbReady && !isPrepPhase()) ? '#d946ef' : '#64748b';
@@ -14175,13 +14145,10 @@ function animate() {
       let connectionValid = true;
       if (reynaState.devourOrb) {
         const orbAlive = reynaState.soulOrbs.includes(reynaState.devourOrb) && reynaState.devourOrb.life > 0;
-        const camPos = new THREE.Vector3();
-        camera.getWorldPosition(camPos);
-        const wallBlocked = isSegmentBlockedByWall(camPos, reynaState.devourOrb.mesh.position);
-        if (!orbAlive || wallBlocked) {
+        if (!orbAlive) {
           connectionValid = false;
-          clearReynaDevourTether(!orbAlive);
-          showSkillNotice(wallBlocked ? '벽에 시야가 가로막혀 포식(Q) 연결이 끊어졌습니다!' : '영혼 구슬이 소멸하여 포식(Q)이 중단되었습니다.', '#c084fc');
+          clearReynaDevourTether(true);
+          showSkillNotice('영혼 구슬이 소멸하여 포식(Q)이 중단되었습니다.', '#c084fc');
         }
       }
 
@@ -14449,10 +14416,27 @@ function animate() {
 
     // 대형 뇌진탕 장판 애니메이션 및 수명
     for (let i = neonState.concussZones.length - 1; i >= 0; i--) {
-      const z = neonState.concussZones[i];
-      if (z.mesh) scene.remove(z.mesh);
-      neonState.concussZones.splice(i, 1);
-    }
+      const cz = neonState.concussZones[i];
+      cz.life -= dt;
+      const ud = cz.mesh.userData;
+      if (ud) {
+        const pulse = 1.0 + Math.sin(now * 0.018) * 0.06;
+        if (ud.pinkWaveWall) {
+          ud.pinkWaveWall.scale.set(1, pulse, 1);
+          ud.pinkWaveWall.rotation.y += dt * 1.4;
+        }
+        if (ud.blueWaveWall) {
+          ud.blueWaveWall.scale.set(1, 1.0 + Math.cos(now * 0.022) * 0.08, 1);
+          ud.blueWaveWall.rotation.y -= dt * 1.9;
+        }
+        if (ud.cracksGroup) {
+          ud.cracksGroup.rotation.y += dt * 0.35;
+        }
+      }
+      if (cz.life <= 0) {
+        scene.remove(cz.mesh);
+        neonState.concussZones.splice(i, 1);
+      }
     }
 
     // 오버드라이브 번개 광선 수명 정리
