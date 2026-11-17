@@ -5231,7 +5231,9 @@
       }
       while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
       gunGroup.add(getActiveModelForWeapon(getCurrentWeaponKey()));
-      gunGroup.visible = true;
+      const _hideForUltOrSkill = (typeof myAgent !== 'undefined' && myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) ||
+        (typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined' && (reynaState.leerEquipped || reynaState.dismissTimer > 0));
+      gunGroup.visible = !_hideForUltOrSkill;
       gunGroup.position.set(0.26, -0.22, -0.42);
       gunGroup.rotation.set(0, 0, 0);
       setZoom(0);
@@ -6362,6 +6364,21 @@
 
     function resetLoadoutToPistolRound() {
       credits = 800;
+      if (typeof jettState !== 'undefined') {
+        jettState.cCharges = 0; jettState.qCharges = 0; jettState.eCharges = 1; jettState.ultPoints = 0;
+        jettState.bladeStormActive = false; jettState.bladeStormEquipped = false;
+      }
+      if (typeof phoenixState !== 'undefined') {
+        phoenixState.cCharges = 0; phoenixState.qCharges = 0; phoenixState.eCharges = 1; phoenixState.ultPoints = 0;
+      }
+      if (typeof reynaState !== 'undefined') {
+        reynaState.cCharges = 0; reynaState.qeCharges = 1; reynaState.ultPoints = 0;
+        reynaState.empressActive = false; reynaState.dismissTimer = 0;
+      }
+      if (typeof neonState !== 'undefined') {
+        neonState.cCharges = 0; neonState.qCharges = 0; neonState.ultPoints = 0;
+        neonState.overdriveActive = false; neonState.highGearActive = false; neonState.battery = 100;
+      }
       teamRoundCredits = { red: 800, blue: 800 };
       slotWeapons = { 1: null, 2: 'classic', 3: 'melee', 4: 'spike' };
       activeSlot = 2;
@@ -7299,7 +7316,8 @@
                   if (tbd.weaponKey && WEAPONS[tbd.weaponKey] && WEAPONS[tbd.weaponKey].slot === 1) {
                     spawnDroppedItem('weapon', tbd.weaponKey, bestTarget.bot.position);
                   }
-                  addKillFeed(`${bd.nick} [${w.name}] ➔ ${tbd.nick}${isHeadHit ? ' [헤드샷]' : ''}`, false);
+                  const isAllyKill = (typeof myTeam !== 'undefined' && bd.team === myTeam);
+                  addKillFeed(`${bd.nick} [${w.name}] ➔ ${tbd.nick}${isHeadHit ? ' [헤드샷]' : ''}`, isAllyKill);
                   if (document.getElementById('tabLeaderboard').style.display === 'block') renderTabLeaderboard();
                 }
               }
@@ -8386,6 +8404,12 @@
         playerHp = 0;
         isDead = true;
         playerStats.d += 1;
+        if (typeof currentMap !== 'undefined' && currentMap !== 'range') {
+          if (myAgent === 'jett' && typeof jettState !== 'undefined') jettState.ultPoints = Math.min(8, jettState.ultPoints + 1);
+          if (myAgent === 'phoenix' && typeof phoenixState !== 'undefined') phoenixState.ultPoints = Math.min(6, phoenixState.ultPoints + 1);
+          if (myAgent === 'reyna' && typeof reynaState !== 'undefined') reynaState.ultPoints = Math.min(6, reynaState.ultPoints + 1);
+          if (myAgent === 'neon' && typeof neonState !== 'undefined') neonState.ultPoints = Math.min(8, neonState.ultPoints + 1);
+        }
         const killerBot = brawlBots.find(b => b.userData.nick === attackerNick);
         if (killerBot) {
           killerBot.userData.k = (killerBot.userData.k || 0) + 1;
@@ -9590,7 +9614,9 @@
         gunGroup.position.set(0.26, -0.22, -0.42);
         gunGroup.rotation.set(0, 0, 0);
       }
-      gunGroup.visible = true;
+      const _hideSpectateGun = (typeof myAgent !== 'undefined' && myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) ||
+        (typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined' && (reynaState.leerEquipped || reynaState.dismissTimer > 0));
+      gunGroup.visible = !_hideSpectateGun;
       const dBanner = document.getElementById('deathBanner');
       if (dBanner) {
         dBanner.style.display = 'flex';
@@ -12897,103 +12923,7 @@
   const isPrepPhase = () => (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase === 'PREP');
   const getEnemyTeam = () => (typeof myTeam !== 'undefined' && myTeam === 'red') ? 'blue' : 'red';
 
-  function showSkillNotice(msg, color = '#00ffcc') {
-    if (typeof addKillFeed === 'function') {
-      addKillFeed(msg, false);
-    }
-    let toast = document.getElementById('agentSkillToast');
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.id = 'agentSkillToast';
-      toast.style.cssText = 'position:fixed; top:22%; left:50%; transform:translateX(-50%); padding:8px 18px; background:rgba(15,25,35,0.88); border:1px solid #00ffcc; border-radius:4px; font-weight:bold; font-size:14px; z-index:9999; pointer-events:none; transition:opacity 0.2s;';
-      document.body.appendChild(toast);
-    }
-    toast.style.color = color;
-    toast.style.borderColor = color;
-    toast.innerText = msg;
-    toast.style.opacity = '1';
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 1400);
-  }
-
-  // 벽 시야 차단 판정 (레이나 포식 테더 끊김용)
-  function isSegmentBlockedByWall(p1, p2) {
-    if (typeof wallColliders === 'undefined' || !Array.isArray(wallColliders)) return false;
-    const dir = p2.clone().sub(p1);
-    const len = dir.length();
-    if (len < 0.05) return false;
-    dir.normalize();
-    const ray = new THREE.Ray(p1, dir);
-    const box = new THREE.Box3();
-    const hitPt = new THREE.Vector3();
-    for (const c of wallColliders) {
-      box.min.set(c.minX, c.minY ?? 0, c.minZ);
-      box.max.set(c.maxX, c.maxY ?? 4, c.maxZ);
-      if (ray.intersectBox(box, hitPt)) {
-        if (p1.distanceTo(hitPt) < len - 0.15) return true;
-      }
-    }
-    return false;
-  }
-
-  // 기존 moveWithCollision 후킹
-  const origMoveWithCollision = window.moveWithCollision;
-  if (typeof origMoveWithCollision === 'function') {
-    window.moveWithCollision = function(dx, dz) {
-      let mult = 1.0;
-      if (typeof myAgent !== 'undefined' && myAgent === 'neon') {
-        if (neonState.slideTimer > 0) return;
-        if (neonState.highGearActive) mult *= 1.48;
-        if (neonState.overdriveActive) mult *= 1.25;
-      }
-      if (typeof myAgent !== 'undefined' && myAgent === 'reyna') {
-        if (reynaState.dismissTimer > 0) mult *= 1.65;
-      }
-      if (neonState.selfConcussTimer > 0) mult *= 0.58;
-      origMoveWithCollision(dx * mult, dz * mult);
-    };
-  }
-
-  // 기존 fireWeapon 후킹 (레이나 무시 중 사격 금지, 네온 고속 기어/오버드라이브 중 일반 총기 사격 잠금)
-  const origFireWeapon = window.fireWeapon;
-  if (typeof origFireWeapon === 'function') {
-    window.fireWeapon = function(isHeavyAttack = false) {
-      if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && reynaState.dismissTimer > 0) {
-        return; // 무시(E) 중 사격 불가
-      }
-      if (typeof myAgent !== 'undefined' && myAgent === 'neon' && (neonState.highGearActive || neonState.overdriveActive)) {
-        return; // 고속 기어(E) 및 오버드라이브(X) 중 일반 총기 사격 불가
-      }
-      origFireWeapon(isHeavyAttack);
-      if (typeof fireCooldown !== 'undefined' && fireCooldown > 0) {
-        if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && reynaState.empressActive) {
-          fireCooldown *= 0.68; // 여제 활성화 시 발사 속도 대폭 증가
-        }
-        if (neonState.selfConcussTimer > 0) {
-          fireCooldown *= 1.45; // 뇌진탕 시 연사 속도 저하
-        }
-      }
-    };
-  }
-
-  // 기존 startReload 후킹 (여제 활성화 시 재장전 속도 대폭 증가)
-  const origStartReload = window.startReload;
-  if (typeof origStartReload === 'function') {
-    window.startReload = function() {
-      origStartReload();
-      if (typeof myAgent !== 'undefined' && myAgent === 'reyna' && reynaState.empressActive && typeof reloadTimer !== 'undefined') {
-        const curK = typeof getCurrentWeaponKey === 'function' ? getCurrentWeaponKey() : null;
-        if (curK && WEAPONS[curK]) {
-          clearTimeout(reloadTimer);
-          reloadTimer = setTimeout(() => {
-            ammoState[curK] = WEAPONS[curK].magSize;
-            isReloading = false;
-            if (typeof updateHUD === 'function') updateHUD();
-          }, (WEAPONS[curK].reloadTime || 2.0) * 500);
-        }
-      }
-    };
-  }
+  function showSkillNotice(msg, color = '#00ffcc') {}
 
   // =========================================================
   // 2. 레이나 (REYNA) 시스템 (궁극기 6포인트)
@@ -13310,27 +13240,83 @@
     showSkillNotice(fromAutoEmpress ? '여제 자동 포식 발동! (초당 50 연속 회복 · 최대 150)' : '포식(Q) 연결! 영혼 에너지 흡수 중 (초당 50 회복)', '#e879f9');
   }
 
-  // E: 무시 (구슬을 바라보지 않거나 멀리 떨어져 있어도 즉시 영혼 구슬 흡수 후 발동)
+  let reynaDismissHandsGroup = null;
+  let reynaDismissAuras = [];
+  function ensureReynaDismissHandsViewModel() {
+    if (reynaDismissHandsGroup || typeof camera === 'undefined') return;
+    reynaDismissHandsGroup = new THREE.Group();
+    reynaDismissHandsGroup.visible = false;
+    reynaDismissAuras = [];
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2e1065, roughness: 0.5 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a382, roughness: 0.6 });
+    const auraMat = new THREE.MeshBasicMaterial({ color: 0xd946ef, transparent: true, opacity: 0.65 });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xf0abfc, transparent: true, opacity: 0.85 });
+    [-1, 1].forEach((side) => {
+      const armGrp = new THREE.Group();
+      armGrp.position.set(side * 0.25, -0.22, -0.34);
+      armGrp.rotation.set(-0.20, -side * 0.18, side * 0.14);
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.27, 12), sleeveMat);
+      forearm.rotation.x = Math.PI / 2.2;
+      forearm.position.set(0, -0.03, 0.12);
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.076), skinMat);
+      palm.position.set(0, 0.005, -0.045);
+      for (let f = 0; f < 4; f++) {
+        const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0065, 0.048, 8), skinMat);
+        finger.rotation.x = Math.PI / 2.1;
+        finger.position.set((-0.020 + f * 0.013) * side, 0.007, -0.10);
+        armGrp.add(finger);
+      }
+      const auraSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(0.068, 1), auraMat);
+      auraSphere.position.set(0, 0.015, -0.055);
+      const auraRing = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.004, 8, 20), ringMat);
+      auraRing.rotation.x = Math.PI / 2.3;
+      auraRing.position.set(0, 0.018, -0.055);
+      reynaDismissAuras.push(auraSphere, auraRing);
+      armGrp.add(forearm, palm, auraSphere, auraRing);
+      reynaDismissHandsGroup.add(armGrp);
+    });
+    camera.add(reynaDismissHandsGroup);
+  }
+
+  function endReynaDismissEarly() {
+    reynaState.dismissTimer = 0;
+    reynaState.dismissStartedAt = 0;
+    if (reynaDismissHandsGroup) reynaDismissHandsGroup.visible = false;
+    if (typeof gunGroup !== 'undefined' && !reynaState.leerEquipped) {
+      gunGroup.visible = true;
+    }
+  }
+
+  // E: 무시 (빈손 전환, 0.8초 후 재입력 시 해제, 여제 중 횟수 차감 없음)
   function castReynaDismiss() {
-    if (isPrepPhase() || reynaState.qeCharges <= 0 || isDead) return;
-    const targetOrb = getAnyActiveSoulOrb();
-    if (!targetOrb) {
-      showSkillNotice('맵에 활성화된 영혼 구슬이 없습니다.', '#e879f9');
+    if (isPrepPhase() || isDead) return;
+    if (reynaState.dismissTimer > 0) {
+      if (performance.now() - (reynaState.dismissStartedAt || 0) >= 800) {
+        endReynaDismissEarly();
+      }
       return;
     }
+    if (!reynaState.empressActive && reynaState.qeCharges <= 0) return;
+    const targetOrb = getAnyActiveSoulOrb();
+    if (!targetOrb) return;
     if (reynaState.devourOrb === targetOrb) {
       clearReynaDevourTether(false);
     }
     scene.remove(targetOrb.mesh);
     reynaState.soulOrbs.splice(reynaState.soulOrbs.indexOf(targetOrb), 1);
-    reynaState.qeCharges -= 1;
+    if (!reynaState.empressActive) {
+      reynaState.qeCharges -= 1;
+    }
     reynaState.dismissTimer = 2.0;
+    reynaState.dismissStartedAt = performance.now();
+    if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+    ensureReynaDismissHandsViewModel();
+    if (reynaDismissHandsGroup) reynaDismissHandsGroup.visible = true;
 
     const isFullInvis = reynaState.empressActive;
     if (typeof broadcastData === 'function') {
       broadcastData({ type: 'reyna_dismiss', invis: isFullInvis, duration: 2.0 });
     }
-    showSkillNotice(isFullInvis ? '무시(E) - 여제 강화: 2초간 완전 투명 & 무적!' : '무시(E) - 2초간 반투명 실루엣 & 무적!', '#d946ef');
   }
 
   // X: 여제 (라운드 종료 또는 사망 시까지 무한 지속)
@@ -13528,75 +13514,68 @@
     return zoneGrp;
   }
 
-  function triggerRelayBoltZones(impactPos, bounceDir) {
-    const forwardFlat = new THREE.Vector3(bounceDir.x, 0, bounceDir.z);
-    if (forwardFlat.lengthSq() < 0.001) forwardFlat.set(0, 0, -1);
-    forwardFlat.normalize();
+  function spawnRelayConcussMarker(pt, zoneRadius = 5.5) {
+    const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl') ? getFloorHeightAt(pt.x, pt.z, pt.y) : 0;
+    const warnRing = new THREE.Mesh(
+      new THREE.RingGeometry(zoneRadius * 0.88, zoneRadius, 48),
+      new THREE.MeshBasicMaterial({ color: 0x22d3ee, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+    );
+    warnRing.rotation.x = -Math.PI / 2;
+    warnRing.position.set(pt.x, floorY + 0.08, pt.z);
 
+    const warnDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(zoneRadius, 48),
+      new THREE.MeshBasicMaterial({ color: 0x0284c7, side: THREE.DoubleSide, transparent: true, opacity: 0.28 })
+    );
+    warnDisc.rotation.x = -Math.PI / 2;
+    warnDisc.position.set(pt.x, floorY + 0.05, pt.z);
+    scene.add(warnRing, warnDisc);
+
+    return { pos: new THREE.Vector3(pt.x, floorY, pt.z), radius: zoneRadius, warnRing, warnDisc };
+  }
+
+  function triggerRelayBoltZones(spot1Pos, spot2PosOrDir) {
     const zoneRadius = 5.5;
-    const spots = [
-      impactPos.clone(),
-      impactPos.clone().addScaledVector(forwardFlat, 8.2)
-    ];
+    let pt1 = spot1Pos.clone();
+    let pt2 = null;
+    if (spot2PosOrDir && spot2PosOrDir.isSpot2) {
+      pt2 = spot2PosOrDir.pos.clone();
+    } else {
+      const bounceDir = spot2PosOrDir || new THREE.Vector3(0, 0, -1);
+      const forwardFlat = new THREE.Vector3(bounceDir.x, 0, bounceDir.z);
+      if (forwardFlat.lengthSq() < 0.001) forwardFlat.set(0, 0, -1);
+      forwardFlat.normalize();
+      pt2 = pt1.clone().addScaledVector(forwardFlat, 8.2);
+    }
 
-    spots.forEach(pt => {
-      const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl') ? getFloorHeightAt(pt.x, pt.z, pt.y) : 0;
-      const zoneMesh = createLargeRelayConcussZoneMesh(zoneRadius);
-      zoneMesh.position.set(pt.x, floorY, pt.z);
-      scene.add(zoneMesh);
-      neonState.concussZones.push({ mesh: zoneMesh, pos: zoneMesh.position.clone(), radius: zoneRadius, life: 3.4, maxLife: 3.4 });
+    const markers = [spawnRelayConcussMarker(pt1, zoneRadius), spawnRelayConcussMarker(pt2, zoneRadius)];
+    setTimeout(() => {
+      markers.forEach((m) => {
+        if (m.warnRing) scene.remove(m.warnRing);
+        if (m.warnDisc) scene.remove(m.warnDisc);
+        const zoneMesh = createLargeRelayConcussZoneMesh(m.radius);
+        zoneMesh.position.copy(m.pos);
+        scene.add(zoneMesh);
+        neonState.concussZones.push({ mesh: zoneMesh, pos: m.pos.clone(), radius: m.radius, life: 3.4, maxLife: 3.4 });
 
-      if (typeof brawlBots !== 'undefined') {
-        for (const b of brawlBots) {
-          if (!b.userData.dead && b.userData.team !== myTeam) {
-            const dx = b.position.x - zoneMesh.position.x;
-            const dz = b.position.z - zoneMesh.position.z;
-            if (Math.hypot(dx, dz) <= zoneRadius) {
-              b.userData.concussedTimer = 3.8;
+        if (typeof brawlBots !== 'undefined') {
+          for (const b of brawlBots) {
+            if (!b.userData.dead && b.userData.team !== myTeam) {
+              if (Math.hypot(b.position.x - m.pos.x, b.position.z - m.pos.z) <= m.radius) {
+                b.userData.concussedTimer = 3.8;
+              }
             }
           }
         }
-      }
-      if (typeof window.practiceBots !== 'undefined' && Array.isArray(window.practiceBots)) {
-        for (const pb of window.practiceBots) {
-          const dx = pb.position.x - zoneMesh.position.x;
-          const dz = pb.position.z - zoneMesh.position.z;
-          if (Math.hypot(dx, dz) <= zoneRadius) {
-            pb.userData.concussedTimer = 3.8;
+        if (typeof window.practiceBots !== 'undefined' && Array.isArray(window.practiceBots)) {
+          for (const pb of window.practiceBots) {
+            if (Math.hypot(pb.position.x - m.pos.x, pb.position.z - m.pos.z) <= m.radius) {
+              pb.userData.concussedTimer = 3.8;
+            }
           }
         }
-      }
-    });
-  }
-
-  // E: 고속 기어 토글
-  function toggleNeonHighGear() {
-    if (isDead) return;
-    if (neonState.highGearActive) {
-      neonState.highGearActive = false;
-      showSkillNotice('고속 기어(E) 해제 — 무기 장착', '#94a3b8');
-    } else if (neonState.battery > 5) {
-      neonState.highGearActive = true;
-      showSkillNotice('고속 기어(E) 가동! 질주 중 사격 잠금 · 우클릭 슬라이딩', '#22d3ee');
-    }
-  }
-
-  function triggerNeonSlide() {
-    if (!neonState.highGearActive || neonState.slidesRemaining <= 0 || neonState.slideTimer > 0 || isDead) return;
-    if (typeof getMoveVectors !== 'function') return;
-    const { forward, right } = getMoveVectors();
-    const move = new THREE.Vector3();
-    if (keys['KeyW']) move.add(forward);
-    if (keys['KeyS']) move.sub(forward);
-    if (keys['KeyD']) move.add(right);
-    if (keys['KeyA']) move.sub(right);
-    if (move.lengthSq() === 0) return;
-    move.normalize();
-
-    neonState.slidesRemaining -= 1;
-    neonState.slideTimer = 0.42;
-    neonState.slideDir.copy(move);
-    showSkillNotice('고속 슬라이딩!', '#38bdf8');
+      });
+    }, 1200);
   }
 
   // X: 오버드라이브 (배터리 100% 연동, 처치 시 100% 즉시 재충전)
@@ -13809,20 +13788,40 @@
       `;
       shopModalEl.appendChild(bar);
 
-      document.getElementById('rnShopC').onclick = () => {
+      const rnBtnC = document.getElementById('rnShopC');
+      const rnBtnQ = document.getElementById('rnShopQ');
+      rnBtnC.onclick = () => {
         if (myAgent === 'reyna' && reynaState.cCharges < 2 && credits >= 250) {
           credits -= 250; reynaState.cCharges++; if (typeof updateHUD === 'function') updateHUD();
         } else if (myAgent === 'neon' && neonState.cCharges < 1 && credits >= 300) {
           credits -= 300; neonState.cCharges++; if (typeof updateHUD === 'function') updateHUD();
         }
       };
-      document.getElementById('rnShopQ').onclick = () => {
+      rnBtnC.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
+        if (myAgent === 'reyna' && reynaState.cCharges > 0) {
+          reynaState.cCharges--; credits = Math.min(9000, credits + 250); if (typeof updateHUD === 'function') updateHUD();
+        } else if (myAgent === 'neon' && neonState.cCharges > 0) {
+          neonState.cCharges--; credits = Math.min(9000, credits + 300); if (typeof updateHUD === 'function') updateHUD();
+        }
+      });
+      rnBtnQ.onclick = () => {
         if (myAgent === 'reyna' && reynaState.qeCharges < 2 && credits >= 200) {
           credits -= 200; reynaState.qeCharges++; if (typeof updateHUD === 'function') updateHUD();
         } else if (myAgent === 'neon' && neonState.qCharges < 1 && credits >= 250) {
           credits -= 250; neonState.qCharges++; if (typeof updateHUD === 'function') updateHUD();
         }
       };
+      rnBtnQ.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
+        if (myAgent === 'reyna' && reynaState.qeCharges > 1) {
+          reynaState.qeCharges--; credits = Math.min(9000, credits + 200); if (typeof updateHUD === 'function') updateHUD();
+        } else if (myAgent === 'neon' && neonState.qCharges > 0) {
+          neonState.qCharges--; credits = Math.min(9000, credits + 250); if (typeof updateHUD === 'function') updateHUD();
+        }
+      });
     }
 
     if (!document.getElementById('reynaNeonBottomHud')) {
@@ -14017,7 +14016,9 @@
             }
           }
           if (reynaState.empressActive) {
-            castReynaDevour(true, newlySpawnedOrb); // 여제 중 킬 시 자동 포식(광선 연결)
+            reynaState.devourTimer = 2.0;
+            reynaState.devourHealLeft = 100;
+            castReynaDevour(true, newlySpawnedOrb);
           }
         }
       }
@@ -14040,13 +14041,28 @@
     // 레이나 여제(X) 보라·검정 화면 테두리 오버레이 유지
     empressOverlay.style.display = (myAgent === 'reyna' && reynaState.empressActive && !isDead) ? 'block' : 'none';
 
-    // 레이나 무시(E) 상태 업데이트
+    // 레이나 무시(E) 상태 및 1인칭 양손 뷰모델 업데이트
     if (reynaState.dismissTimer > 0) {
       reynaState.dismissTimer = Math.max(0, reynaState.dismissTimer - dt);
       dismissOverlay.style.display = 'block';
       dismissOverlay.style.opacity = reynaState.empressActive ? '0.95' : '0.55';
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      ensureReynaDismissHandsViewModel();
+      if (reynaDismissHandsGroup) {
+        reynaDismissHandsGroup.visible = true;
+        reynaDismissAuras.forEach((m, idx) => {
+          m.rotation.y += dt * (idx % 2 === 0 ? 4.5 : -6.0);
+          m.rotation.z += dt * 3.2;
+        });
+      }
+      if (reynaState.dismissTimer <= 0) {
+        endReynaDismissEarly();
+      }
     } else {
       dismissOverlay.style.display = 'none';
+      if (reynaDismissHandsGroup && reynaDismissHandsGroup.visible) {
+        endReynaDismissEarly();
+      }
     }
 
     // 레이나 포식(Q) 보라색 광선 연결 및 연속 회복 (초당 50, 벽 시야 끊김 또는 구슬 수명 종료 시 즉시 중단)
@@ -14241,7 +14257,9 @@
     } else {
       if (odHandData && odHandData.handGrp.visible) odHandData.handGrp.visible = false;
       if (sprintData && sprintData.armsGrp.visible) sprintData.armsGrp.visible = false;
-      if (typeof gunGroup !== 'undefined' && !(myAgent === 'reyna' && reynaState.leerEquipped)) {
+      const _hideGunInAgentLoop = (myAgent === 'reyna' && (reynaState.leerEquipped || reynaState.dismissTimer > 0)) ||
+        (myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped);
+      if (typeof gunGroup !== 'undefined' && !_hideGunInAgentLoop) {
         gunGroup.visible = true;
       }
     }
@@ -14255,10 +14273,10 @@
       }
     }
 
-    // 릴레이 볼트 투사체: 사거리 제한 없이 벽이나 바닥에 닿을 때까지 날아가 1회 튕긴 뒤 폭발
+    // 릴레이 볼트 투사체: 1차 충돌 지점에 1번 표식, 반사 후 2차 충돌 지점에 2번 표식을 남기고 1.2초 뒤 동시 폭발
     for (let i = neonState.relayBolts.length - 1; i >= 0; i--) {
       const rb = neonState.relayBolts[i];
-      rb.vel.y -= 5.2 * dt; // 완만한 포물선 중력
+      rb.vel.y -= 5.2 * dt;
       const nextPos = rb.mesh.position.clone().addScaledVector(rb.vel, dt);
 
       let hitWall = false;
@@ -14270,7 +14288,7 @@
             hitWall = true;
             if (!rb.bounced) {
               rb.bounced = true;
-              // 충돌 면 법선 추정 후 1회 반사
+              rb.firstImpactPos = rb.mesh.position.clone();
               const prev = rb.mesh.position;
               const overlapX = (prev.x <= c.minX || prev.x >= c.maxX);
               const overlapZ = (prev.z <= c.minZ || prev.z >= c.maxZ);
@@ -14281,8 +14299,7 @@
                 rb.vel.z = -rb.vel.z * 0.85;
               }
             } else {
-              // 1회 튕긴 뒤 다시 벽에 닿으면 즉시 폭발
-              triggerRelayBoltZones(rb.mesh.position, rb.vel);
+              triggerRelayBoltZones(rb.firstImpactPos || rb.mesh.position, { isSpot2: true, pos: rb.mesh.position.clone() });
               scene.remove(rb.mesh);
               neonState.relayBolts.splice(i, 1);
             }
@@ -14298,7 +14315,6 @@
         rb.mesh.position.addScaledVector(rb.vel, dt);
       }
 
-      // 바닥 충돌 체크
       const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl')
         ? getFloorHeightAt(rb.mesh.position.x, rb.mesh.position.z, rb.mesh.position.y)
         : 0;
@@ -14306,21 +14322,21 @@
         if (!rb.bounced) {
           rb.bounced = true;
           rb.mesh.position.y = floorY + 0.24;
+          rb.firstImpactPos = rb.mesh.position.clone();
           rb.vel.y = Math.max(6.5, Math.abs(rb.vel.y) * 0.65);
           rb.vel.x *= 0.88;
           rb.vel.z *= 0.88;
         } else {
           rb.mesh.position.y = floorY + 0.1;
-          triggerRelayBoltZones(rb.mesh.position, rb.vel);
+          triggerRelayBoltZones(rb.firstImpactPos || rb.mesh.position, { isSpot2: true, pos: rb.mesh.position.clone() });
           scene.remove(rb.mesh);
           neonState.relayBolts.splice(i, 1);
           continue;
         }
       }
 
-      // 맵 외곽 안전장치 (초장거리 이탈 방지)
       if (Math.abs(rb.mesh.position.x) > 260 || Math.abs(rb.mesh.position.z) > 260 || rb.mesh.position.y < -30) {
-        triggerRelayBoltZones(rb.mesh.position, rb.vel);
+        triggerRelayBoltZones(rb.firstImpactPos || rb.mesh.position, { isSpot2: true, pos: rb.mesh.position.clone() });
         scene.remove(rb.mesh);
         neonState.relayBolts.splice(i, 1);
       }
@@ -14392,358 +14408,6 @@
 })();
 </script>
 
-
-<script>
-(function() {
-  // 1 & 5. 스킬 활성 중 총기(gunGroup) 강제 표시 차단 및 레이나 E 무시 1인칭 보라빛 에너지 양손 뷰모델
-  let _reynaDismissHandsGroup = null;
-  let _reynaDismissAuras = [];
-
-  function ensureReynaDismissHands() {
-    if (_reynaDismissHandsGroup || typeof camera === 'undefined' || typeof THREE === 'undefined') return;
-    _reynaDismissHandsGroup = new THREE.Group();
-    _reynaDismissHandsGroup.visible = false;
-    _reynaDismissAuras = [];
-
-    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2e1065, roughness: 0.5 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a382, roughness: 0.6 });
-    const auraMat = new THREE.MeshBasicMaterial({ color: 0xd946ef, transparent: true, opacity: 0.65 });
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xf0abfc, transparent: true, opacity: 0.85 });
-
-    [-1, 1].forEach((side) => {
-      const armGrp = new THREE.Group();
-      armGrp.position.set(side * 0.25, -0.22, -0.34);
-      armGrp.rotation.set(-0.20, -side * 0.18, side * 0.14);
-
-      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.27, 12), sleeveMat);
-      forearm.rotation.x = Math.PI / 2.2;
-      forearm.position.set(0, -0.03, 0.12);
-
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.076), skinMat);
-      palm.position.set(0, 0.005, -0.045);
-
-      for (let f = 0; f < 4; f++) {
-        const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0065, 0.048, 8), skinMat);
-        finger.rotation.x = Math.PI / 2.1;
-        finger.position.set((-0.020 + f * 0.013) * side, 0.007, -0.10);
-        armGrp.add(finger);
-      }
-
-      const auraSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(0.068, 1), auraMat);
-      auraSphere.position.set(0, 0.015, -0.055);
-      const auraRing = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.004, 8, 20), ringMat);
-      auraRing.rotation.x = Math.PI / 2.3;
-      auraRing.position.set(0, 0.018, -0.055);
-
-      _reynaDismissAuras.push(auraSphere, auraRing);
-      armGrp.add(forearm, palm, auraSphere, auraRing);
-      _reynaDismissHandsGroup.add(armGrp);
-    });
-
-    camera.add(_reynaDismissHandsGroup);
-  }
-
-  // 4. 상점(B키) 마우스 우클릭 스킬 되팔기(환불) 기능 바인딩
-  function bindShopRightClickRefunds() {
-    const map = [
-      { id: 'rnShopC', agent: 'reyna', key: 'cCharges', cost: 250 },
-      { id: 'rnShopQ', agent: 'reyna', key: 'qeCharges', cost: 200 },
-      { id: 'rnShopC', agent: 'neon', key: 'cCharges', cost: 300 },
-      { id: 'rnShopQ', agent: 'neon', key: 'qCharges', cost: 250 }
-    ];
-    ['rnShopC', 'rnShopQ'].forEach((btnId) => {
-      const btn = document.getElementById(btnId);
-      if (!btn || btn._refundBound) return;
-      btn._refundBound = true;
-      btn.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
-        const entry = map.find(m => m.id === btnId && m.agent === myAgent);
-        if (!entry) return;
-        const st = myAgent === 'reyna' ? reynaState : (myAgent === 'neon' ? neonState : null);
-        if (!st) return;
-        const minKeep = (myAgent === 'reyna' && entry.key === 'qeCharges') ? 1 : 0;
-        if (st[entry.key] > minKeep) {
-          st[entry.key] -= 1;
-          if (typeof credits !== 'undefined') credits = Math.min(9000, credits + entry.cost);
-          if (typeof updateHUD === 'function') updateHUD();
-        }
-      });
-    });
-  }
-
-  // 5 & 6. 레이나 E 무시 수동 해제(0.8초 이후 E 재입력) 및 여제(X) 중 E 무제한·자동 패시브 회복
-  let _dismissElapsed = 0;
-  let _prevDismissTimer = 0;
-  let _prevTrackedKills = 0;
-
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyE' && typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined') {
-      if (reynaState.dismissTimer > 0 && _dismissElapsed >= 0.8) {
-        e.stopImmediatePropagation();
-        reynaState.dismissTimer = 0;
-        _dismissElapsed = 0;
-        if (_reynaDismissHandsGroup) _reynaDismissHandsGroup.visible = false;
-        if (typeof gunGroup !== 'undefined' && !reynaState.leerEquipped) gunGroup.visible = true;
-      } else if (reynaState.dismissTimer <= 0 && reynaState.empressActive && reynaState.qeCharges <= 0 && reynaState.soulOrbs.length > 0) {
-        // 여제 활성 중 충전량이 0이어도 영혼 구슬이 있으면 E 무시 사용 가능하도록 임시 충전 보충
-        reynaState.qeCharges = 1;
-      }
-    }
-  }, true);
-
-  // 8 & 9. 사망 시 궁극기 포인트 +1, 사격장 궁극기 100% 충전 및 일반전 진입 시 완벽 리셋
-  let _wasDead = false;
-  let _lastMap = null;
-  let _lastTick = performance.now();
-
-  function tickFinalPatches(now) {
-    requestAnimationFrame(tickFinalPatches);
-    const dt = Math.min(0.05, (now - _lastTick) / 1000);
-    _lastTick = now;
-
-    bindShopRightClickRefunds();
-
-    // 1 & 5. 제트 X 및 레이나 E 활성 중 gunGroup 강제 숨김 유지
-    if (typeof myAgent !== 'undefined' && typeof gunGroup !== 'undefined') {
-      if (myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) {
-        gunGroup.visible = false;
-      }
-      if (myAgent === 'reyna' && typeof reynaState !== 'undefined') {
-        if (reynaState.dismissTimer > 0) {
-          if (_prevDismissTimer <= 0) _dismissElapsed = 0;
-          _dismissElapsed += dt;
-          gunGroup.visible = false;
-          ensureReynaDismissHands();
-          if (_reynaDismissHandsGroup) {
-            _reynaDismissHandsGroup.visible = true;
-            _reynaDismissAuras.forEach((m, i) => {
-              m.rotation.y += dt * (i % 2 === 0 ? 4.5 : -6.0);
-              m.rotation.z += dt * 3.2;
-            });
-          }
-        } else {
-          _dismissElapsed = 0;
-          if (_reynaDismissHandsGroup && _reynaDismissHandsGroup.visible) {
-            _reynaDismissHandsGroup.visible = false;
-            if (!reynaState.leerEquipped) gunGroup.visible = true;
-          }
-        }
-        _prevDismissTimer = reynaState.dismissTimer;
-
-        // 6. 여제(X) 활성 중 킬 발생 시 영혼 구슬 소모 없는 자동 패시브 회복 발동
-        const curKills = (typeof playerStats !== 'undefined' && playerStats.k) ? playerStats.k : 0;
-        if (curKills > _prevTrackedKills && reynaState.empressActive) {
-          reynaState.devourTimer = 2.0;
-          reynaState.devourHealLeft = 100;
-        }
-        _prevTrackedKills = curKills;
-      }
-    }
-
-    // 8. 사망 시 궁극기 포인트 +1
-    if (typeof isDead !== 'undefined') {
-      if (isDead && !_wasDead && typeof currentMap !== 'undefined' && currentMap !== 'range') {
-        if (myAgent === 'reyna' && typeof reynaState !== 'undefined') reynaState.ultPoints = Math.min(6, reynaState.ultPoints + 1);
-        if (myAgent === 'neon' && typeof neonState !== 'undefined') neonState.ultPoints = Math.min(8, neonState.ultPoints + 1);
-        if (myAgent === 'jett' && typeof jettState !== 'undefined') jettState.ultPoints = Math.min(8, jettState.ultPoints + 1);
-        if (myAgent === 'phoenix' && typeof phoenixState !== 'undefined') phoenixState.ultPoints = Math.min(6, phoenixState.ultPoints + 1);
-      }
-      _wasDead = isDead;
-    }
-
-    // 9. 사격장 궁극기 100% 즉시 충전 & 일반전(매치) 진입 시 초기화
-    if (typeof currentMap !== 'undefined') {
-      if (currentMap === 'range') {
-        if (typeof reynaState !== 'undefined') reynaState.ultPoints = 6;
-        if (typeof neonState !== 'undefined') neonState.ultPoints = 8;
-        if (typeof jettState !== 'undefined') jettState.ultPoints = 8;
-        if (typeof phoenixState !== 'undefined') phoenixState.ultPoints = 6;
-      } else if (_lastMap === 'range' && currentMap !== 'range') {
-        if (typeof credits !== 'undefined') credits = 800;
-        if (typeof reynaState !== 'undefined') {
-          reynaState.cCharges = 0; reynaState.qeCharges = 1; reynaState.ultPoints = 0; reynaState.empressActive = false;
-        }
-        if (typeof neonState !== 'undefined') {
-          neonState.cCharges = 0; neonState.qCharges = 0; neonState.ultPoints = 0; neonState.overdriveActive = false;
-        }
-        if (typeof jettState !== 'undefined') {
-          jettState.cCharges = 0; jettState.qCharges = 0; jettState.ultPoints = 0; jettState.bladeStormActive = false;
-        }
-        if (typeof phoenixState !== 'undefined') {
-          phoenixState.cCharges = 0; phoenixState.qCharges = 0; phoenixState.ultPoints = 0;
-        }
-        if (typeof updateHUD === 'function') updateHUD();
-      }
-      _lastMap = currentMap;
-    }
-  }
-  requestAnimationFrame(tickFinalPatches);
-})();
-</script>
-
-
-<script>
-(function applyFinalNineFixes() {
-  // 3. 스킬 사용 시 상단 텍스트 알림(55m 폭발, 진탕 등) 완전 삭제
-  const toastEl = document.getElementById('agentSkillToast');
-  if (toastEl) toastEl.style.display = 'none';
-  if (typeof showSkillNotice === 'function') {
-    window.showSkillNotice = function() {};
-  }
-
-  // 2. 네온 Q 릴레이 볼트 2지점 동시 폭발(1.2초 지연) 구현
-  if (typeof neonState !== 'undefined' && typeof scene !== 'undefined') {
-    neonState.pendingRelayZones = neonState.pendingRelayZones || [];
-
-    window.triggerRelayBoltZones = function(impactPos, bounceDir) {
-      const forwardFlat = new THREE.Vector3(bounceDir.x, 0, bounceDir.z);
-      if (forwardFlat.lengthSq() < 0.001) forwardFlat.set(0, 0, -1);
-      forwardFlat.normalize();
-
-      const zoneRadius = 5.5;
-      const spots = [
-        impactPos.clone(),
-        impactPos.clone().addScaledVector(forwardFlat, 8.2)
-      ];
-
-      spots.forEach(pt => {
-        const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl')
-          ? getFloorHeightAt(pt.x, pt.z, pt.y) : 0;
-
-        // 1.2초 뒤 동시 폭발 예고 원형 표식 생성
-        const warnRing = new THREE.Mesh(
-          new THREE.RingGeometry(zoneRadius * 0.88, zoneRadius, 48),
-          new THREE.MeshBasicMaterial({ color: 0x22d3ee, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
-        );
-        warnRing.rotation.x = -Math.PI / 2;
-        warnRing.position.set(pt.x, floorY + 0.08, pt.z);
-
-        const warnDisc = new THREE.Mesh(
-          new THREE.CircleGeometry(zoneRadius, 48),
-          new THREE.MeshBasicMaterial({ color: 0x0284c7, side: THREE.DoubleSide, transparent: true, opacity: 0.25 })
-        );
-        warnDisc.rotation.x = -Math.PI / 2;
-        warnDisc.position.set(pt.x, floorY + 0.05, pt.z);
-
-        scene.add(warnRing, warnDisc);
-        neonState.pendingRelayZones.push({
-          pos: new THREE.Vector3(pt.x, floorY, pt.z),
-          radius: zoneRadius,
-          delay: 1.2,
-          warnRing,
-          warnDisc
-        });
-      });
-    };
-  }
-
-  // 7. 아군 처치 시에도 우측 상단 팀 킬로그 출력 강조
-  if (typeof addKillFeed === 'function') {
-    const _origAddKillFeed = addKillFeed;
-    window.addKillFeed = function(text, isHighlight = false) {
-      const isTeamKill = typeof text === 'string' && text.includes('➔') &&
-        ((typeof myTeam !== 'undefined' && myTeam === 'red' && text.includes('[공격]')) ||
-         (typeof myTeam !== 'undefined' && myTeam === 'blue' && text.includes('[수비]')));
-      _origAddKillFeed(text, isHighlight || isTeamKill);
-    };
-  }
-
-  // 4. 상점(B키) 마우스 우클릭 스킬 되팔기(환불) 지원 보강 (제트/피닉스/레이나/네온 전체)
-  function ensureAllShopRightClickRefunds() {
-    const refundTargets = [
-      { id: 'shopSkillC', fn: () => typeof refundJettAbility === 'function' && refundJettAbility('C') },
-      { id: 'shopSkillQ', fn: () => typeof refundJettAbility === 'function' && refundJettAbility('Q') },
-      { id: 'phxShopC',   fn: () => typeof refundPhoenixAbility === 'function' && refundPhoenixAbility('C') },
-      { id: 'phxShopQ',   fn: () => typeof refundPhoenixAbility === 'function' && refundPhoenixAbility('Q') },
-      { id: 'phxShopE',   fn: () => typeof refundPhoenixAbility === 'function' && refundPhoenixAbility('E') },
-      { id: 'rnShopC',    fn: () => {
-        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
-        if (myAgent === 'reyna' && reynaState.cCharges > 0) {
-          reynaState.cCharges--; credits = Math.min(9000, credits + 250); updateHUD();
-        } else if (myAgent === 'neon' && neonState.cCharges > 0) {
-          neonState.cCharges--; credits = Math.min(9000, credits + 300); updateHUD();
-        }
-      }},
-      { id: 'rnShopQ',    fn: () => {
-        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
-        if (myAgent === 'reyna' && reynaState.qeCharges > 1) {
-          reynaState.qeCharges--; credits = Math.min(9000, credits + 200); updateHUD();
-        } else if (myAgent === 'neon' && neonState.qCharges > 0) {
-          neonState.qCharges--; credits = Math.min(9000, credits + 250); updateHUD();
-        }
-      }}
-    ];
-    refundTargets.forEach(item => {
-      const el = document.getElementById(item.id);
-      if (el && !el._rightClickRefundAttached) {
-        el._rightClickRefundAttached = true;
-        el.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          item.fn();
-        });
-      }
-    });
-  }
-
-  // 1, 2, 5, 6, 8, 9 통합 루프 보강
-  let prevTick = performance.now();
-  function unifiedNineFixLoop(now) {
-    requestAnimationFrame(unifiedNineFixLoop);
-    const dt = Math.min(0.05, (now - prevTick) / 1000);
-    prevTick = now;
-
-    ensureAllShopRightClickRefunds();
-
-    // 1 & 5. 제트 X 칼날 폭풍 및 레이나 E 무시 활성 시 총기/칼 모델 겹침 완벽 제거
-    if (typeof myAgent !== 'undefined' && typeof gunGroup !== 'undefined') {
-      if (myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) {
-        gunGroup.visible = false;
-      }
-      if (myAgent === 'reyna' && typeof reynaState !== 'undefined' && reynaState.dismissTimer > 0) {
-        gunGroup.visible = false;
-      }
-    }
-
-    // 2. 네온 릴레이 볼트 1.2초 지연 후 2지점 동시 폭발 및 진탕 판정
-    if (typeof neonState !== 'undefined' && Array.isArray(neonState.pendingRelayZones)) {
-      for (let i = neonState.pendingRelayZones.length - 1; i >= 0; i--) {
-        const pz = neonState.pendingRelayZones[i];
-        pz.delay -= dt;
-        const pulse = 1.0 + Math.sin((1.2 - pz.delay) * 14) * 0.04;
-        pz.warnRing.scale.set(pulse, pulse, 1);
-        if (pz.delay <= 0) {
-          scene.remove(pz.warnRing);
-          scene.remove(pz.warnDisc);
-          const zoneMesh = createLargeRelayConcussZoneMesh(pz.radius);
-          zoneMesh.position.copy(pz.pos);
-          scene.add(zoneMesh);
-          neonState.concussZones.push({ mesh: zoneMesh, pos: pz.pos.clone(), radius: pz.radius, life: 3.4, maxLife: 3.4 });
-
-          if (typeof brawlBots !== 'undefined') {
-            for (const b of brawlBots) {
-              if (!b.userData.dead && b.userData.team !== myTeam) {
-                if (Math.hypot(b.position.x - pz.pos.x, b.position.z - pz.pos.z) <= pz.radius) {
-                  b.userData.concussedTimer = 3.8;
-                }
-              }
-            }
-          }
-          if (typeof window.practiceBots !== 'undefined' && Array.isArray(window.practiceBots)) {
-            for (const pb of window.practiceBots) {
-              if (Math.hypot(pb.position.x - pz.pos.x, pb.position.z - pz.pos.z) <= pz.radius) {
-                pb.userData.concussedTimer = 3.8;
-              }
-            }
-          }
-          neonState.pendingRelayZones.splice(i, 1);
-        }
-      }
-    }
-  }
-  requestAnimationFrame(unifiedNineFixLoop);
-})();
-</script>
 
 </body>
 </html>
