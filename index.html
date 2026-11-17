@@ -7,10 +7,23 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
-    #crosshair { position: fixed; top: 50%; left: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; transition: transform 0.05s; }
-    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ffcc; box-shadow: 0 0 4px #00ffcc; }
-    #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
-    #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+    #crosshair { position: fixed; top: 50%; left: 50%; width: 0; height: 0; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
+    .ch-part { position: absolute; box-sizing: border-box; transition: transform 0.04s ease-out; }
+    .ch-modal-backdrop { position: fixed; inset: 0; background: rgba(10, 15, 22, 0.85); backdrop-filter: blur(6px); z-index: 95; display: none; align-items: center; justify-content: center; }
+    .ch-panel { width: 780px; max-width: 95vw; max-height: 90vh; overflow-y: auto; background: #0f1923; border: 1px solid #ff4655; border-radius: 8px; padding: 20px 24px; color: #ece8e1; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8); }
+    .ch-preview-box { position: relative; height: 140px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 16px; background: linear-gradient(135deg, #1b2838 0%, #2a3f54 100%); }
+    .ch-preview-box.bg-light { background: linear-gradient(135deg, #d8dee9 0%, #eceff4 100%); }
+    .ch-preview-box.bg-range { background: radial-gradient(circle at center, #3b4252 0%, #1e222a 100%); }
+    .ch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+    .ch-group { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 12px 14px; }
+    .ch-group h4 { margin: 0 0 10px 0; font-size: 13px; color: #00ffcc; letter-spacing: 0.5px; }
+    .ch-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+    .ch-row input[type="range"] { flex: 1; accent-color: #ff4655; }
+    .ch-row input[type="number"] { width: 54px; background: #091118; border: 1px solid #334155; color: #00ffcc; border-radius: 4px; padding: 3px 5px; text-align: center; font-weight: bold; }
+    .ch-swatch { width: 22px; height: 22px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; }
+    .ch-swatch.active { border-color: #fff; transform: scale(1.12); }
+    .ch-preset-btn { background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 6px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .ch-preset-btn:hover { border-color: #ff4655; background: #293548; }
 
     #adsReticle { position: fixed; top: 50%; left: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); pointer-events: none; z-index: 12; border: 2px solid rgba(255, 215, 0, 0.9); box-shadow: 0 0 8px rgba(255, 200, 0, 0.6), inset 0 0 6px rgba(255, 200, 0, 0.4); border-radius: 3px; display: none; }
     #adsReticle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #ffea00; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 6px #ffea00; }
@@ -216,6 +229,7 @@
                      style="width:68px; background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; font-weight:bold; font-size:13px; padding:4px 6px; border-radius:4px; text-align:center;">
               <span id="sensValue" style="display:none;">1.00</span>
             </div>
+            <button type="button" onclick="openCrosshairModal()" class="btn-secondary" style="padding:6px 12px; font-size:12px; border:1px solid #00ffcc; color:#00ffcc; font-weight:bold;">🎯 조준점 설정</button>
             <button id="btnFullscreen" class="btn-secondary" style="padding:6px 10px; font-size:12px;">전체화면</button>
           </div>
           <div id="roomStatusBox" style="margin-top:8px; text-align:center; font-size:13px; color:#ffcc00;">
@@ -462,6 +476,80 @@
   </div>
 
   <div id="crosshair"></div>
+  <div id="crosshairModal" class="ch-modal-backdrop" onclick="if(event.target===this) closeCrosshairModal()">
+    <div class="ch-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:18px; font-weight:900; color:#ff4655;">CROSSHAIR</span>
+          <span style="font-size:14px; font-weight:bold;">조준점(크로스헤어) 커스텀 & 감도 설정</span>
+        </div>
+        <button onclick="closeCrosshairModal()" style="background:#ff4655; border:none; color:#fff; padding:6px 14px; border-radius:4px; font-weight:bold; cursor:pointer;">닫기 (ESC)</button>
+      </div>
+
+      <div id="chPreviewBox" class="ch-preview-box">
+        <div id="chPreviewCanvas" style="position:relative; width:0; height:0;"></div>
+        <div style="position:absolute; top:8px; left:10px; font-size:11px; color:rgba(255,255,255,0.7);">실시간 미리보기 (LIVE PREVIEW)</div>
+        <div style="position:absolute; bottom:8px; right:10px; display:flex; gap:6px;">
+          <button class="ch-preset-btn" onclick="cyclePreviewBg()">배경 전환 (어두움/밝음/사격장)</button>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px;">
+        <span style="font-size:12px; color:#94a3b8; font-weight:bold;">인기 프리셋:</span>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('proCross')">십자 (프로 스타일)</button>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('dot')">점 조준점 (Dot)</button>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('circle')">원형 / 타원형</button>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('default')" style="border-color:#ff4655; color:#ff8a93;">기본 조준점 초기화</button>
+      </div>
+
+      <div class="ch-grid">
+        <div class="ch-group">
+          <h4>기본 · 색상 · 윤곽선</h4>
+          <div class="ch-row">
+            <span>조준점 색상</span>
+            <div id="chColorSwatches" style="display:flex; gap:5px; align-items:center;">
+              <div class="ch-swatch" data-color="#ffffff" style="background:#ffffff;" onclick="setChColor('#ffffff')"></div>
+              <div class="ch-swatch" data-color="#00ff00" style="background:#00ff00;" onclick="setChColor('#00ff00')"></div>
+              <div class="ch-swatch" data-color="#7fff00" style="background:#7fff00;" onclick="setChColor('#7fff00')"></div>
+              <div class="ch-swatch" data-color="#00ffff" style="background:#00ffff;" onclick="setChColor('#00ffff')"></div>
+              <div class="ch-swatch" data-color="#ff0000" style="background:#ff0000;" onclick="setChColor('#ff0000')"></div>
+              <div class="ch-swatch" data-color="#ffff00" style="background:#ffff00;" onclick="setChColor('#ffff00')"></div>
+              <div class="ch-swatch" data-color="#ff66ff" style="background:#ff66ff;" onclick="setChColor('#ff66ff')"></div>
+              <input type="color" id="chColorPicker" value="#00ffff" onchange="setChColor(this.value)" style="width:26px; height:24px; border:none; background:none; cursor:pointer;">
+            </div>
+          </div>
+          <div class="ch-row"><span>윤곽선(외곽선) 표시</span><input type="checkbox" id="chOutlineOn" onchange="syncChFromUI()"></div>
+          <div class="ch-row"><span>윤곽선 두께 (1~3px)</span><input type="range" id="chOutlineWidthRange" min="1" max="3" step="1" oninput="syncChPair('chOutlineWidth', this.value)"><input type="number" id="chOutlineWidthNum" min="1" max="3" step="1" oninput="syncChPair('chOutlineWidth', this.value)"></div>
+          <div class="ch-row"><span>윤곽선 투명도 (0~1)</span><input type="range" id="chOutlineAlphaRange" min="0" max="1" step="0.05" oninput="syncChPair('chOutlineAlpha', this.value)"><input type="number" id="chOutlineAlphaNum" min="0" max="1" step="0.05" oninput="syncChPair('chOutlineAlpha', this.value)"></div>
+          <div class="ch-row"><span>사격 오차(반동 벌어짐) 표시</span><input type="checkbox" id="chRecoilError" onchange="syncChFromUI()"></div>
+        </div>
+
+        <div class="ch-group">
+          <h4>중앙 점 (CENTER DOT)</h4>
+          <div class="ch-row"><span>중앙 점 표시</span><input type="checkbox" id="chDotOn" onchange="syncChFromUI()"></div>
+          <div class="ch-row"><span>중앙 점 크기 (1~6px)</span><input type="range" id="chDotSizeRange" min="1" max="6" step="1" oninput="syncChPair('chDotSize', this.value)"><input type="number" id="chDotSizeNum" min="1" max="6" step="1" oninput="syncChPair('chDotSize', this.value)"></div>
+          <div class="ch-row"><span>중앙 점 투명도 (0~1)</span><input type="range" id="chDotAlphaRange" min="0" max="1" step="0.05" oninput="syncChPair('chDotAlpha', this.value)"><input type="number" id="chDotAlphaNum" min="0" max="1" step="0.05" oninput="syncChPair('chDotAlpha', this.value)"></div>
+          <div class="ch-row" style="margin-top:12px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);"><span>마우스 감도 연동</span><input type="range" id="chModalSensRange" min="0.05" max="10" step="0.01" oninput="syncModalSensitivity(this.value)"><input type="number" id="chModalSensNum" min="0.05" max="10" step="0.01" oninput="syncModalSensitivity(this.value)"></div>
+        </div>
+
+        <div class="ch-group">
+          <h4>안쪽 선 (INNER LINES)</h4>
+          <div class="ch-row"><span>안쪽 선 길이 (0~20px)</span><input type="range" id="chInnerLenRange" min="0" max="20" step="1" oninput="syncChPair('chInnerLen', this.value)"><input type="number" id="chInnerLenNum" min="0" max="20" step="1" oninput="syncChPair('chInnerLen', this.value)"></div>
+          <div class="ch-row"><span>안쪽 선 두께 (1~10px)</span><input type="range" id="chInnerThickRange" min="1" max="10" step="1" oninput="syncChPair('chInnerThick', this.value)"><input type="number" id="chInnerThickNum" min="1" max="10" step="1" oninput="syncChPair('chInnerThick', this.value)"></div>
+          <div class="ch-row"><span>안쪽 선 간격/오프셋 (0~20px)</span><input type="range" id="chInnerOffsetRange" min="0" max="20" step="1" oninput="syncChPair('chInnerOffset', this.value)"><input type="number" id="chInnerOffsetNum" min="0" max="20" step="1" oninput="syncChPair('chInnerOffset', this.value)"></div>
+          <div class="ch-row"><span>안쪽 선 투명도 (0~1)</span><input type="range" id="chInnerAlphaRange" min="0" max="1" step="0.05" oninput="syncChPair('chInnerAlpha', this.value)"><input type="number" id="chInnerAlphaNum" min="0" max="1" step="0.05" oninput="syncChPair('chInnerAlpha', this.value)"></div>
+        </div>
+
+        <div class="ch-group">
+          <h4>바깥 선 (OUTER LINES)</h4>
+          <div class="ch-row"><span>바깥 선 표시</span><input type="checkbox" id="chOuterOn" onchange="syncChFromUI()"></div>
+          <div class="ch-row"><span>바깥 선 길이 (0~20px)</span><input type="range" id="chOuterLenRange" min="0" max="20" step="1" oninput="syncChPair('chOuterLen', this.value)"><input type="number" id="chOuterLenNum" min="0" max="20" step="1" oninput="syncChPair('chOuterLen', this.value)"></div>
+          <div class="ch-row"><span>바깥 선 두께 (1~10px)</span><input type="range" id="chOuterThickRange" min="1" max="10" step="1" oninput="syncChPair('chOuterThick', this.value)"><input type="number" id="chOuterThickNum" min="1" max="10" step="1" oninput="syncChPair('chOuterThick', this.value)"></div>
+          <div class="ch-row"><span>바깥 선 간격/오프셋 (0~30px)</span><input type="range" id="chOuterOffsetRange" min="0" max="30" step="1" oninput="syncChPair('chOuterOffset', this.value)"><input type="number" id="chOuterOffsetNum" min="0" max="30" step="1" oninput="syncChPair('chOuterOffset', this.value)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="adsReticle"></div>
   <div id="sniperScope">
     <svg id="araxysScopeSvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
@@ -7571,6 +7659,9 @@
       if (!currentUserId || !userAccount) return;
       userAccount.skins = { ...equippedSkins };
       userAccount.sensitivity = typeof sensitivity === 'number' ? sensitivity : 1.0;
+      if (typeof crosshairConfig === 'object' && crosshairConfig) {
+        userAccount.crosshair = { ...crosshairConfig };
+      }
       usersDB[currentUserId] = userAccount;
       saveUsersDB();
     }
@@ -7637,6 +7728,10 @@
       if (typeof userAccount.vp !== 'number') userAccount.vp = 0;
       if (typeof userAccount.radianite !== 'number') userAccount.radianite = 0;
       if (userAccount.skins) Object.assign(equippedSkins, userAccount.skins);
+      if (typeof DEFAULT_CROSSHAIR !== 'undefined') {
+        crosshairConfig = { ...DEFAULT_CROSSHAIR, ...(userAccount.crosshair || {}) };
+        if (typeof applyCrosshairEverywhere === 'function') applyCrosshairEverywhere();
+      }
 
       const savedSens = typeof userAccount.sensitivity === 'number' ? userAccount.sensitivity : 1.0;
       if (typeof updateSensitivityValue === 'function') {
@@ -9956,8 +10051,10 @@
 
       const crosshairEl = document.getElementById('crosshair');
       const curKey = getCurrentWeaponKey();
-      const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isCrouching ? (isMoving ? 0.85 : 0.75) : (isMoving && !isWalking ? 1.5 : 1.0)));
-      crosshairEl.style.transform = `translate(-50%, -50%) scale(${spreadScale})`;
+      const baseSpread = !isGrounded ? 12 : (curKey === 'operator' && zoomLevel === 0 ? 10 : (isCrouching ? -1 : (isMoving && !isWalking ? 6 : 0)));
+      const recoilSpread = (typeof recoilPitchOffset === 'number' ? recoilPitchOffset * 65 : 0);
+      const dynamicOffset = crosshairConfig.recoilError ? Math.max(0, baseSpread + recoilSpread) : 0;
+      renderCrosshairDOM(crosshairEl, crosshairConfig, dynamicOffset);
 
       if (dashCooldown > 0) dashCooldown -= dt;
       const dashEl = document.getElementById('dashStatus');
@@ -10414,6 +10511,225 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    // === 발로란트 스타일 커스텀 조준점(Crosshair) 시스템 ===
+    const DEFAULT_CROSSHAIR = {
+      color: '#00ffff',
+      outlineOn: true,
+      outlineWidth: 1,
+      outlineAlpha: 0.75,
+      dotOn: false,
+      dotSize: 2,
+      dotAlpha: 1,
+      innerLen: 6,
+      innerThick: 2,
+      innerOffset: 3,
+      innerAlpha: 1,
+      outerOn: false,
+      outerLen: 3,
+      outerThick: 2,
+      outerOffset: 10,
+      outerAlpha: 0.85,
+      recoilError: true
+    };
+
+    const CROSSHAIR_PRESETS = {
+      default: { ...DEFAULT_CROSSHAIR },
+      proCross: {
+        color: '#00ffff', outlineOn: true, outlineWidth: 1, outlineAlpha: 0.8,
+        dotOn: false, dotSize: 2, dotAlpha: 1,
+        innerLen: 5, innerThick: 2, innerOffset: 2, innerAlpha: 1,
+        outerOn: false, outerLen: 0, outerThick: 2, outerOffset: 8, outerAlpha: 0.8,
+        recoilError: false
+      },
+      dot: {
+        color: '#ffffff', outlineOn: true, outlineWidth: 1, outlineAlpha: 0.9,
+        dotOn: true, dotSize: 4, dotAlpha: 1,
+        innerLen: 0, innerThick: 2, innerOffset: 0, innerAlpha: 0,
+        outerOn: false, outerLen: 0, outerThick: 2, outerOffset: 8, outerAlpha: 0,
+        recoilError: false
+      },
+      circle: {
+        color: '#7fff00', outlineOn: true, outlineWidth: 1, outlineAlpha: 0.7,
+        dotOn: true, dotSize: 2, dotAlpha: 0.9,
+        innerLen: 2, innerThick: 6, innerOffset: 4, innerAlpha: 0.95,
+        outerOn: true, outerLen: 2, outerThick: 4, outerOffset: 9, outerAlpha: 0.65,
+        recoilError: true
+      }
+    };
+
+    let crosshairConfig = {
+      ...DEFAULT_CROSSHAIR,
+      ...((typeof userAccount !== 'undefined' && userAccount && userAccount.crosshair) ? userAccount.crosshair : {})
+    };
+
+    function renderCrosshairDOM(targetEl, cfg, dynamicSpreadPx = 0) {
+      if (!targetEl || !cfg) return;
+      const outlineStyle = cfg.outlineOn
+        ? `box-shadow: 0 0 0 ${cfg.outlineWidth}px rgba(0, 0, 0, ${cfg.outlineAlpha});`
+        : '';
+      let parts = '';
+
+      if (cfg.dotOn && cfg.dotSize > 0) {
+        const half = cfg.dotSize / 2;
+        parts += `<div class="ch-part" style="left:${-half}px; top:${-half}px; width:${cfg.dotSize}px; height:${cfg.dotSize}px; background:${cfg.color}; opacity:${cfg.dotAlpha}; ${outlineStyle}"></div>`;
+      }
+
+      if (cfg.innerLen > 0 && cfg.innerThick > 0) {
+        const off = cfg.innerOffset + dynamicSpreadPx;
+        const halfT = cfg.innerThick / 2;
+        const base = `background:${cfg.color}; opacity:${cfg.innerAlpha}; ${outlineStyle}`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${-(off + cfg.innerLen)}px; width:${cfg.innerThick}px; height:${cfg.innerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${off}px; width:${cfg.innerThick}px; height:${cfg.innerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-(off + cfg.innerLen)}px; top:${-halfT}px; width:${cfg.innerLen}px; height:${cfg.innerThick}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${off}px; top:${-halfT}px; width:${cfg.innerLen}px; height:${cfg.innerThick}px; ${base}"></div>`;
+      }
+
+      if (cfg.outerOn && cfg.outerLen > 0 && cfg.outerThick > 0) {
+        const off = cfg.outerOffset + dynamicSpreadPx * 1.4;
+        const halfT = cfg.outerThick / 2;
+        const base = `background:${cfg.color}; opacity:${cfg.outerAlpha ?? 0.85}; ${outlineStyle}`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${-(off + cfg.outerLen)}px; width:${cfg.outerThick}px; height:${cfg.outerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${off}px; width:${cfg.outerThick}px; height:${cfg.outerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-(off + cfg.outerLen)}px; top:${-halfT}px; width:${cfg.outerLen}px; height:${cfg.outerThick}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${off}px; top:${-halfT}px; width:${cfg.outerLen}px; height:${cfg.outerThick}px; ${base}"></div>`;
+      }
+
+      targetEl.innerHTML = parts;
+    }
+
+    function applyCrosshairEverywhere(dynamicSpreadPx = 0) {
+      renderCrosshairDOM(document.getElementById('crosshair'), crosshairConfig, dynamicSpreadPx);
+      renderCrosshairDOM(document.getElementById('chPreviewCanvas'), crosshairConfig, 0);
+    }
+
+    function populateCrosshairUI() {
+      const c = crosshairConfig;
+      const picker = document.getElementById('chColorPicker');
+      if (picker) picker.value = c.color;
+      document.querySelectorAll('.ch-swatch').forEach(el => {
+        el.classList.toggle('active', el.dataset.color.toLowerCase() === c.color.toLowerCase());
+      });
+      document.getElementById('chOutlineOn').checked = c.outlineOn;
+      document.getElementById('chRecoilError').checked = c.recoilError;
+      document.getElementById('chDotOn').checked = c.dotOn;
+      document.getElementById('chOuterOn').checked = c.outerOn;
+
+      const pairs = [
+        ['chOutlineWidth', c.outlineWidth],
+        ['chOutlineAlpha', c.outlineAlpha],
+        ['chDotSize', c.dotSize],
+        ['chDotAlpha', c.dotAlpha],
+        ['chInnerLen', c.innerLen],
+        ['chInnerThick', c.innerThick],
+        ['chInnerOffset', c.innerOffset],
+        ['chInnerAlpha', c.innerAlpha],
+        ['chOuterLen', c.outerLen],
+        ['chOuterThick', c.outerThick],
+        ['chOuterOffset', c.outerOffset]
+      ];
+      pairs.forEach(([id, val]) => {
+        const r = document.getElementById(id + 'Range');
+        const n = document.getElementById(id + 'Num');
+        if (r) r.value = val;
+        if (n) n.value = val;
+      });
+
+      const curSens = typeof sensitivity === 'number' ? sensitivity : 1.0;
+      const sr = document.getElementById('chModalSensRange');
+      const sn = document.getElementById('chModalSensNum');
+      if (sr) sr.value = curSens;
+      if (sn) sn.value = curSens.toFixed(2);
+    }
+
+    window.syncChPair = function(prefix, rawVal) {
+      const num = parseFloat(rawVal);
+      if (isNaN(num)) return;
+      document.getElementById(prefix + 'Range').value = num;
+      document.getElementById(prefix + 'Num').value = num;
+      syncChFromUI();
+    };
+
+    window.setChColor = function(hex) {
+      crosshairConfig.color = hex;
+      populateCrosshairUI();
+      applyCrosshairEverywhere();
+      if (typeof saveUserAccount === 'function') saveUserAccount();
+    };
+
+    window.syncChFromUI = function() {
+      crosshairConfig = {
+        color: document.getElementById('chColorPicker').value,
+        outlineOn: document.getElementById('chOutlineOn').checked,
+        outlineWidth: parseFloat(document.getElementById('chOutlineWidthNum').value) || 1,
+        outlineAlpha: parseFloat(document.getElementById('chOutlineAlphaNum').value) ?? 0.75,
+        dotOn: document.getElementById('chDotOn').checked,
+        dotSize: parseFloat(document.getElementById('chDotSizeNum').value) || 2,
+        dotAlpha: parseFloat(document.getElementById('chDotAlphaNum').value) ?? 1,
+        innerLen: parseFloat(document.getElementById('chInnerLenNum').value) ?? 6,
+        innerThick: parseFloat(document.getElementById('chInnerThickNum').value) || 2,
+        innerOffset: parseFloat(document.getElementById('chInnerOffsetNum').value) ?? 3,
+        innerAlpha: parseFloat(document.getElementById('chInnerAlphaNum').value) ?? 1,
+        outerOn: document.getElementById('chOuterOn').checked,
+        outerLen: parseFloat(document.getElementById('chOuterLenNum').value) ?? 3,
+        outerThick: parseFloat(document.getElementById('chOuterThickNum').value) || 2,
+        outerOffset: parseFloat(document.getElementById('chOuterOffsetNum').value) ?? 10,
+        outerAlpha: crosshairConfig.outerAlpha ?? 0.85,
+        recoilError: document.getElementById('chRecoilError').checked
+      };
+      applyCrosshairEverywhere();
+      if (typeof saveUserAccount === 'function') saveUserAccount();
+    };
+
+    window.applyCrosshairPreset = function(presetKey) {
+      crosshairConfig = { ...(CROSSHAIR_PRESETS[presetKey] || DEFAULT_CROSSHAIR) };
+      populateCrosshairUI();
+      applyCrosshairEverywhere();
+      if (typeof saveUserAccount === 'function') saveUserAccount();
+    };
+
+    window.syncModalSensitivity = function(val) {
+      const v = Math.min(10, Math.max(0.05, parseFloat(val) || 1.0));
+      if (typeof updateSensitivityValue === 'function') {
+        updateSensitivityValue(v, true);
+      } else {
+        sensitivity = v;
+        if (typeof saveUserAccount === 'function') saveUserAccount();
+      }
+      const sr = document.getElementById('chModalSensRange');
+      const sn = document.getElementById('chModalSensNum');
+      if (sr) sr.value = v;
+      if (sn) sn.value = v.toFixed(2);
+    };
+
+    let previewBgIdx = 0;
+    window.cyclePreviewBg = function() {
+      const box = document.getElementById('chPreviewBox');
+      const classes = ['', 'bg-light', 'bg-range'];
+      previewBgIdx = (previewBgIdx + 1) % classes.length;
+      box.className = 'ch-preview-box ' + classes[previewBgIdx];
+    };
+
+    window.openCrosshairModal = function() {
+      populateCrosshairUI();
+      applyCrosshairEverywhere();
+      document.getElementById('crosshairModal').style.display = 'flex';
+    };
+
+    window.closeCrosshairModal = function() {
+      document.getElementById('crosshairModal').style.display = 'none';
+    };
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') {
+        const cm = document.getElementById('crosshairModal');
+        if (cm && cm.style.display === 'flex') {
+          closeCrosshairModal();
+        }
+      }
+    });
+
+    applyCrosshairEverywhere();
   </script>
 
 <script>
