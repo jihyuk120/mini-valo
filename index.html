@@ -14392,5 +14392,195 @@
 })();
 </script>
 
+
+<script>
+(function() {
+  // 1 & 5. 스킬 활성 중 총기(gunGroup) 강제 표시 차단 및 레이나 E 무시 1인칭 보라빛 에너지 양손 뷰모델
+  let _reynaDismissHandsGroup = null;
+  let _reynaDismissAuras = [];
+
+  function ensureReynaDismissHands() {
+    if (_reynaDismissHandsGroup || typeof camera === 'undefined' || typeof THREE === 'undefined') return;
+    _reynaDismissHandsGroup = new THREE.Group();
+    _reynaDismissHandsGroup.visible = false;
+    _reynaDismissAuras = [];
+
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2e1065, roughness: 0.5 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a382, roughness: 0.6 });
+    const auraMat = new THREE.MeshBasicMaterial({ color: 0xd946ef, transparent: true, opacity: 0.65 });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xf0abfc, transparent: true, opacity: 0.85 });
+
+    [-1, 1].forEach((side) => {
+      const armGrp = new THREE.Group();
+      armGrp.position.set(side * 0.25, -0.22, -0.34);
+      armGrp.rotation.set(-0.20, -side * 0.18, side * 0.14);
+
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.27, 12), sleeveMat);
+      forearm.rotation.x = Math.PI / 2.2;
+      forearm.position.set(0, -0.03, 0.12);
+
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.076), skinMat);
+      palm.position.set(0, 0.005, -0.045);
+
+      for (let f = 0; f < 4; f++) {
+        const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0065, 0.048, 8), skinMat);
+        finger.rotation.x = Math.PI / 2.1;
+        finger.position.set((-0.020 + f * 0.013) * side, 0.007, -0.10);
+        armGrp.add(finger);
+      }
+
+      const auraSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(0.068, 1), auraMat);
+      auraSphere.position.set(0, 0.015, -0.055);
+      const auraRing = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.004, 8, 20), ringMat);
+      auraRing.rotation.x = Math.PI / 2.3;
+      auraRing.position.set(0, 0.018, -0.055);
+
+      _reynaDismissAuras.push(auraSphere, auraRing);
+      armGrp.add(forearm, palm, auraSphere, auraRing);
+      _reynaDismissHandsGroup.add(armGrp);
+    });
+
+    camera.add(_reynaDismissHandsGroup);
+  }
+
+  // 4. 상점(B키) 마우스 우클릭 스킬 되팔기(환불) 기능 바인딩
+  function bindShopRightClickRefunds() {
+    const map = [
+      { id: 'rnShopC', agent: 'reyna', key: 'cCharges', cost: 250 },
+      { id: 'rnShopQ', agent: 'reyna', key: 'qeCharges', cost: 200 },
+      { id: 'rnShopC', agent: 'neon', key: 'cCharges', cost: 300 },
+      { id: 'rnShopQ', agent: 'neon', key: 'qCharges', cost: 250 }
+    ];
+    ['rnShopC', 'rnShopQ'].forEach((btnId) => {
+      const btn = document.getElementById(btnId);
+      if (!btn || btn._refundBound) return;
+      btn._refundBound = true;
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase !== 'PREP') return;
+        const entry = map.find(m => m.id === btnId && m.agent === myAgent);
+        if (!entry) return;
+        const st = myAgent === 'reyna' ? reynaState : (myAgent === 'neon' ? neonState : null);
+        if (!st) return;
+        const minKeep = (myAgent === 'reyna' && entry.key === 'qeCharges') ? 1 : 0;
+        if (st[entry.key] > minKeep) {
+          st[entry.key] -= 1;
+          if (typeof credits !== 'undefined') credits = Math.min(9000, credits + entry.cost);
+          if (typeof updateHUD === 'function') updateHUD();
+        }
+      });
+    });
+  }
+
+  // 5 & 6. 레이나 E 무시 수동 해제(0.8초 이후 E 재입력) 및 여제(X) 중 E 무제한·자동 패시브 회복
+  let _dismissElapsed = 0;
+  let _prevDismissTimer = 0;
+  let _prevTrackedKills = 0;
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyE' && typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined') {
+      if (reynaState.dismissTimer > 0 && _dismissElapsed >= 0.8) {
+        e.stopImmediatePropagation();
+        reynaState.dismissTimer = 0;
+        _dismissElapsed = 0;
+        if (_reynaDismissHandsGroup) _reynaDismissHandsGroup.visible = false;
+        if (typeof gunGroup !== 'undefined' && !reynaState.leerEquipped) gunGroup.visible = true;
+      } else if (reynaState.dismissTimer <= 0 && reynaState.empressActive && reynaState.qeCharges <= 0 && reynaState.soulOrbs.length > 0) {
+        // 여제 활성 중 충전량이 0이어도 영혼 구슬이 있으면 E 무시 사용 가능하도록 임시 충전 보충
+        reynaState.qeCharges = 1;
+      }
+    }
+  }, true);
+
+  // 8 & 9. 사망 시 궁극기 포인트 +1, 사격장 궁극기 100% 충전 및 일반전 진입 시 완벽 리셋
+  let _wasDead = false;
+  let _lastMap = null;
+  let _lastTick = performance.now();
+
+  function tickFinalPatches(now) {
+    requestAnimationFrame(tickFinalPatches);
+    const dt = Math.min(0.05, (now - _lastTick) / 1000);
+    _lastTick = now;
+
+    bindShopRightClickRefunds();
+
+    // 1 & 5. 제트 X 및 레이나 E 활성 중 gunGroup 강제 숨김 유지
+    if (typeof myAgent !== 'undefined' && typeof gunGroup !== 'undefined') {
+      if (myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) {
+        gunGroup.visible = false;
+      }
+      if (myAgent === 'reyna' && typeof reynaState !== 'undefined') {
+        if (reynaState.dismissTimer > 0) {
+          if (_prevDismissTimer <= 0) _dismissElapsed = 0;
+          _dismissElapsed += dt;
+          gunGroup.visible = false;
+          ensureReynaDismissHands();
+          if (_reynaDismissHandsGroup) {
+            _reynaDismissHandsGroup.visible = true;
+            _reynaDismissAuras.forEach((m, i) => {
+              m.rotation.y += dt * (i % 2 === 0 ? 4.5 : -6.0);
+              m.rotation.z += dt * 3.2;
+            });
+          }
+        } else {
+          _dismissElapsed = 0;
+          if (_reynaDismissHandsGroup && _reynaDismissHandsGroup.visible) {
+            _reynaDismissHandsGroup.visible = false;
+            if (!reynaState.leerEquipped) gunGroup.visible = true;
+          }
+        }
+        _prevDismissTimer = reynaState.dismissTimer;
+
+        // 6. 여제(X) 활성 중 킬 발생 시 영혼 구슬 소모 없는 자동 패시브 회복 발동
+        const curKills = (typeof playerStats !== 'undefined' && playerStats.k) ? playerStats.k : 0;
+        if (curKills > _prevTrackedKills && reynaState.empressActive) {
+          reynaState.devourTimer = 2.0;
+          reynaState.devourHealLeft = 100;
+        }
+        _prevTrackedKills = curKills;
+      }
+    }
+
+    // 8. 사망 시 궁극기 포인트 +1
+    if (typeof isDead !== 'undefined') {
+      if (isDead && !_wasDead && typeof currentMap !== 'undefined' && currentMap !== 'range') {
+        if (myAgent === 'reyna' && typeof reynaState !== 'undefined') reynaState.ultPoints = Math.min(6, reynaState.ultPoints + 1);
+        if (myAgent === 'neon' && typeof neonState !== 'undefined') neonState.ultPoints = Math.min(8, neonState.ultPoints + 1);
+        if (myAgent === 'jett' && typeof jettState !== 'undefined') jettState.ultPoints = Math.min(8, jettState.ultPoints + 1);
+        if (myAgent === 'phoenix' && typeof phoenixState !== 'undefined') phoenixState.ultPoints = Math.min(6, phoenixState.ultPoints + 1);
+      }
+      _wasDead = isDead;
+    }
+
+    // 9. 사격장 궁극기 100% 즉시 충전 & 일반전(매치) 진입 시 초기화
+    if (typeof currentMap !== 'undefined') {
+      if (currentMap === 'range') {
+        if (typeof reynaState !== 'undefined') reynaState.ultPoints = 6;
+        if (typeof neonState !== 'undefined') neonState.ultPoints = 8;
+        if (typeof jettState !== 'undefined') jettState.ultPoints = 8;
+        if (typeof phoenixState !== 'undefined') phoenixState.ultPoints = 6;
+      } else if (_lastMap === 'range' && currentMap !== 'range') {
+        if (typeof credits !== 'undefined') credits = 800;
+        if (typeof reynaState !== 'undefined') {
+          reynaState.cCharges = 0; reynaState.qeCharges = 1; reynaState.ultPoints = 0; reynaState.empressActive = false;
+        }
+        if (typeof neonState !== 'undefined') {
+          neonState.cCharges = 0; neonState.qCharges = 0; neonState.ultPoints = 0; neonState.overdriveActive = false;
+        }
+        if (typeof jettState !== 'undefined') {
+          jettState.cCharges = 0; jettState.qCharges = 0; jettState.ultPoints = 0; jettState.bladeStormActive = false;
+        }
+        if (typeof phoenixState !== 'undefined') {
+          phoenixState.cCharges = 0; phoenixState.qCharges = 0; phoenixState.ultPoints = 0;
+        }
+        if (typeof updateHUD === 'function') updateHUD();
+      }
+      _lastMap = currentMap;
+    }
+  }
+  requestAnimationFrame(tickFinalPatches);
+})();
+</script>
+
 </body>
 </html>
