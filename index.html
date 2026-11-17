@@ -9098,19 +9098,7 @@
         isGrounded = false;
       }
 
-      if (e.code === 'KeyE' && dashCooldown <= 0 && spikeState.plantProgress === 0 && spikeState.defuseProgress === 0) {
-        const { forward, right } = getMoveVectors();
-        const dir = new THREE.Vector3(0, 0, 0);
-        if (keys['KeyW']) dir.add(forward);
-        if (keys['KeyS']) dir.sub(forward);
-        if (keys['KeyD']) dir.add(right);
-        if (keys['KeyA']) dir.sub(right);
-        if (dir.lengthSq() === 0) dir.copy(forward);
-        else dir.normalize();
-        dashDir.copy(dir);
-        dashTime = 0.19;
-        dashCooldown = 3.0;
-      }
+      // 공용 기본 대시(E) 제거됨 (제트 전용 순풍만 E키 대시 사용)
     });
 
     document.addEventListener('keyup', (e) => {
@@ -9745,8 +9733,12 @@
 
       if (dashCooldown > 0) dashCooldown -= dt;
       const dashEl = document.getElementById('dashStatus');
-      dashEl.innerText = dashCooldown > 0 ? dashCooldown.toFixed(1) + '초' : '준비완료';
-      dashEl.style.color = dashCooldown > 0 ? '#ff4655' : '#00ffcc';
+      if (dashEl) {
+        if (typeof myAgent !== 'undefined' && myAgent !== 'jett') {
+          dashEl.innerText = '요원 전용 스킬';
+          dashEl.style.color = '#94a3b8';
+        }
+      }
 
       let targetFov = 75;
       if (!isDead && !isSpectating) {
@@ -12935,7 +12927,7 @@
         if (neonState.overdriveActive) mult *= 1.25;
       }
       if (typeof myAgent !== 'undefined' && myAgent === 'reyna') {
-        if (reynaState.dismissTimer > 0) mult *= 1.42;
+        if (reynaState.dismissTimer > 0) mult *= 1.65;
       }
       if (neonState.selfConcussTimer > 0) mult *= 0.58; // 뇌진탕 이동 속도 저하
       origMoveWithCollision(dx * mult, dz * mult);
@@ -12998,11 +12990,108 @@
     dismissTimer: 0,
     devourTimer: 0,
     devourHealLeft: 0,
+    leerEquipped: false,
     lastTrackedKills: 0,
     lastRoundNum: -1,
     soulOrbs: [],
     leers: []
   };
+
+  function createReynaEyeOrbMesh(scale = 1.0) {
+    const eyeGroup = new THREE.Group();
+
+    const eyeball = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11 * scale, 24, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0xf472b6,
+        emissive: 0xc026d3,
+        emissiveIntensity: 0.9,
+        roughness: 0.25
+      })
+    );
+
+    const iris = new THREE.Mesh(
+      new THREE.CircleGeometry(0.068 * scale, 24),
+      new THREE.MeshBasicMaterial({ color: 0xf9a8d4 })
+    );
+    iris.position.z = 0.106 * scale;
+
+    const pupil = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.022 * scale, 0.095 * scale),
+      new THREE.MeshBasicMaterial({ color: 0x1e0536 })
+    );
+    pupil.position.z = 0.108 * scale;
+
+    const auraOuter = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.155 * scale, 1),
+      new THREE.MeshBasicMaterial({
+        color: 0x3b0764,
+        transparent: true,
+        opacity: 0.55
+      })
+    );
+    const auraWisps = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.175 * scale, 1),
+      new THREE.MeshBasicMaterial({
+        color: 0x7e22ce,
+        transparent: true,
+        opacity: 0.38,
+        wireframe: true
+      })
+    );
+
+    eyeGroup.add(eyeball, iris, pupil, auraOuter, auraWisps);
+    eyeGroup.userData = { auraOuter, auraWisps };
+    return eyeGroup;
+  }
+
+  let reynaLeerHandGroup = null;
+  let reynaLeerHandOrb = null;
+
+  function ensureReynaLeerHandViewModel() {
+    if (reynaLeerHandGroup || typeof camera === 'undefined') return;
+    reynaLeerHandGroup = new THREE.Group();
+    reynaLeerHandGroup.visible = false;
+
+    const armGrp = new THREE.Group();
+    armGrp.position.set(0.28, -0.23, -0.36);
+    armGrp.rotation.set(-0.15, -0.14, 0.06);
+
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2e1065, roughness: 0.55 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a382, roughness: 0.65 });
+    const tattooMat = new THREE.MeshBasicMaterial({ color: 0xe879f9 });
+
+    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.043, 0.28, 12), sleeveMat);
+    forearm.rotation.x = Math.PI / 2.2;
+    forearm.position.set(0, -0.03, 0.12);
+
+    const tattooRing = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.004, 8, 18), tattooMat);
+    tattooRing.position.set(0, -0.005, 0.02);
+
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.02, 0.078), skinMat);
+    palm.position.set(0, 0.005, -0.045);
+
+    reynaLeerHandOrb = createReynaEyeOrbMesh(1.0);
+    reynaLeerHandOrb.position.set(0, 0.13, -0.055);
+    reynaLeerHandOrb.rotation.y = Math.PI;
+
+    armGrp.add(forearm, tattooRing, palm, reynaLeerHandOrb);
+    reynaLeerHandGroup.add(armGrp);
+    camera.add(reynaLeerHandGroup);
+  }
+
+  function setReynaLeerEquipped(equipped) {
+    reynaState.leerEquipped = equipped;
+    ensureReynaLeerHandViewModel();
+    if (equipped) {
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      if (reynaLeerHandGroup) reynaLeerHandGroup.visible = true;
+      showSkillNotice('눈총(C) 장착 — 좌클릭으로 투척 / [1~3] 취소', '#e879f9');
+    } else {
+      if (reynaLeerHandGroup) reynaLeerHandGroup.visible = false;
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+    }
+  }
 
   // 적 화면 외곽 보라색 안개(근시) 오버레이 생성
   const nearsightOverlay = document.createElement('div');
@@ -13055,31 +13144,26 @@
     return bestOrb;
   }
 
-  // C: 눈총 (벽 통과 보라색 눈 구체 소환, 바라보는 적 화면 외곽 보라색 근시)
-  function castReynaLeer() {
+  // C: 눈총 (장착 후 좌클릭 발사, 1~3번 키로 취소)
+  function equipReynaLeer() {
     if (isPrepPhase()) {
       showSkillNotice('준비 시간에는 공격 스킬(눈총)을 사용할 수 없습니다.', '#ff4655');
       return;
     }
     if (reynaState.cCharges <= 0 || isDead) return;
+    setReynaLeerEquipped(!reynaState.leerEquipped);
+  }
+
+  function castReynaLeer() {
+    if (!reynaState.leerEquipped || reynaState.cCharges <= 0 || isDead) return;
     reynaState.cCharges -= 1;
+    setReynaLeerEquipped(false);
 
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
     dir.normalize();
 
-    const eyeGroup = new THREE.Group();
-    const outer = new THREE.Mesh(
-      new THREE.SphereGeometry(0.55, 20, 20),
-      new THREE.MeshBasicMaterial({ color: 0x7e22ce, transparent: true, opacity: 0.85, depthTest: false })
-    );
-    const pupil = new THREE.Mesh(
-      new THREE.SphereGeometry(0.26, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xf5d0fe, depthTest: false })
-    );
-    pupil.position.z = 0.36;
-    eyeGroup.add(outer, pupil);
-
+    const eyeGroup = createReynaEyeOrbMesh(3.6);
     const startPos = new THREE.Vector3();
     camera.getWorldPosition(startPos);
     eyeGroup.position.copy(startPos).addScaledVector(dir, 1.5);
@@ -13204,17 +13288,16 @@
     origin.y = Math.max(0, origin.y - 1.8);
 
     [-2.4, 2.4].forEach(offset => {
-      const wallGeo = new THREE.PlaneGeometry(34, 3.6);
+      const wallGeo = new THREE.PlaneGeometry(34, 3.8);
       const wallMat = new THREE.MeshBasicMaterial({
-        color: 0x0ea5e9,
-        emissive: 0x38bdf8,
-        transparent: true,
-        opacity: 0.78,
+        color: 0x0369a1,
+        transparent: false,
+        opacity: 1.0,
         side: THREE.DoubleSide
       });
       const wallMesh = new THREE.Mesh(wallGeo, wallMat);
       wallMesh.position.copy(origin).addScaledVector(right, offset).addScaledVector(forward, 18);
-      wallMesh.position.y += 1.8;
+      wallMesh.position.y += 1.9;
       wallMesh.lookAt(wallMesh.position.clone().add(right));
       scene.add(wallMesh);
       neonState.fastLanes.push({ mesh: wallMesh, life: 6.0 });
@@ -13247,9 +13330,9 @@
 
     neonState.relayBolts.push({
       mesh: orb,
-      vel: dir.multiplyScalar(32),
+      vel: dir.multiplyScalar(68),
       bounced: false,
-      life: 3.5
+      life: 6.5
     });
     showSkillNotice('릴레이 볼트(Q) 투척! 반사 후 2연속 뇌진탕 장판 폭발', '#22d3ee');
   }
@@ -13489,20 +13572,32 @@
   document.addEventListener('keydown', (e) => {
     if (document.pointerLockElement !== document.body || isDead) return;
     if (myAgent === 'reyna') {
-      if (e.code === 'KeyC') castReynaLeer();
-      else if (e.code === 'KeyQ') castReynaDevour(false);
-      else if (e.code === 'KeyE') castReynaDismiss();
-      else if (e.code === 'KeyX') castReynaEmpress();
+      if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code) && reynaState.leerEquipped) {
+        setReynaLeerEquipped(false);
+        return;
+      }
+      if (e.code === 'KeyC') equipReynaLeer();
+      else if (e.code === 'KeyQ') { if (reynaState.leerEquipped) setReynaLeerEquipped(false); castReynaDevour(false); }
+      else if (e.code === 'KeyE') { if (reynaState.leerEquipped) setReynaLeerEquipped(false); castReynaDismiss(); }
+      else if (e.code === 'KeyX') { if (reynaState.leerEquipped) setReynaLeerEquipped(false); castReynaEmpress(); }
     } else if (myAgent === 'neon') {
       if (e.code === 'KeyC') castNeonFastLane();
       else if (e.code === 'KeyQ') castNeonRelayBolt();
       else if (e.code === 'KeyE') toggleNeonHighGear();
       else if (e.code === 'KeyX') castNeonOverdrive();
     }
-  });
+  }, true);
 
   document.addEventListener('mousedown', (e) => {
     if (document.pointerLockElement !== document.body || isDead) return;
+    if (myAgent === 'reyna' && reynaState.leerEquipped) {
+      if (e.button === 0) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        castReynaLeer();
+      }
+      return;
+    }
     if (myAgent === 'neon') {
       // 달리는 중 마우스 우클릭(Right Click) 시 현재 이동 중인 WASD 방향으로 고속 슬라이딩
       if (e.button === 2 && neonState.highGearActive) {
@@ -13531,6 +13626,7 @@
         reynaState.qeCharges = Math.max(1, reynaState.qeCharges); // 라운드 시작 시 최소 1개 무료 지급
         reynaState.empressTimer = 0;
         reynaState.dismissTimer = 0;
+        if (reynaState.leerEquipped) setReynaLeerEquipped(false);
         reynaState.soulOrbs.forEach(o => scene.remove(o.mesh));
         reynaState.soulOrbs = [];
       }
@@ -13569,6 +13665,7 @@
         const gained = playerStats.k - neonState.lastTrackedKills;
         neonState.lastTrackedKills = playerStats.k;
         if (myAgent === 'neon') {
+          neonState.battery = 100;
           neonState.ultPoints = Math.min(NEON_CONFIG.X.maxPoints, neonState.ultPoints + gained);
           neonState.slideKillsTracker += gained;
           // 2명 처치 시 슬라이딩 횟수 즉시 재충전
@@ -13638,17 +13735,93 @@
       }
     }
 
-    // 네온 배터리 및 슬라이딩, 오버드라이브 업데이트
+    // 레이나 1인칭 눈총 구체 오라 회전 및 무기 숨김 유지
+    if (myAgent === 'reyna' && reynaState.leerEquipped && !isDead) {
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+      ensureReynaLeerHandViewModel();
+      if (reynaLeerHandGroup) {
+        reynaLeerHandGroup.visible = true;
+        if (reynaLeerHandOrb && reynaLeerHandOrb.userData) {
+          reynaLeerHandOrb.userData.auraOuter.rotation.y += dt * 3.2;
+          reynaLeerHandOrb.userData.auraWisps.rotation.z -= dt * 4.5;
+          reynaLeerHandOrb.position.y = 0.13 + Math.sin(now * 0.006) * 0.008;
+        }
+      }
+    } else if (reynaLeerHandGroup && reynaLeerHandGroup.visible) {
+      reynaLeerHandGroup.visible = false;
+      if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+    }
+
+    // 네온 배터리 및 슬라이딩, 오버드라이브 업데이트 (소모 ~10초, 충전 ~18초)
     if (neonState.highGearActive && !isDead) {
-      neonState.battery = Math.max(0, neonState.battery - 14 * dt);
+      neonState.battery = Math.max(0, neonState.battery - 10.0 * dt);
       if (neonState.battery <= 0) neonState.highGearActive = false;
     } else {
-      neonState.battery = Math.min(100, neonState.battery + 10 * dt);
+      neonState.battery = Math.min(100, neonState.battery + 5.55 * dt);
     }
 
     if (neonState.slideTimer > 0 && !isDead && typeof origMoveWithCollision === 'function') {
       neonState.slideTimer -= dt;
       origMoveWithCollision(neonState.slideDir.x * 24 * dt, neonState.slideDir.z * 24 * dt);
+    }
+
+    // 네온 1인칭 팔 달리기 자세 (무기 숨김 + 양팔 전기 스파크 스윙)
+    if (!window._neonSprintArmsInit && typeof camera !== 'undefined') {
+      window._neonSprintArmsInit = true;
+      const armsGrp = new THREE.Group();
+      armsGrp.visible = false;
+      const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.45 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xd69f7e, roughness: 0.6 });
+      const gloveMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
+      const sparkMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      const sparks = [];
+      function makeArm(side) {
+        const pivot = new THREE.Group();
+        pivot.position.set(side * 0.28, -0.24, -0.22);
+        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.30, 12), sleeveMat);
+        forearm.rotation.x = Math.PI / 2.3;
+        forearm.position.set(0, -0.02, -0.10);
+        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.036, 0.075), gloveMat);
+        hand.position.set(0, 0.01, -0.26);
+        const knuckles = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.014, 0.03), skinMat);
+        knuckles.position.set(0, 0.026, -0.25);
+        const spark1 = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.004, 6, 16), sparkMat);
+        spark1.position.set(0, 0.0, -0.16);
+        const spark2 = new THREE.Mesh(new THREE.OctahedronGeometry(0.022, 0), sparkMat);
+        spark2.position.set(side * 0.04, 0.03, -0.24);
+        sparks.push(spark1, spark2);
+        pivot.add(forearm, hand, knuckles, spark1, spark2);
+        return pivot;
+      }
+      const leftArm = makeArm(-1);
+      const rightArm = makeArm(1);
+      armsGrp.add(leftArm, rightArm);
+      camera.add(armsGrp);
+      window._neonSprintArmsData = { armsGrp, leftArm, rightArm, sparks };
+    }
+
+    const sprintData = window._neonSprintArmsData;
+    const isNeonSprinting = (myAgent === 'neon' && neonState.highGearActive && !isDead && !neonState.overdriveActive);
+    if (sprintData) {
+      if (isNeonSprinting) {
+        if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+        sprintData.armsGrp.visible = true;
+        const moving = Boolean(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
+        const spd = moving ? 15.0 : 4.0;
+        const amp = moving ? 0.42 : 0.06;
+        const sw = Math.sin(now * 0.001 * spd) * amp;
+        sprintData.leftArm.rotation.x = sw;
+        sprintData.rightArm.rotation.x = -sw;
+        sprintData.leftArm.position.y = -0.24 + Math.abs(Math.cos(now * 0.001 * spd)) * 0.025;
+        sprintData.rightArm.position.y = -0.24 + Math.abs(Math.sin(now * 0.001 * spd)) * 0.025;
+        sprintData.sparks.forEach((sp, idx) => {
+          sp.rotation.z += dt * (idx % 2 === 0 ? 12 : -15);
+          sp.scale.setScalar(0.75 + Math.random() * 0.55);
+        });
+      } else if (sprintData.armsGrp.visible) {
+        sprintData.armsGrp.visible = false;
+        if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+      }
     }
 
     if (neonState.overdriveActive) {
@@ -13670,11 +13843,11 @@
       }
     }
 
-    // 릴레이 볼트 투사체 벽 1회 반사 및 바닥 폭발
+    // 릴레이 볼트 투사체 벽 1회 반사 및 바닥 폭발 (장거리 사거리)
     for (let i = neonState.relayBolts.length - 1; i >= 0; i--) {
       const rb = neonState.relayBolts[i];
       rb.life -= dt;
-      rb.vel.y -= 14 * dt;
+      rb.vel.y -= 5.5 * dt;
       const nextPos = rb.mesh.position.clone().addScaledVector(rb.vel, dt);
 
       if (!rb.bounced && typeof wallColliders !== 'undefined') {
