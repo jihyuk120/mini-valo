@@ -158,6 +158,9 @@
       </div>
 
       <button id="authSubmitBtn" class="btn-primary" style="width:100%; padding:13px;" onclick="submitAuthForm()">로그인 및 로비 입장</button>
+      <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+        <button type="button" onclick="resetAccountStorageData()" style="background:transparent; border:1px solid rgba(255,255,255,0.18); color:#94a3b8; font-size:11px; padding:3px 8px; border-radius:4px; cursor:pointer;">계정 데이터 초기화</button>
+      </div>
     </div>
   </div>
 
@@ -7599,8 +7602,8 @@
     // =========================================================================
     // 1. 계정 로그인(ID/PW/로그인 유지) & 계정별 데이터(usersDB) & 2. 친구 추가/로비 초대
     // =========================================================================
-    const USERS_DB_KEY = 'minivalo_users_db_v1';
-    const SESSION_KEY = 'minivalo_auth_session_v1';
+    const USERS_DB_KEY = 'miniValoUsersDB';
+    const SESSION_KEY = 'miniValoAutoLoginId';
     let usersDB = {};
     let currentUserId = null;
     let userAccount = null;
@@ -7618,10 +7621,12 @@
     function loadUsersDB() {
       try {
         const raw = localStorage.getItem(USERS_DB_KEY);
-        usersDB = raw ? JSON.parse(raw) : {};
+        const parsed = raw ? JSON.parse(raw) : {};
+        usersDB = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
       } catch (e) {
         usersDB = {};
       }
+      return usersDB;
     }
 
     function saveUsersDB() {
@@ -7633,25 +7638,30 @@
     function loadUserAccount() {
       loadUsersDB();
       try {
-        const rawSession = localStorage.getItem(SESSION_KEY);
-        if (rawSession) {
-          const sess = JSON.parse(rawSession);
-          if (sess && sess.keepLoggedIn && sess.userId && usersDB[sess.userId]) {
-            currentUserId = sess.userId;
-            const parsed = usersDB[sess.userId];
-            parsed.friends = Array.isArray(parsed.friends) ? parsed.friends : [];
-            parsed.history = Array.isArray(parsed.history) ? parsed.history : [];
-            parsed.ownedSkins = Array.isArray(parsed.ownedSkins) ? parsed.ownedSkins : [];
-            if (typeof parsed.vp !== 'number') parsed.vp = 0;
-            if (typeof parsed.radianite !== 'number') parsed.radianite = 0;
-            if (parsed.skins) Object.assign(equippedSkins, parsed.skins);
-            if (typeof parsed.sensitivity === 'number') {
-              sensitivity = parsed.sensitivity;
-            }
-            return parsed;
+        const autoId = (localStorage.getItem(SESSION_KEY) || '').trim();
+        if (autoId && Object.prototype.hasOwnProperty.call(usersDB, autoId) && usersDB[autoId]) {
+          currentUserId = autoId;
+          const parsed = usersDB[autoId];
+          if (!parsed.nick && parsed.nickname) parsed.nick = parsed.nickname;
+          if (!parsed.nickname && parsed.nick) parsed.nickname = parsed.nick;
+          if (!parsed.password && parsed.pw) parsed.password = parsed.pw;
+          if (!parsed.pw && parsed.password) parsed.pw = parsed.password;
+          parsed.friends = Array.isArray(parsed.friends) ? parsed.friends : [];
+          parsed.history = Array.isArray(parsed.history) ? parsed.history : [];
+          parsed.ownedSkins = Array.isArray(parsed.ownedSkins) ? parsed.ownedSkins : [];
+          if (typeof parsed.vp !== 'number') parsed.vp = 0;
+          if (typeof parsed.radianite !== 'number') parsed.radianite = 0;
+          if (parsed.skins) Object.assign(equippedSkins, parsed.skins);
+          if (typeof DEFAULT_CROSSHAIR !== 'undefined' && parsed.crosshair) {
+            crosshairConfig = { ...DEFAULT_CROSSHAIR, ...parsed.crosshair };
           }
+          if (typeof parsed.sensitivity === 'number') {
+            sensitivity = parsed.sensitivity;
+          }
+          return parsed;
         }
       } catch (e) {}
+      currentUserId = null;
       return null;
     }
 
@@ -7741,7 +7751,7 @@
       }
 
       if (keepLogin) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ userId, keepLoggedIn: true }));
+        localStorage.setItem(SESSION_KEY, userId);
       } else {
         localStorage.removeItem(SESSION_KEY);
       }
@@ -7755,8 +7765,10 @@
       loadUsersDB();
       const id = (document.getElementById('authIdInput').value || '').trim();
       const pw = (document.getElementById('authPwInput').value || '').trim();
-      const keepLogin = document.getElementById('keepLoggedInCheck').checked;
+      const keepLogin = !!document.getElementById('keepLoggedInCheck').checked;
       const errEl = document.getElementById('authErrorMsg');
+      errEl.style.color = '#ff4655';
+      errEl.innerText = '';
 
       if (!id || !pw) {
         errEl.innerText = '아이디와 비밀번호를 모두 입력하세요.';
@@ -7764,7 +7776,7 @@
       }
 
       if (authMode === 'signup') {
-        if (usersDB[id]) {
+        if (Object.prototype.hasOwnProperty.call(usersDB, id)) {
           errEl.innerText = '이미 존재하는 아이디입니다.';
           return;
         }
@@ -7776,27 +7788,44 @@
         }
         if (!rawTag) rawTag = String(Math.floor(1000 + Math.random() * 9000));
 
+        const cleanNick = rawNick.slice(0, 10);
+        const cleanTag = rawTag.slice(0, 4).toUpperCase();
+        const savedCrosshair = (typeof crosshairConfig === 'object' && crosshairConfig)
+          ? { ...crosshairConfig }
+          : (typeof DEFAULT_CROSSHAIR === 'object' && DEFAULT_CROSSHAIR ? { ...DEFAULT_CROSSHAIR } : {});
+
         usersDB[id] = {
+          id: id,
           userId: id,
+          pw: pw,
           password: pw,
-          nick: rawNick.slice(0, 10),
-          tag: rawTag.slice(0, 4).toUpperCase(),
+          nickname: cleanNick,
+          nick: cleanNick,
+          tag: cleanTag,
           vp: 0,
           radianite: 0,
           ownedSkins: [],
           skins: { ...equippedSkins },
           friends: [],
           history: [],
-          sensitivity: sensitivity || 1.0
+          sensitivity: sensitivity || 1.0,
+          crosshair: savedCrosshair
         };
         saveUsersDB();
         applyAccountSession(id, keepLogin);
       } else {
-        const record = usersDB[id];
-        if (!record || record.password !== pw) {
-          errEl.innerText = '아이디 또는 비밀번호가 일치하지 않습니다.';
+        if (!Object.prototype.hasOwnProperty.call(usersDB, id) || !usersDB[id]) {
+          errEl.innerText = '존재하지 않는 아이디입니다';
           return;
         }
+        const record = usersDB[id];
+        const storedPw = record.pw !== undefined ? record.pw : record.password;
+        if (String(storedPw) !== String(pw)) {
+          errEl.innerText = '비밀번호가 일치하지 않습니다';
+          return;
+        }
+        if (!record.nick && record.nickname) record.nick = record.nickname;
+        if (!record.nickname && record.nick) record.nickname = record.nick;
         applyAccountSession(id, keepLogin);
       }
     };
@@ -7809,6 +7838,22 @@
       document.getElementById('authErrorMsg').innerText = '';
       switchAuthTab('login');
       document.getElementById('accountSetupModal').style.display = 'flex';
+    };
+
+    window.resetAccountStorageData = function() {
+      localStorage.removeItem(USERS_DB_KEY);
+      localStorage.removeItem(SESSION_KEY);
+      usersDB = {};
+      currentUserId = null;
+      userAccount = null;
+      document.getElementById('authIdInput').value = '';
+      document.getElementById('authPwInput').value = '';
+      document.getElementById('setupNickInput').value = '';
+      document.getElementById('setupTagInput').value = String(Math.floor(1000 + Math.random() * 9000));
+      switchAuthTab('signup');
+      const errEl = document.getElementById('authErrorMsg');
+      errEl.style.color = '#00ffcc';
+      errEl.innerText = '계정 데이터가 초기화되었습니다. 새로 가입해 주세요.';
     };
 
     window.copyMyRiotTag = function() {
