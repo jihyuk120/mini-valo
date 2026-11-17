@@ -101,17 +101,50 @@
   </style>
 </head>
 <body>
-  <!-- 최초 접속 기기별 영구 계정 설정 모달 -->
+  <!-- 발로란트 스타일 아이디·비밀번호 로그인 / 회원가입 모달 -->
   <div id="accountSetupModal" class="modal" style="display:none; z-index:45; background:rgba(8,14,20,0.97);">
-    <div class="panel-box" style="width:430px; text-align:center; border-color:#00ffcc;">
-      <h2 style="color:#00ffcc; margin:0 0 8px 0; letter-spacing:2px;">요원 계정 생성</h2>
-      <p style="font-size:13px; color:#cbd5e1; margin:0 0 14px 0;">이 기기(localStorage)에 영구 저장될 닉네임과 고유 태그를 설정하세요.</p>
-      <div class="row" style="margin-bottom:14px;">
-        <input type="text" id="setupNickInput" placeholder="닉네임 (최대 10자)" maxlength="10" style="width:155px;">
-        <span style="font-size:20px; font-weight:bold; color:#00ffcc;">#</span>
-        <input type="text" id="setupTagInput" placeholder="4자리" maxlength="4" style="width:85px;">
+    <div class="panel-box" style="width:440px; text-align:left; border-color:#ff4655; padding:26px 30px; box-shadow:0 12px 40px rgba(0,0,0,0.85);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div>
+          <div style="font-size:11px; color:#ff4655; font-weight:bold; letter-spacing:2px;">MINI-VALO ACCOUNT</div>
+          <h2 id="authModalTitle" style="color:#ece8e1; margin:2px 0 0 0; letter-spacing:1px;">요원 계정 로그인</h2>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button id="tabLoginBtn" class="btn-primary" style="padding:6px 12px; font-size:12px;" onclick="switchAuthTab('login')">로그인</button>
+          <button id="tabSignupBtn" class="btn-secondary" style="padding:6px 12px; font-size:12px;" onclick="switchAuthTab('signup')">회원가입</button>
+        </div>
       </div>
-      <button class="btn-primary" style="width:100%;" onclick="confirmAccountSetup()">계정 저장 및 로비 입장</button>
+
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+        <div>
+          <label style="font-size:12px; color:#94a3b8; display:block; margin-bottom:4px;">아이디 (ID)</label>
+          <input type="text" id="authIdInput" placeholder="영문/숫자 아이디 입력" maxlength="16" style="width:100%; box-sizing:border-box; text-align:left;">
+        </div>
+        <div>
+          <label style="font-size:12px; color:#94a3b8; display:block; margin-bottom:4px;">비밀번호 (PW)</label>
+          <input type="password" id="authPwInput" placeholder="비밀번호 입력" maxlength="24" style="width:100%; box-sizing:border-box; text-align:left; background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; padding:10px 14px; font-size:15px; border-radius:4px;">
+        </div>
+
+        <!-- 회원가입 모드 전용: 닉네임 & 태그 -->
+        <div id="signupExtraFields" style="display:none; flex-direction:column; gap:8px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1);">
+          <label style="font-size:12px; color:#94a3b8;">인게임 닉네임 & 고유 태그 (#)</label>
+          <div class="row" style="justify-content:flex-start;">
+            <input type="text" id="setupNickInput" placeholder="닉네임 (최대 10자)" maxlength="10" style="flex:1; text-align:left;">
+            <span style="font-size:18px; font-weight:bold; color:#00ffcc;">#</span>
+            <input type="text" id="setupTagInput" placeholder="4자리" maxlength="4" style="width:85px;">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <label style="font-size:13px; color:#ece8e1; cursor:pointer; display:flex; align-items:center; gap:7px;">
+          <input type="checkbox" id="keepLoggedInCheck" checked style="accent-color:#ff4655; width:15px; height:15px; cursor:pointer;">
+          로그인 유지
+        </label>
+        <span id="authErrorMsg" style="font-size:12px; color:#ff4655; font-weight:bold;"></span>
+      </div>
+
+      <button id="authSubmitBtn" class="btn-primary" style="width:100%; padding:13px;" onclick="submitAuthForm()">로그인 및 로비 입장</button>
     </div>
   </div>
 
@@ -130,8 +163,10 @@
     <div class="social-topbar">
       <span style="font-size:12px; color:#94a3b8;">내 계정:</span>
       <span id="profileRiotIdDisplay" style="font-weight:bold; color:#ece8e1; font-size:14px;">플레이어#0000</span>
+      <span id="profileCurrencyDisplay" style="font-size:12px; color:#ffcc00; font-weight:bold;">VP 0 · RP 0</span>
       <button class="profile-tag-pill" onclick="copyMyRiotTag()" title="클릭하여 닉네임#태그 복사">태그 복사</button>
       <button class="btn-secondary" style="padding:4px 9px; font-size:12px;" onclick="promptRenameAccount()">닉네임 변경</button>
+      <button class="btn-secondary" style="padding:4px 9px; font-size:12px; border-color:#ff4655; color:#ff4655;" onclick="logoutAccount()">로그아웃</button>
       <input type="hidden" id="nickInput" value="플레이어">
     </div>
 
@@ -174,9 +209,12 @@
                 <option value="chamber">체임버 (Chamber)</option>
               </select>
             </div>
-            <div>
-              감도: <span id="sensValue" style="color:#00ffcc; font-weight:bold;">1.00</span>
-              <input type="range" id="sensSlider" min="0.1" max="3.0" step="0.05" value="1.0" style="width:95px; vertical-align:middle;">
+            <div style="display:inline-flex; align-items:center; gap:6px;">
+              <span>감도:</span>
+              <input type="range" id="sensSlider" min="0.05" max="10.0" step="0.01" value="1.00" style="width:110px; vertical-align:middle;">
+              <input type="number" id="sensNumberInput" step="0.01" min="0.05" max="10.0" value="1.00"
+                     style="width:68px; background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; font-weight:bold; font-size:13px; padding:4px 6px; border-radius:4px; text-align:center;">
+              <span id="sensValue" style="display:none;">1.00</span>
             </div>
             <button id="btnFullscreen" class="btn-secondary" style="padding:6px 10px; font-size:12px;">전체화면</button>
           </div>
@@ -7471,10 +7509,14 @@
     }
 
     // =========================================================================
-    // 1. 기기별 영구 계정(localStorage) & 2. 친구 추가/온라인 상태/로비 초대 & 3. 파티 로비
+    // 1. 계정 로그인(ID/PW/로그인 유지) & 계정별 데이터(usersDB) & 2. 친구 추가/로비 초대
     // =========================================================================
-    const ACCOUNT_STORAGE_KEY = 'minivalo_persistent_account_v1';
+    const USERS_DB_KEY = 'minivalo_users_db_v1';
+    const SESSION_KEY = 'minivalo_auth_session_v1';
+    let usersDB = {};
+    let currentUserId = null;
     let userAccount = null;
+    let authMode = 'login';
     let partyHostId = '';
     let pendingInvite = null;
     const friendPresenceMap = {}; // riotId -> { status: 'online'|'lobby'|'ingame'|'offline', peerId, inParty }
@@ -7485,15 +7527,39 @@
       return 'mv-acct-' + hex;
     }
 
-    function loadUserAccount() {
+    function loadUsersDB() {
       try {
-        const raw = localStorage.getItem(ACCOUNT_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && parsed.nick && parsed.tag) {
+        const raw = localStorage.getItem(USERS_DB_KEY);
+        usersDB = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        usersDB = {};
+      }
+    }
+
+    function saveUsersDB() {
+      try {
+        localStorage.setItem(USERS_DB_KEY, JSON.stringify(usersDB));
+      } catch (e) {}
+    }
+
+    function loadUserAccount() {
+      loadUsersDB();
+      try {
+        const rawSession = localStorage.getItem(SESSION_KEY);
+        if (rawSession) {
+          const sess = JSON.parse(rawSession);
+          if (sess && sess.keepLoggedIn && sess.userId && usersDB[sess.userId]) {
+            currentUserId = sess.userId;
+            const parsed = usersDB[sess.userId];
             parsed.friends = Array.isArray(parsed.friends) ? parsed.friends : [];
             parsed.history = Array.isArray(parsed.history) ? parsed.history : [];
+            parsed.ownedSkins = Array.isArray(parsed.ownedSkins) ? parsed.ownedSkins : [];
+            if (typeof parsed.vp !== 'number') parsed.vp = 0;
+            if (typeof parsed.radianite !== 'number') parsed.radianite = 0;
             if (parsed.skins) Object.assign(equippedSkins, parsed.skins);
+            if (typeof parsed.sensitivity === 'number') {
+              sensitivity = parsed.sensitivity;
+            }
             return parsed;
           }
         }
@@ -7502,11 +7568,11 @@
     }
 
     function saveUserAccount() {
-      if (!userAccount) return;
+      if (!currentUserId || !userAccount) return;
       userAccount.skins = { ...equippedSkins };
-      try {
-        localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(userAccount));
-      } catch (e) {}
+      userAccount.sensitivity = typeof sensitivity === 'number' ? sensitivity : 1.0;
+      usersDB[currentUserId] = userAccount;
+      saveUsersDB();
     }
 
     window.saveAccountSkins = function() {
@@ -7538,29 +7604,116 @@
       const fullId = getMyRiotId();
       const disp = document.getElementById('profileRiotIdDisplay');
       if (disp) disp.innerText = fullId;
+      const currDisp = document.getElementById('profileCurrencyDisplay');
+      if (currDisp) currDisp.innerText = `VP ${userAccount.vp || 0} · RP ${userAccount.radianite || 0}`;
       const nickInp = document.getElementById('nickInput');
       if (nickInp) nickInp.value = fullId;
+      const savedSens = typeof userAccount.sensitivity === 'number' ? userAccount.sensitivity : 1.0;
+      if (typeof updateSensitivityValue === 'function') {
+        updateSensitivityValue(savedSens, false);
+      }
       renderFriendListUI();
       renderRecentMatchesUI();
       renderLobbySlotsUI();
     }
 
-    window.confirmAccountSetup = function() {
-      const n = (document.getElementById('setupNickInput').value || '').trim().replace(/#/g, '');
-      let t = (document.getElementById('setupTagInput').value || '').trim().replace(/[^0-9a-zA-Z]/g, '');
-      if (!n) { alert('닉네임을 입력해주세요.'); return; }
-      if (!t) t = String(Math.floor(1000 + Math.random() * 9000));
-      userAccount = {
-        nick: n.slice(0, 10),
-        tag: t.slice(0, 4).toUpperCase(),
-        skins: { ...equippedSkins },
-        friends: [],
-        history: []
-      };
-      saveUserAccount();
+    window.switchAuthTab = function(mode) {
+      authMode = mode;
+      const isSignup = mode === 'signup';
+      document.getElementById('authModalTitle').innerText = isSignup ? '새 요원 계정 가입' : '요원 계정 로그인';
+      document.getElementById('signupExtraFields').style.display = isSignup ? 'flex' : 'none';
+      document.getElementById('authSubmitBtn').innerText = isSignup ? '회원가입 완료 및 로비 입장' : '로그인 및 로비 입장';
+      document.getElementById('tabLoginBtn').className = isSignup ? 'btn-secondary' : 'btn-primary';
+      document.getElementById('tabSignupBtn').className = isSignup ? 'btn-primary' : 'btn-secondary';
+      document.getElementById('authErrorMsg').innerText = '';
+    };
+
+    function applyAccountSession(userId, keepLogin) {
+      currentUserId = userId;
+      userAccount = usersDB[userId];
+      userAccount.friends = Array.isArray(userAccount.friends) ? userAccount.friends : [];
+      userAccount.history = Array.isArray(userAccount.history) ? userAccount.history : [];
+      userAccount.ownedSkins = Array.isArray(userAccount.ownedSkins) ? userAccount.ownedSkins : [];
+      if (typeof userAccount.vp !== 'number') userAccount.vp = 0;
+      if (typeof userAccount.radianite !== 'number') userAccount.radianite = 0;
+      if (userAccount.skins) Object.assign(equippedSkins, userAccount.skins);
+
+      const savedSens = typeof userAccount.sensitivity === 'number' ? userAccount.sensitivity : 1.0;
+      if (typeof updateSensitivityValue === 'function') {
+        updateSensitivityValue(savedSens, false);
+      } else {
+        sensitivity = savedSens;
+      }
+
+      if (keepLogin) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ userId, keepLoggedIn: true }));
+      } else {
+        localStorage.removeItem(SESSION_KEY);
+      }
+
       document.getElementById('accountSetupModal').style.display = 'none';
       syncAccountUI();
-      initAccountPeerNode();
+      if (typeof initAccountPeerNode === 'function') initAccountPeerNode();
+    }
+
+    window.submitAuthForm = function() {
+      loadUsersDB();
+      const id = (document.getElementById('authIdInput').value || '').trim();
+      const pw = (document.getElementById('authPwInput').value || '').trim();
+      const keepLogin = document.getElementById('keepLoggedInCheck').checked;
+      const errEl = document.getElementById('authErrorMsg');
+
+      if (!id || !pw) {
+        errEl.innerText = '아이디와 비밀번호를 모두 입력하세요.';
+        return;
+      }
+
+      if (authMode === 'signup') {
+        if (usersDB[id]) {
+          errEl.innerText = '이미 존재하는 아이디입니다.';
+          return;
+        }
+        const rawNick = (document.getElementById('setupNickInput').value || '').trim().replace(/#/g, '');
+        let rawTag = (document.getElementById('setupTagInput').value || '').trim().replace(/[^0-9a-zA-Z]/g, '');
+        if (!rawNick) {
+          errEl.innerText = '사용할 닉네임을 입력하세요.';
+          return;
+        }
+        if (!rawTag) rawTag = String(Math.floor(1000 + Math.random() * 9000));
+
+        usersDB[id] = {
+          userId: id,
+          password: pw,
+          nick: rawNick.slice(0, 10),
+          tag: rawTag.slice(0, 4).toUpperCase(),
+          vp: 0,
+          radianite: 0,
+          ownedSkins: [],
+          skins: { ...equippedSkins },
+          friends: [],
+          history: [],
+          sensitivity: sensitivity || 1.0
+        };
+        saveUsersDB();
+        applyAccountSession(id, keepLogin);
+      } else {
+        const record = usersDB[id];
+        if (!record || record.password !== pw) {
+          errEl.innerText = '아이디 또는 비밀번호가 일치하지 않습니다.';
+          return;
+        }
+        applyAccountSession(id, keepLogin);
+      }
+    };
+
+    window.logoutAccount = function() {
+      localStorage.removeItem(SESSION_KEY);
+      currentUserId = null;
+      userAccount = null;
+      document.getElementById('authPwInput').value = '';
+      document.getElementById('authErrorMsg').innerText = '';
+      switchAuthTab('login');
+      document.getElementById('accountSetupModal').style.display = 'flex';
     };
 
     window.copyMyRiotTag = function() {
@@ -8917,10 +9070,59 @@
     const overlay = document.getElementById('overlay');
     const shopModal = document.getElementById('shopModal');
 
-    document.getElementById('sensSlider').addEventListener('input', (e) => {
-      sensitivity = parseFloat(e.target.value);
-      document.getElementById('sensValue').innerText = sensitivity.toFixed(2);
-    });
+    function updateSensitivityValue(rawVal, shouldPersist = true) {
+      let parsed = parseFloat(rawVal);
+      if (isNaN(parsed)) return;
+      parsed = Math.min(10.0, Math.max(0.05, Math.round(parsed * 100) / 100));
+      sensitivity = parsed;
+
+      const slider = document.getElementById('sensSlider');
+      const numInput = document.getElementById('sensNumberInput');
+      const valLabel = document.getElementById('sensValue');
+
+      if (slider) slider.value = parsed.toFixed(2);
+      if (numInput && document.activeElement !== numInput) {
+        numInput.value = parsed.toFixed(2);
+      }
+      if (valLabel) valLabel.innerText = parsed.toFixed(2);
+
+      if (shouldPersist && currentUserId && userAccount) {
+        userAccount.sensitivity = parsed;
+        saveUserAccount();
+      }
+    }
+
+    const sensSliderEl = document.getElementById('sensSlider');
+    const sensNumberEl = document.getElementById('sensNumberInput');
+
+    if (sensSliderEl) {
+      sensSliderEl.addEventListener('input', (e) => {
+        updateSensitivityValue(e.target.value, true);
+      });
+    }
+
+    if (sensNumberEl) {
+      sensNumberEl.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        if (!isNaN(v) && v >= 0.05 && v <= 10.0) {
+          sensitivity = Math.round(v * 100) / 100;
+          if (sensSliderEl) sensSliderEl.value = sensitivity.toFixed(2);
+          const valLabel = document.getElementById('sensValue');
+          if (valLabel) valLabel.innerText = sensitivity.toFixed(2);
+          if (currentUserId && userAccount) {
+            userAccount.sensitivity = sensitivity;
+            saveUserAccount();
+          }
+        }
+      });
+      sensNumberEl.addEventListener('change', (e) => {
+        updateSensitivityValue(e.target.value, true);
+      });
+    }
+
+    if (userAccount && typeof userAccount.sensitivity === 'number') {
+      updateSensitivityValue(userAccount.sensitivity, false);
+    }
 
     document.getElementById('btnStartBrawl').addEventListener('click', () => {
       const inParty = Object.keys(connections).length > 0;
