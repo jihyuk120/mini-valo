@@ -9090,7 +9090,8 @@
       setZoom(0);
       isReloading = true;
       document.getElementById('reloadMsg').style.display = 'block';
-      gunGroup.rotation.x = -0.45;
+      gunGroup.position.set(0.26, -0.22, -0.42);   // 줌(중앙) 위치에서 허리 위치로 즉시 복귀
+      gunGroup.rotation.set(-0.45, 0, 0);
 
       if (w.shellReload) {
         const loadOneShell = () => {
@@ -10366,7 +10367,7 @@
         camera.rotation.y = yaw + recoilYawOffset;
         camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch + recoilPitchOffset + aimPunchPitch));
 
-        const targetEyeHeight = isCrouching ? 1.25 : 2.0;
+        const targetEyeHeight = (typeof window.__neonSliding === 'function' && window.__neonSliding()) ? 1.0 : (isCrouching ? 1.25 : 2.0);
         currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, 16 * dt);
 
         if (!isDead) {
@@ -10636,6 +10637,12 @@
         }
       }
 
+      if (isReloading && !isInspecting && gunGroup.visible && zoomLevel === 0 && getCurrentWeaponKey() !== 'melee') {
+        gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, 0.26, 0.25);
+        gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, -0.22, 0.25);
+        gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, -0.42, 0.25);
+      }
+
       if (neoFrontierAuraTimer > 0) neoFrontierAuraTimer -= dt;
       if (neoSheriffModel && neoSheriffModel.userData.emeraldGlowMat) {
         const nfPulse = Math.sin(performance.now() * 0.014) * 0.35;
@@ -10790,6 +10797,8 @@
       {
         const _wz = WEAPONS[getCurrentWeaponKey()];
         if (zoomLevel > 0 && _wz && (_wz.zoomType === 'sniper' || _wz.zoomType === 'sniper1')) gunGroup.visible = false;
+        if ((typeof window.__phoenixHidesGun === 'function' && window.__phoenixHidesGun()) ||
+            (typeof window.__neonHidesGun === 'function' && window.__neonHidesGun())) gunGroup.visible = false;
       }
       renderer.render(scene, camera);
     }
@@ -12604,6 +12613,10 @@
     camera.add(phoenixHandViewGroup);
   }
 
+  window.__phoenixHidesGun = function() {
+    return (typeof myAgent !== 'undefined' && myAgent === 'phoenix' && !!phoenixState.equippedAbility && !(typeof isDead !== 'undefined' && isDead));
+  };
+
   function setPhoenixEquippedAbility(slot) {
     phoenixState.equippedAbility = slot;
     ensurePhoenixHandViewModel();
@@ -14184,7 +14197,7 @@
   // =========================================================
   const NEON_CONFIG = {
     C: { name: '추월 차선', maxCharges: 1, cost: 300 },
-    Q: { name: '릴레이 볼트', maxCharges: 1, cost: 250 },
+    Q: { name: '릴레이 볼트', maxCharges: 1, cost: 200 },
     E: { name: '고속 기어', maxBattery: 100 },
     X: { name: '오버드라이브', maxPoints: 8 }
   };
@@ -14201,6 +14214,7 @@
     ultPoints: 0,
     overdriveActive: false,
     overdriveAmmo: 0,
+    throwLock: 0,
     overdriveBeamTimer: 0,
     selfConcussTimer: 0,
     lastTrackedKills: 0,
@@ -14212,7 +14226,13 @@
   };
 
   window.__neonOverdriveBlocksGun = function() {
-    return (typeof myAgent !== 'undefined' && myAgent === 'neon' && neonState.overdriveActive && !isDead);
+    return (typeof myAgent !== 'undefined' && myAgent === 'neon' && !isDead && (neonState.overdriveActive || neonState.throwLock > 0));
+  };
+  window.__neonHidesGun = function() {
+    return (typeof myAgent !== 'undefined' && myAgent === 'neon' && !isDead && neonState.throwLock > 0);
+  };
+  window.__neonSliding = function() {
+    return (typeof myAgent !== 'undefined' && myAgent === 'neon' && !isDead && neonState.slideTimer > 0);
   };
 
   window.__abilityHooks = window.__abilityHooks || {};
@@ -14392,10 +14412,13 @@
       mesh: orb,
       vel: dir.multiplyScalar(76),
       bounced: false,
-      fuse: 1.2,        // 던진 지 1.2초 뒤 폭발
-      stuck: false
+      age: 0,           // 최대 5초 비행
+      stuck: false,
+      removed: false
     });
-    showSkillNotice('릴레이 볼트(Q) 투척! 1.2초 뒤 폭발해 뇌진탕', '#22d3ee');
+    neonState.throwLock = 0.7;   // 투척 후 무기를 다시 들기까지 0.7초
+    if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+    showSkillNotice('릴레이 볼트(Q) 투척! 표면 충돌 1초 뒤 뇌진탕 장판', '#22d3ee');
   }
 
   // 반경 5.5m(지름 11m) 대형 진탕 장판 + 바닥 번개 균열 + 푸른·분홍 전기 파동 벽 테두리
@@ -14472,6 +14495,31 @@
     return { pos: new THREE.Vector3(pt.x, floorY, pt.z), radius: zoneRadius, warnRing, warnDisc };
   }
 
+  // 충돌 지점 바로 아래 지면에 표식을 만들고 1초 뒤 반경 5m 뇌진탕 장판(2.5초) 생성
+  function scheduleRelayZone(pt) {
+    const RADIUS = 5.0;
+    const marker = spawnRelayConcussMarker(pt, RADIUS);
+    setTimeout(() => {
+      if (marker.warnRing) scene.remove(marker.warnRing);
+      if (marker.warnDisc) scene.remove(marker.warnDisc);
+      const zoneMesh = createLargeRelayConcussZoneMesh(RADIUS);
+      zoneMesh.position.copy(marker.pos);
+      scene.add(zoneMesh);
+      neonState.concussZones.push({ mesh: zoneMesh, pos: marker.pos.clone(), radius: RADIUS, life: 2.5, maxLife: 2.5 });
+      // 벽·지형 관통: 수평 거리만 판정. 네온 본인/아군도 동일하게 뇌진탕
+      const hit = (b) => {
+        if (!b || !b.userData || b.userData.dead) return;
+        if (Math.hypot(b.position.x - marker.pos.x, b.position.z - marker.pos.z) <= RADIUS) b.userData.concussedTimer = 2.5;
+      };
+      if (typeof brawlBots !== 'undefined') brawlBots.forEach(hit);
+      if (typeof window.practiceBots !== 'undefined' && Array.isArray(window.practiceBots)) window.practiceBots.forEach(hit);
+      if (typeof isDead !== 'undefined' && !isDead && Math.hypot(camera.position.x - marker.pos.x, camera.position.z - marker.pos.z) <= RADIUS) {
+        neonState.selfConcussTimer = 2.5;
+      }
+      try { if (typeof playBeep === 'function') playBeep(); } catch (e) {}
+    }, 1000);
+  }
+
   // 즉시 폭발: 지정 위치에 대형 뇌진탕 장판을 만들고 범위 안 적에게 뇌진탕 부여
   function explodeRelayBoltAt(pos, zoneRadius = 5.5) {
     const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl') ? getFloorHeightAt(pos.x, pos.z, pos.y) : 0;
@@ -14546,7 +14594,7 @@
     neonState.overdriveAmmo = 40;      // 번개 광선 40발
     neonState.battery = 100;
     neonState.slidesRemaining = 1;
-    showSkillNotice('오버드라이브(X) 활성화! 달리기 게이지가 다 닳으면 종료 · 번개 40발 (무기 교체 시 취소)', '#22d3ee');
+    showSkillNotice('오버드라이브(X) 활성화! 번개 40발 (계속 충전) · 달리기 게이지가 다 닳으면 종료 · 무기 교체 시 취소', '#22d3ee');
   }
 
   // 오버드라이브 1인칭 손가락 번개 모델 생성
@@ -14610,10 +14658,10 @@
   // 오버드라이브 손끝 번개 광선 발사 (초당 10회 연타, 몸통 15 / 헤드 45 데미지)
   function fireNeonLightningBeam() {
     if (!neonState.overdriveActive || isDead || isPrepPhase()) return;
-    if (neonState.overdriveAmmo <= 0) {
+    if (neonState.overdriveAmmo < 1) {
       if (!neonState._noAmmoNoticeAt || performance.now() - neonState._noAmmoNoticeAt > 1500) {
         neonState._noAmmoNoticeAt = performance.now();
-        showSkillNotice('번개 탄약 소진 (달리기 게이지가 다 닳으면 종료)', '#94a3b8');
+        showSkillNotice('번개 충전 중...', '#94a3b8');
       }
       return;
     }
@@ -14817,8 +14865,8 @@
       rnBtnQ.onclick = () => {
         if (myAgent === 'reyna' && reynaState.qeCharges < 2 && credits >= 200) {
           credits -= 200; reynaState.qeCharges++; if (typeof updateHUD === 'function') updateHUD();
-        } else if (myAgent === 'neon' && neonState.qCharges < 1 && credits >= 250) {
-          credits -= 250; neonState.qCharges++; if (typeof updateHUD === 'function') updateHUD();
+        } else if (myAgent === 'neon' && neonState.qCharges < 1 && credits >= 200) {
+          credits -= 200; neonState.qCharges++; if (typeof updateHUD === 'function') updateHUD();
         }
       };
       rnBtnQ.addEventListener('contextmenu', (e) => {
@@ -14827,7 +14875,7 @@
         if (myAgent === 'reyna' && reynaState.qeCharges > 1) {
           reynaState.qeCharges--; credits = Math.min(9000, credits + 200); if (typeof updateHUD === 'function') updateHUD();
         } else if (myAgent === 'neon' && neonState.qCharges > 0) {
-          neonState.qCharges--; credits = Math.min(9000, credits + 250); if (typeof updateHUD === 'function') updateHUD();
+          neonState.qCharges--; credits = Math.min(9000, credits + 200); if (typeof updateHUD === 'function') updateHUD();
         }
       });
     }
@@ -14898,7 +14946,7 @@
       document.getElementById('rnShopCTitle').innerText = `C 추월 차선 (${neonState.cCharges}/1)`;
       document.getElementById('rnShopCDesc').innerText = '300 ¤ · 전방 양옆 푸른 전기 장벽 2줄';
       document.getElementById('rnShopQTitle').innerText = `Q 릴레이 볼트 (${neonState.qCharges}/1)`;
-      document.getElementById('rnShopQDesc').innerText = '250 ¤ · 무제한 사거리 반사 후 반경 5.5m 진탕';
+      document.getElementById('rnShopQDesc').innerText = '200 ¤ · 최대 5초 비행 · 2회 충돌 후 1초 뒤 반경 5m 뇌진탕 2.5초';
       document.getElementById('rnShopETitle').innerText = `E 고속 기어 (무료 기본)`;
       document.getElementById('rnShopEDesc').innerText = '질주(사격 잠금) + 우클릭 WASD 슬라이딩';
       document.getElementById('rnShopXTitle').innerText = `X 오버드라이브 (${neonState.ultPoints}/8 pt)`;
@@ -14907,7 +14955,7 @@
       document.getElementById('rnHudC').innerHTML = `<div style="color:#38bdf8;font-weight:bold;">[C] 추월차선${lockTag}</div><div>${neonState.cCharges} / 1</div>`;
       document.getElementById('rnHudQ').innerHTML = `<div style="color:#22d3ee;font-weight:bold;">[Q] 릴레이${lockTag}</div><div>${neonState.qCharges} / 1</div>`;
       document.getElementById('rnHudE').innerHTML = `<div style="color:${neonState.highGearActive ? '#22d3ee' : '#94a3b8'};font-weight:bold;">[E] 고속기어</div><div>${Math.round(neonState.battery)}% · 슬라이드:${neonState.slidesRemaining}</div>`;
-      document.getElementById('rnHudX').innerHTML = `<div style="color:#38bdf8;font-weight:bold;">[X] 오버드라이브${lockTag}</div><div>${neonState.overdriveActive ? 'ACTIVE · 게이지 ' + Math.round(neonState.battery) + '% · 탄 ' + neonState.overdriveAmmo + '/40' : neonState.ultPoints + ' / 8'}</div>`;
+      document.getElementById('rnHudX').innerHTML = `<div style="color:#38bdf8;font-weight:bold;">[X] 오버드라이브${lockTag}</div><div>${neonState.overdriveActive ? 'ACTIVE · 게이지 ' + Math.round(neonState.battery) + '% · 탄 ' + Math.floor(neonState.overdriveAmmo) + '/40' : neonState.ultPoints + ' / 8'}</div>`;
     }
   }
 
@@ -14967,7 +15015,9 @@
       // 달리는 중 마우스 우클릭 시 고속 슬라이딩
       if (e.button === 2 && neonState.highGearActive) {
         e.preventDefault();
+        e.stopImmediatePropagation();   // 슬라이딩 우클릭이 줌(ADS)으로 전달되지 않게 차단
         triggerNeonSlide();
+        return;
       }
       // 오버드라이브(X) 활성화 중 좌클릭 시 즉시 손끝 번개 광선 발사
       if (e.button === 0 && neonState.overdriveActive) {
@@ -15180,6 +15230,7 @@
     // 네온 배터리 관리 (오버드라이브 X 또는 고속 기어 E 가동 중 배터리 소모, 0% 시 종료)
     if (neonState.overdriveActive && !isDead) {
       neonState.highGearActive = true;   // 오버드라이브 동안 달리기 유지
+      neonState.overdriveAmmo = Math.min(40, neonState.overdriveAmmo + 8.0 * dt); // 탄 지속 충전
       neonState.battery = Math.max(0, neonState.battery - 10.0 * dt);
       if (neonState.battery <= 0) {
         neonState.overdriveActive = false;
@@ -15210,7 +15261,7 @@
     // 고속 슬라이딩 벡터 이동
     if (neonState.slideTimer > 0 && !isDead && typeof origMoveWithCollision === 'function') {
       neonState.slideTimer -= dt;
-      origMoveWithCollision(neonState.slideDir.x * 24 * dt, neonState.slideDir.z * 24 * dt);
+      origMoveWithCollision(neonState.slideDir.x * 16 * dt, neonState.slideDir.z * 16 * dt);
       if (neonState.slideTimer <= 0) {
         // 슬라이딩이 끝나면 곧바로 총을 든 상태로 복귀 (달리기 팔 숨김 + 고속 기어 해제)
         neonState.slideTimer = 0;
@@ -15300,6 +15351,8 @@
       if (odHandData && odHandData.handGrp.visible) odHandData.handGrp.visible = false;
       if (sprintData && sprintData.armsGrp.visible) sprintData.armsGrp.visible = false;
       const _hideGunInAgentLoop = (myAgent === 'reyna' && (reynaState.leerEquipped || reynaState.dismissTimer > 0)) ||
+        (myAgent === 'neon' && neonState.throwLock > 0) ||
+        (typeof window.__phoenixHidesGun === 'function' && window.__phoenixHidesGun()) ||
         (typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld());
       if (typeof gunGroup !== 'undefined' && !_hideGunInAgentLoop) {
         gunGroup.visible = true;
@@ -15320,13 +15373,8 @@
     // 릴레이 볼트 투사체: 1차 충돌 지점에 1번 표식, 반사 후 2차 충돌 지점에 2번 표식을 남기고 1.2초 뒤 동시 폭발
     for (let i = neonState.relayBolts.length - 1; i >= 0; i--) {
       const rb = neonState.relayBolts[i];
-      rb.fuse -= dt;
-      // 폭발 직전 깜빡이며 커지는 연출
-      const _t = Math.max(0, 1.2 - rb.fuse);
-      rb.mesh.scale.setScalar(1 + _t * 0.9);
-      rb.mesh.material.color.setHex((Math.floor(_t * 14) % 2 === 0) ? 0x22d3ee : 0xfde047);
-      if (rb.fuse <= 0) {
-        explodeRelayBoltAt(rb.mesh.position, 5.5);
+      rb.age += dt;
+      if (rb.age > 5.0) {   // 최대 비행 5초: 두 번째 표면에 닿지 못하면 사라짐
         scene.remove(rb.mesh);
         neonState.relayBolts.splice(i, 1);
         continue;
@@ -15345,6 +15393,7 @@
             if (!rb.bounced) {
               rb.bounced = true;
               rb.firstImpactPos = rb.mesh.position.clone();
+              scheduleRelayZone(rb.mesh.position);   // 1번째 충돌 지점 아래 지면에 장판 예약
               const prev = rb.mesh.position;
               const overlapX = (prev.x <= c.minX || prev.x >= c.maxX);
               const overlapZ = (prev.z <= c.minZ || prev.z >= c.maxZ);
@@ -15355,14 +15404,18 @@
                 rb.vel.z = -rb.vel.z * 0.85;
               }
             } else {
-              rb.stuck = true;      // 두 번째 충돌: 그 자리에 멈춰 폭발 대기
-              rb.vel.set(0, 0, 0);
+              // 두 번째 충돌: 지면에 두 번째 장판 예약 후 볼트 소멸
+              scheduleRelayZone(rb.mesh.position);
+              rb.removed = true;
+              scene.remove(rb.mesh);
+              neonState.relayBolts.splice(i, 1);
             }
             break;
           }
         }
       }
 
+      if (rb.removed) continue;
       if (!neonState.relayBolts[i] || rb.stuck) continue;
       if (!hitWall) {
         rb.mesh.position.copy(nextPos);
@@ -15378,13 +15431,15 @@
           rb.bounced = true;
           rb.mesh.position.y = floorY + 0.24;
           rb.firstImpactPos = rb.mesh.position.clone();
+          scheduleRelayZone(rb.mesh.position);   // 1번째 충돌(바닥) 장판 예약
           rb.vel.y = Math.max(6.5, Math.abs(rb.vel.y) * 0.65);
           rb.vel.x *= 0.88;
           rb.vel.z *= 0.88;
         } else {
-          rb.mesh.position.y = floorY + 0.1;
-          rb.stuck = true;
-          rb.vel.set(0, 0, 0);
+          scheduleRelayZone(rb.mesh.position);   // 2번째 충돌 장판 예약 후 볼트 소멸
+          rb.removed = true;
+          scene.remove(rb.mesh);
+          neonState.relayBolts.splice(i, 1);
           continue;
         }
       }
@@ -15451,6 +15506,7 @@
     if (typeof brawlBots !== 'undefined') updateBotConcussVisual(brawlBots);
     if (typeof window.practiceBots !== 'undefined') updateBotConcussVisual(window.practiceBots);
 
+    if (neonState.throwLock > 0) neonState.throwLock = Math.max(0, neonState.throwLock - dt);
     concussOverlay.style.display = neonState.selfConcussTimer > 0 ? 'block' : 'none';
     if (neonState.selfConcussTimer > 0) neonState.selfConcussTimer = Math.max(0, neonState.selfConcussTimer - dt);
 
