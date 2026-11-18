@@ -7,10 +7,23 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
-    #crosshair { position: fixed; top: 50%; left: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; transition: transform 0.05s; }
-    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ffcc; box-shadow: 0 0 4px #00ffcc; }
-    #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
-    #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+    #crosshair { position: fixed; top: 50%; left: 50%; width: 0; height: 0; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
+    .ch-part { position: absolute; box-sizing: border-box; transition: transform 0.04s ease-out; }
+    .ch-modal-backdrop { position: fixed; inset: 0; background: rgba(10, 15, 22, 0.85); backdrop-filter: blur(6px); z-index: 95; display: none; align-items: center; justify-content: center; }
+    .ch-panel { width: 780px; max-width: 95vw; max-height: 90vh; overflow-y: auto; background: #0f1923; border: 1px solid #ff4655; border-radius: 8px; padding: 20px 24px; color: #ece8e1; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8); }
+    .ch-preview-box { position: relative; height: 140px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 16px; background: linear-gradient(135deg, #1b2838 0%, #2a3f54 100%); }
+    .ch-preview-box.bg-light { background: linear-gradient(135deg, #d8dee9 0%, #eceff4 100%); }
+    .ch-preview-box.bg-range { background: radial-gradient(circle at center, #3b4252 0%, #1e222a 100%); }
+    .ch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+    .ch-group { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 12px 14px; }
+    .ch-group h4 { margin: 0 0 10px 0; font-size: 13px; color: #00ffcc; letter-spacing: 0.5px; }
+    .ch-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+    .ch-row input[type="range"] { flex: 1; accent-color: #ff4655; }
+    .ch-row input[type="number"] { width: 54px; background: #091118; border: 1px solid #334155; color: #00ffcc; border-radius: 4px; padding: 3px 5px; text-align: center; font-weight: bold; }
+    .ch-swatch { width: 22px; height: 22px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; }
+    .ch-swatch.active { border-color: #fff; transform: scale(1.12); }
+    .ch-preset-btn { background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 6px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .ch-preset-btn:hover { border-color: #ff4655; background: #293548; }
 
     #adsReticle { position: fixed; top: 50%; left: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); pointer-events: none; z-index: 12; border: 2px solid rgba(255, 215, 0, 0.9); box-shadow: 0 0 8px rgba(255, 200, 0, 0.6), inset 0 0 6px rgba(255, 200, 0, 0.4); border-radius: 3px; display: none; }
     #adsReticle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #ffea00; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 6px #ffea00; }
@@ -81,7 +94,7 @@
     .item-price { font-size: 14px; font-weight: bold; color: #00ffcc; }
 
     /* === MINI-VALO SOCIAL & PARTY LOBBY === */
-    #overlay { padding: 0; overflow: hidden; }
+    #overlay { padding: 0; overflow: hidden; z-index: 50 !important; pointer-events: auto !important; }
     .social-topbar { position: fixed; top: 14px; right: 20px; display: flex; align-items: center; gap: 10px; z-index: 25; background: rgba(12, 20, 28, 0.94); border: 1px solid rgba(0,255,204,0.35); padding: 8px 14px; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
     .profile-tag-pill { background: #162635; color: #00ffcc; border: 1px solid #00ffcc; padding: 3px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; }
     .profile-tag-pill:hover { background: #1f374d; }
@@ -98,11 +111,13 @@
     .lobby-slot.empty { border-style: dotted; color: #555; }
     .history-item { font-size: 11px; padding: 5px 8px; border-radius: 4px; background: rgba(255,255,255,0.04); margin-bottom: 4px; display: flex; justify-content: space-between; }
 
+    #shopModal { pointer-events: auto !important; }
+    .ch-modal-backdrop { pointer-events: auto !important; }
   </style>
 </head>
 <body>
   <!-- 발로란트 스타일 아이디·비밀번호 로그인 / 회원가입 모달 -->
-  <div id="accountSetupModal" class="modal" style="display:none; z-index:45; background:rgba(8,14,20,0.97);">
+  <div id="accountSetupModal" class="modal" style="display:none; pointer-events:none; z-index:60; background:rgba(8,14,20,0.97);">
     <div class="panel-box" style="width:440px; text-align:left; border-color:#ff4655; padding:26px 30px; box-shadow:0 12px 40px rgba(0,0,0,0.85);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div>
@@ -145,6 +160,9 @@
       </div>
 
       <button id="authSubmitBtn" class="btn-primary" style="width:100%; padding:13px;" onclick="submitAuthForm()">로그인 및 로비 입장</button>
+      <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+        <button type="button" onclick="resetAccountStorageData()" style="background:transparent; border:1px solid rgba(255,255,255,0.18); color:#94a3b8; font-size:11px; padding:3px 8px; border-radius:4px; cursor:pointer;">계정 데이터 초기화</button>
+      </div>
     </div>
   </div>
 
@@ -158,7 +176,7 @@
     </div>
   </div>
 
-  <div id="overlay" class="modal">
+  <div id="overlay" class="modal" style="z-index: 50; pointer-events: auto;">
     <!-- 우측 상단 영구 프로필 패널 -->
     <div class="social-topbar">
       <span style="font-size:12px; color:#94a3b8;">내 계정:</span>
@@ -216,6 +234,7 @@
                      style="width:68px; background:#0f1923; border:1px solid #00ffcc; color:#00ffcc; font-weight:bold; font-size:13px; padding:4px 6px; border-radius:4px; text-align:center;">
               <span id="sensValue" style="display:none;">1.00</span>
             </div>
+            <button type="button" onclick="openCrosshairModal()" class="btn-secondary" style="padding:6px 12px; font-size:12px; border:1px solid #00ffcc; color:#00ffcc; font-weight:bold;">🎯 조준점 설정</button>
             <button id="btnFullscreen" class="btn-secondary" style="padding:6px 10px; font-size:12px;">전체화면</button>
           </div>
           <div id="roomStatusBox" style="margin-top:8px; text-align:center; font-size:13px; color:#ffcc00;">
@@ -275,7 +294,7 @@
     </div>
   </div>
 
-  <div id="shopModal" class="modal" style="justify-content:flex-start; padding-top:16px;">
+  <div id="shopModal" class="modal" style="display: none; pointer-events: none; justify-content:flex-start; padding-top:16px;">
     <div class="shop-header" style="width:1160px; max-width:96vw; margin-bottom:8px;">
       <h1 style="font-size:28px; margin:0;">발로란트 전 무기 무기고 (SHOP)</h1>
       <div style="font-size:18px; font-weight:bold; color:#00ffcc;">보유 크레딧: <span id="shopCredits">800</span> ¤ <span id="shopCreditHint" style="font-size:12px; color:#ffcc00;">(일반전 크레드 규칙)</span></div>
@@ -462,6 +481,80 @@
   </div>
 
   <div id="crosshair"></div>
+  <div id="crosshairModal" class="ch-modal-backdrop" onclick="if(event.target===this) closeCrosshairModal()">
+    <div class="ch-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:18px; font-weight:900; color:#ff4655;">CROSSHAIR</span>
+          <span style="font-size:14px; font-weight:bold;">조준점(크로스헤어) 커스텀 & 감도 설정</span>
+        </div>
+        <button onclick="closeCrosshairModal()" style="background:#ff4655; border:none; color:#fff; padding:6px 14px; border-radius:4px; font-weight:bold; cursor:pointer;">닫기 (ESC)</button>
+      </div>
+
+      <div id="chPreviewBox" class="ch-preview-box">
+        <div id="chPreviewCanvas" style="position:relative; width:0; height:0;"></div>
+        <div style="position:absolute; top:8px; left:10px; font-size:11px; color:rgba(255,255,255,0.7);">실시간 미리보기 (LIVE PREVIEW)</div>
+        <div style="position:absolute; bottom:8px; right:10px; display:flex; gap:6px;">
+          <button class="ch-preset-btn" onclick="cyclePreviewBg()">배경 전환 (어두움/밝음/사격장)</button>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px;">
+        <span style="font-size:12px; color:#94a3b8; font-weight:bold;">인기 프리셋:</span>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('proCross')">십자 (프로 스타일)</button>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('dot')">점 조준점 (Dot)</button>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('circle')">원형 / 타원형</button>
+        <button class="ch-preset-btn" onclick="applyCrosshairPreset('default')" style="border-color:#ff4655; color:#ff8a93;">기본 조준점 초기화</button>
+      </div>
+
+      <div class="ch-grid">
+        <div class="ch-group">
+          <h4>기본 · 색상 · 윤곽선</h4>
+          <div class="ch-row">
+            <span>조준점 색상</span>
+            <div id="chColorSwatches" style="display:flex; gap:5px; align-items:center;">
+              <div class="ch-swatch" data-color="#ffffff" style="background:#ffffff;" onclick="setChColor('#ffffff')"></div>
+              <div class="ch-swatch" data-color="#00ff00" style="background:#00ff00;" onclick="setChColor('#00ff00')"></div>
+              <div class="ch-swatch" data-color="#7fff00" style="background:#7fff00;" onclick="setChColor('#7fff00')"></div>
+              <div class="ch-swatch" data-color="#00ffff" style="background:#00ffff;" onclick="setChColor('#00ffff')"></div>
+              <div class="ch-swatch" data-color="#ff0000" style="background:#ff0000;" onclick="setChColor('#ff0000')"></div>
+              <div class="ch-swatch" data-color="#ffff00" style="background:#ffff00;" onclick="setChColor('#ffff00')"></div>
+              <div class="ch-swatch" data-color="#ff66ff" style="background:#ff66ff;" onclick="setChColor('#ff66ff')"></div>
+              <input type="color" id="chColorPicker" value="#00ffff" onchange="setChColor(this.value)" style="width:26px; height:24px; border:none; background:none; cursor:pointer;">
+            </div>
+          </div>
+          <div class="ch-row"><span>윤곽선(외곽선) 표시</span><input type="checkbox" id="chOutlineOn" onchange="syncChFromUI()"></div>
+          <div class="ch-row"><span>윤곽선 두께 (1~3px)</span><input type="range" id="chOutlineWidthRange" min="1" max="3" step="1" oninput="syncChPair('chOutlineWidth', this.value)"><input type="number" id="chOutlineWidthNum" min="1" max="3" step="1" oninput="syncChPair('chOutlineWidth', this.value)"></div>
+          <div class="ch-row"><span>윤곽선 투명도 (0~1)</span><input type="range" id="chOutlineAlphaRange" min="0" max="1" step="0.05" oninput="syncChPair('chOutlineAlpha', this.value)"><input type="number" id="chOutlineAlphaNum" min="0" max="1" step="0.05" oninput="syncChPair('chOutlineAlpha', this.value)"></div>
+          <div class="ch-row"><span>사격 오차(반동 벌어짐) 표시</span><input type="checkbox" id="chRecoilError" onchange="syncChFromUI()"></div>
+        </div>
+
+        <div class="ch-group">
+          <h4>중앙 점 (CENTER DOT)</h4>
+          <div class="ch-row"><span>중앙 점 표시</span><input type="checkbox" id="chDotOn" onchange="syncChFromUI()"></div>
+          <div class="ch-row"><span>중앙 점 크기 (1~6px)</span><input type="range" id="chDotSizeRange" min="1" max="6" step="1" oninput="syncChPair('chDotSize', this.value)"><input type="number" id="chDotSizeNum" min="1" max="6" step="1" oninput="syncChPair('chDotSize', this.value)"></div>
+          <div class="ch-row"><span>중앙 점 투명도 (0~1)</span><input type="range" id="chDotAlphaRange" min="0" max="1" step="0.05" oninput="syncChPair('chDotAlpha', this.value)"><input type="number" id="chDotAlphaNum" min="0" max="1" step="0.05" oninput="syncChPair('chDotAlpha', this.value)"></div>
+          <div class="ch-row" style="margin-top:12px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);"><span>마우스 감도 연동</span><input type="range" id="chModalSensRange" min="0.05" max="10" step="0.01" oninput="syncModalSensitivity(this.value)"><input type="number" id="chModalSensNum" min="0.05" max="10" step="0.01" oninput="syncModalSensitivity(this.value)"></div>
+        </div>
+
+        <div class="ch-group">
+          <h4>안쪽 선 (INNER LINES)</h4>
+          <div class="ch-row"><span>안쪽 선 길이 (0~20px)</span><input type="range" id="chInnerLenRange" min="0" max="20" step="1" oninput="syncChPair('chInnerLen', this.value)"><input type="number" id="chInnerLenNum" min="0" max="20" step="1" oninput="syncChPair('chInnerLen', this.value)"></div>
+          <div class="ch-row"><span>안쪽 선 두께 (1~10px)</span><input type="range" id="chInnerThickRange" min="1" max="10" step="1" oninput="syncChPair('chInnerThick', this.value)"><input type="number" id="chInnerThickNum" min="1" max="10" step="1" oninput="syncChPair('chInnerThick', this.value)"></div>
+          <div class="ch-row"><span>안쪽 선 간격/오프셋 (0~20px)</span><input type="range" id="chInnerOffsetRange" min="0" max="20" step="1" oninput="syncChPair('chInnerOffset', this.value)"><input type="number" id="chInnerOffsetNum" min="0" max="20" step="1" oninput="syncChPair('chInnerOffset', this.value)"></div>
+          <div class="ch-row"><span>안쪽 선 투명도 (0~1)</span><input type="range" id="chInnerAlphaRange" min="0" max="1" step="0.05" oninput="syncChPair('chInnerAlpha', this.value)"><input type="number" id="chInnerAlphaNum" min="0" max="1" step="0.05" oninput="syncChPair('chInnerAlpha', this.value)"></div>
+        </div>
+
+        <div class="ch-group">
+          <h4>바깥 선 (OUTER LINES)</h4>
+          <div class="ch-row"><span>바깥 선 표시</span><input type="checkbox" id="chOuterOn" onchange="syncChFromUI()"></div>
+          <div class="ch-row"><span>바깥 선 길이 (0~20px)</span><input type="range" id="chOuterLenRange" min="0" max="20" step="1" oninput="syncChPair('chOuterLen', this.value)"><input type="number" id="chOuterLenNum" min="0" max="20" step="1" oninput="syncChPair('chOuterLen', this.value)"></div>
+          <div class="ch-row"><span>바깥 선 두께 (1~10px)</span><input type="range" id="chOuterThickRange" min="1" max="10" step="1" oninput="syncChPair('chOuterThick', this.value)"><input type="number" id="chOuterThickNum" min="1" max="10" step="1" oninput="syncChPair('chOuterThick', this.value)"></div>
+          <div class="ch-row"><span>바깥 선 간격/오프셋 (0~30px)</span><input type="range" id="chOuterOffsetRange" min="0" max="30" step="1" oninput="syncChPair('chOuterOffset', this.value)"><input type="number" id="chOuterOffsetNum" min="0" max="30" step="1" oninput="syncChPair('chOuterOffset', this.value)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="adsReticle"></div>
   <div id="sniperScope">
     <svg id="araxysScopeSvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
@@ -619,6 +712,27 @@
   </div>
 
   <script>
+    const DEFAULT_CROSSHAIR = {
+      color: '#00ffff',
+      outlineOn: true,
+      outlineWidth: 1,
+      outlineAlpha: 0.75,
+      dotOn: false,
+      dotSize: 2,
+      dotAlpha: 1,
+      innerLen: 6,
+      innerThick: 2,
+      innerOffset: 3,
+      innerAlpha: 1,
+      outerOn: false,
+      outerLen: 3,
+      outerThick: 2,
+      outerOffset: 10,
+      outerAlpha: 0.85,
+      recoilError: true
+    };
+    let crosshairConfig = { ...DEFAULT_CROSSHAIR };
+
     // ==========================================
     // Web Audio API 프로시저럴 사운드 엔진 (외부 파일 불필요)
     // ==========================================
@@ -7511,8 +7625,8 @@
     // =========================================================================
     // 1. 계정 로그인(ID/PW/로그인 유지) & 계정별 데이터(usersDB) & 2. 친구 추가/로비 초대
     // =========================================================================
-    const USERS_DB_KEY = 'minivalo_users_db_v1';
-    const SESSION_KEY = 'minivalo_auth_session_v1';
+    const USERS_DB_KEY = 'miniValoUsersDB';
+    const SESSION_KEY = 'miniValoAutoLoginId';
     let usersDB = {};
     let currentUserId = null;
     let userAccount = null;
@@ -7530,10 +7644,12 @@
     function loadUsersDB() {
       try {
         const raw = localStorage.getItem(USERS_DB_KEY);
-        usersDB = raw ? JSON.parse(raw) : {};
+        const parsed = raw ? JSON.parse(raw) : {};
+        usersDB = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
       } catch (e) {
         usersDB = {};
       }
+      return usersDB;
     }
 
     function saveUsersDB() {
@@ -7545,25 +7661,30 @@
     function loadUserAccount() {
       loadUsersDB();
       try {
-        const rawSession = localStorage.getItem(SESSION_KEY);
-        if (rawSession) {
-          const sess = JSON.parse(rawSession);
-          if (sess && sess.keepLoggedIn && sess.userId && usersDB[sess.userId]) {
-            currentUserId = sess.userId;
-            const parsed = usersDB[sess.userId];
-            parsed.friends = Array.isArray(parsed.friends) ? parsed.friends : [];
-            parsed.history = Array.isArray(parsed.history) ? parsed.history : [];
-            parsed.ownedSkins = Array.isArray(parsed.ownedSkins) ? parsed.ownedSkins : [];
-            if (typeof parsed.vp !== 'number') parsed.vp = 0;
-            if (typeof parsed.radianite !== 'number') parsed.radianite = 0;
-            if (parsed.skins) Object.assign(equippedSkins, parsed.skins);
-            if (typeof parsed.sensitivity === 'number') {
-              sensitivity = parsed.sensitivity;
-            }
-            return parsed;
+        const autoId = (localStorage.getItem(SESSION_KEY) || '').trim();
+        if (autoId && Object.prototype.hasOwnProperty.call(usersDB, autoId) && usersDB[autoId]) {
+          currentUserId = autoId;
+          const parsed = usersDB[autoId];
+          if (!parsed.nick && parsed.nickname) parsed.nick = parsed.nickname;
+          if (!parsed.nickname && parsed.nick) parsed.nickname = parsed.nick;
+          if (!parsed.password && parsed.pw) parsed.password = parsed.pw;
+          if (!parsed.pw && parsed.password) parsed.pw = parsed.password;
+          parsed.friends = Array.isArray(parsed.friends) ? parsed.friends : [];
+          parsed.history = Array.isArray(parsed.history) ? parsed.history : [];
+          parsed.ownedSkins = Array.isArray(parsed.ownedSkins) ? parsed.ownedSkins : [];
+          if (typeof parsed.vp !== 'number') parsed.vp = 0;
+          if (typeof parsed.radianite !== 'number') parsed.radianite = 0;
+          if (parsed.skins) Object.assign(equippedSkins, parsed.skins);
+          if (typeof DEFAULT_CROSSHAIR !== 'undefined' && parsed.crosshair) {
+            crosshairConfig = { ...DEFAULT_CROSSHAIR, ...parsed.crosshair };
           }
+          if (typeof parsed.sensitivity === 'number') {
+            sensitivity = parsed.sensitivity;
+          }
+          return parsed;
         }
       } catch (e) {}
+      currentUserId = null;
       return null;
     }
 
@@ -7571,6 +7692,9 @@
       if (!currentUserId || !userAccount) return;
       userAccount.skins = { ...equippedSkins };
       userAccount.sensitivity = typeof sensitivity === 'number' ? sensitivity : 1.0;
+      if (typeof crosshairConfig === 'object' && crosshairConfig) {
+        userAccount.crosshair = { ...crosshairConfig };
+      }
       usersDB[currentUserId] = userAccount;
       saveUsersDB();
     }
@@ -7617,17 +7741,6 @@
       renderLobbySlotsUI();
     }
 
-    window.switchAuthTab = function(mode) {
-      authMode = mode;
-      const isSignup = mode === 'signup';
-      document.getElementById('authModalTitle').innerText = isSignup ? '새 요원 계정 가입' : '요원 계정 로그인';
-      document.getElementById('signupExtraFields').style.display = isSignup ? 'flex' : 'none';
-      document.getElementById('authSubmitBtn').innerText = isSignup ? '회원가입 완료 및 로비 입장' : '로그인 및 로비 입장';
-      document.getElementById('tabLoginBtn').className = isSignup ? 'btn-secondary' : 'btn-primary';
-      document.getElementById('tabSignupBtn').className = isSignup ? 'btn-primary' : 'btn-secondary';
-      document.getElementById('authErrorMsg').innerText = '';
-    };
-
     function applyAccountSession(userId, keepLogin) {
       currentUserId = userId;
       userAccount = usersDB[userId];
@@ -7637,6 +7750,10 @@
       if (typeof userAccount.vp !== 'number') userAccount.vp = 0;
       if (typeof userAccount.radianite !== 'number') userAccount.radianite = 0;
       if (userAccount.skins) Object.assign(equippedSkins, userAccount.skins);
+      if (typeof DEFAULT_CROSSHAIR !== 'undefined') {
+        crosshairConfig = { ...DEFAULT_CROSSHAIR, ...(userAccount.crosshair || {}) };
+        if (typeof applyCrosshairEverywhere === 'function') applyCrosshairEverywhere();
+      }
 
       const savedSens = typeof userAccount.sensitivity === 'number' ? userAccount.sensitivity : 1.0;
       if (typeof updateSensitivityValue === 'function') {
@@ -7646,7 +7763,7 @@
       }
 
       if (keepLogin) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ userId, keepLoggedIn: true }));
+        localStorage.setItem(SESSION_KEY, userId);
       } else {
         localStorage.removeItem(SESSION_KEY);
       }
@@ -7656,64 +7773,20 @@
       if (typeof initAccountPeerNode === 'function') initAccountPeerNode();
     }
 
-    window.submitAuthForm = function() {
-      loadUsersDB();
-      const id = (document.getElementById('authIdInput').value || '').trim();
-      const pw = (document.getElementById('authPwInput').value || '').trim();
-      const keepLogin = document.getElementById('keepLoggedInCheck').checked;
-      const errEl = document.getElementById('authErrorMsg');
-
-      if (!id || !pw) {
-        errEl.innerText = '아이디와 비밀번호를 모두 입력하세요.';
-        return;
-      }
-
-      if (authMode === 'signup') {
-        if (usersDB[id]) {
-          errEl.innerText = '이미 존재하는 아이디입니다.';
-          return;
-        }
-        const rawNick = (document.getElementById('setupNickInput').value || '').trim().replace(/#/g, '');
-        let rawTag = (document.getElementById('setupTagInput').value || '').trim().replace(/[^0-9a-zA-Z]/g, '');
-        if (!rawNick) {
-          errEl.innerText = '사용할 닉네임을 입력하세요.';
-          return;
-        }
-        if (!rawTag) rawTag = String(Math.floor(1000 + Math.random() * 9000));
-
-        usersDB[id] = {
-          userId: id,
-          password: pw,
-          nick: rawNick.slice(0, 10),
-          tag: rawTag.slice(0, 4).toUpperCase(),
-          vp: 0,
-          radianite: 0,
-          ownedSkins: [],
-          skins: { ...equippedSkins },
-          friends: [],
-          history: [],
-          sensitivity: sensitivity || 1.0
-        };
-        saveUsersDB();
-        applyAccountSession(id, keepLogin);
-      } else {
-        const record = usersDB[id];
-        if (!record || record.password !== pw) {
-          errEl.innerText = '아이디 또는 비밀번호가 일치하지 않습니다.';
-          return;
-        }
-        applyAccountSession(id, keepLogin);
-      }
-    };
-
-    window.logoutAccount = function() {
+    window.resetAccountStorageData = function() {
+      localStorage.removeItem(USERS_DB_KEY);
       localStorage.removeItem(SESSION_KEY);
+      usersDB = {};
       currentUserId = null;
       userAccount = null;
+      document.getElementById('authIdInput').value = '';
       document.getElementById('authPwInput').value = '';
-      document.getElementById('authErrorMsg').innerText = '';
-      switchAuthTab('login');
-      document.getElementById('accountSetupModal').style.display = 'flex';
+      document.getElementById('setupNickInput').value = '';
+      document.getElementById('setupTagInput').value = String(Math.floor(1000 + Math.random() * 9000));
+      switchAuthTab('signup');
+      const errEl = document.getElementById('authErrorMsg');
+      errEl.style.color = '#00ffcc';
+      errEl.innerText = '계정 데이터가 초기화되었습니다. 새로 가입해 주세요.';
     };
 
     window.copyMyRiotTag = function() {
@@ -8468,16 +8541,7 @@
       setupConnection(conn);
     }
 
-    // Boot persistent account check
-    userAccount = loadUserAccount();
-    if (!userAccount) {
-      document.getElementById('setupTagInput').value = String(Math.floor(1000 + Math.random() * 9000));
-      document.getElementById('accountSetupModal').style.display = 'flex';
-    } else {
-      syncAccountUI();
-      setTimeout(initAccountPeerNode, 150);
-    }
-    setInterval(probeAllFriendsPresence, 15000);
+    
 
     function addKillFeed(text, isHighlight = false) {
       const killfeed = document.getElementById('killfeed');
@@ -9124,6 +9188,17 @@
       updateSensitivityValue(userAccount.sensitivity, false);
     }
 
+    function enterGameView() {
+      hasEnteredGame = true;
+      isShopOpen = false;
+      if (shopModal) shopModal.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
+      try {
+        const p = document.body.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) {}
+    }
+
     document.getElementById('btnStartBrawl').addEventListener('click', () => {
       const inParty = Object.keys(connections).length > 0;
       if (inParty && !isHost) {
@@ -9138,23 +9213,17 @@
         });
       }
       loadMap('brawl');
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.getElementById('btnStartRange').addEventListener('click', () => {
       loadMap('range');
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     let hasEnteredGame = false;
     document.getElementById('btnResumeGame').addEventListener('click', () => {
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.getElementById('btnFullscreen').addEventListener('click', () => {
@@ -9163,9 +9232,7 @@
     });
 
     document.getElementById('closeShopBtn').addEventListener('click', () => {
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.addEventListener('pointerlockchange', () => {
@@ -9956,8 +10023,10 @@
 
       const crosshairEl = document.getElementById('crosshair');
       const curKey = getCurrentWeaponKey();
-      const spreadScale = !isGrounded ? 2.4 : (curKey === 'operator' && zoomLevel === 0 ? 2.2 : (isCrouching ? (isMoving ? 0.85 : 0.75) : (isMoving && !isWalking ? 1.5 : 1.0)));
-      crosshairEl.style.transform = `translate(-50%, -50%) scale(${spreadScale})`;
+      const baseSpread = !isGrounded ? 12 : (curKey === 'operator' && zoomLevel === 0 ? 10 : (isCrouching ? -1 : (isMoving && !isWalking ? 6 : 0)));
+      const recoilSpread = (typeof recoilPitchOffset === 'number' ? recoilPitchOffset * 65 : 0);
+      const dynamicOffset = crosshairConfig.recoilError ? Math.max(0, baseSpread + recoilSpread) : 0;
+      renderCrosshairDOM(crosshairEl, crosshairConfig, dynamicOffset);
 
       if (dashCooldown > 0) dashCooldown -= dt;
       const dashEl = document.getElementById('dashStatus');
@@ -10409,11 +10478,217 @@
     }
     animate();
 
+    renderer.domElement.addEventListener('click', () => {
+      if (overlay && overlay.style.display === 'none' && !isShopOpen && document.pointerLockElement !== document.body) {
+        try {
+          const p = document.body.requestPointerLock();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (e) {}
+      }
+    });
+
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    // === 발로란트 스타일 커스텀 조준점(Crosshair) 시스템 ===
+
+    const CROSSHAIR_PRESETS = {
+      default: { ...DEFAULT_CROSSHAIR },
+      proCross: {
+        color: '#00ffff', outlineOn: true, outlineWidth: 1, outlineAlpha: 0.8,
+        dotOn: false, dotSize: 2, dotAlpha: 1,
+        innerLen: 5, innerThick: 2, innerOffset: 2, innerAlpha: 1,
+        outerOn: false, outerLen: 0, outerThick: 2, outerOffset: 8, outerAlpha: 0.8,
+        recoilError: false
+      },
+      dot: {
+        color: '#ffffff', outlineOn: true, outlineWidth: 1, outlineAlpha: 0.9,
+        dotOn: true, dotSize: 4, dotAlpha: 1,
+        innerLen: 0, innerThick: 2, innerOffset: 0, innerAlpha: 0,
+        outerOn: false, outerLen: 0, outerThick: 2, outerOffset: 8, outerAlpha: 0,
+        recoilError: false
+      },
+      circle: {
+        color: '#7fff00', outlineOn: true, outlineWidth: 1, outlineAlpha: 0.7,
+        dotOn: true, dotSize: 2, dotAlpha: 0.9,
+        innerLen: 2, innerThick: 6, innerOffset: 4, innerAlpha: 0.95,
+        outerOn: true, outerLen: 2, outerThick: 4, outerOffset: 9, outerAlpha: 0.65,
+        recoilError: true
+      }
+    };
+
+    crosshairConfig = { ...DEFAULT_CROSSHAIR, ...((userAccount && userAccount.crosshair) ? userAccount.crosshair : {}) };
+
+    function renderCrosshairDOM(targetEl, cfg, dynamicSpreadPx = 0) {
+      if (!targetEl || !cfg) return;
+      const outlineStyle = cfg.outlineOn
+        ? `box-shadow: 0 0 0 ${cfg.outlineWidth}px rgba(0, 0, 0, ${cfg.outlineAlpha});`
+        : '';
+      let parts = '';
+
+      if (cfg.dotOn && cfg.dotSize > 0) {
+        const half = cfg.dotSize / 2;
+        parts += `<div class="ch-part" style="left:${-half}px; top:${-half}px; width:${cfg.dotSize}px; height:${cfg.dotSize}px; background:${cfg.color}; opacity:${cfg.dotAlpha}; ${outlineStyle}"></div>`;
+      }
+
+      if (cfg.innerLen > 0 && cfg.innerThick > 0) {
+        const off = cfg.innerOffset + dynamicSpreadPx;
+        const halfT = cfg.innerThick / 2;
+        const base = `background:${cfg.color}; opacity:${cfg.innerAlpha}; ${outlineStyle}`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${-(off + cfg.innerLen)}px; width:${cfg.innerThick}px; height:${cfg.innerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${off}px; width:${cfg.innerThick}px; height:${cfg.innerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-(off + cfg.innerLen)}px; top:${-halfT}px; width:${cfg.innerLen}px; height:${cfg.innerThick}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${off}px; top:${-halfT}px; width:${cfg.innerLen}px; height:${cfg.innerThick}px; ${base}"></div>`;
+      }
+
+      if (cfg.outerOn && cfg.outerLen > 0 && cfg.outerThick > 0) {
+        const off = cfg.outerOffset + dynamicSpreadPx * 1.4;
+        const halfT = cfg.outerThick / 2;
+        const base = `background:${cfg.color}; opacity:${cfg.outerAlpha ?? 0.85}; ${outlineStyle}`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${-(off + cfg.outerLen)}px; width:${cfg.outerThick}px; height:${cfg.outerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-halfT}px; top:${off}px; width:${cfg.outerThick}px; height:${cfg.outerLen}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${-(off + cfg.outerLen)}px; top:${-halfT}px; width:${cfg.outerLen}px; height:${cfg.outerThick}px; ${base}"></div>`;
+        parts += `<div class="ch-part" style="left:${off}px; top:${-halfT}px; width:${cfg.outerLen}px; height:${cfg.outerThick}px; ${base}"></div>`;
+      }
+
+      targetEl.innerHTML = parts;
+    }
+
+    function applyCrosshairEverywhere(dynamicSpreadPx = 0) {
+      renderCrosshairDOM(document.getElementById('crosshair'), crosshairConfig, dynamicSpreadPx);
+      renderCrosshairDOM(document.getElementById('chPreviewCanvas'), crosshairConfig, 0);
+    }
+
+    function populateCrosshairUI() {
+      const c = crosshairConfig;
+      const picker = document.getElementById('chColorPicker');
+      if (picker) picker.value = c.color;
+      document.querySelectorAll('.ch-swatch').forEach(el => {
+        el.classList.toggle('active', el.dataset.color.toLowerCase() === c.color.toLowerCase());
+      });
+      document.getElementById('chOutlineOn').checked = c.outlineOn;
+      document.getElementById('chRecoilError').checked = c.recoilError;
+      document.getElementById('chDotOn').checked = c.dotOn;
+      document.getElementById('chOuterOn').checked = c.outerOn;
+
+      const pairs = [
+        ['chOutlineWidth', c.outlineWidth],
+        ['chOutlineAlpha', c.outlineAlpha],
+        ['chDotSize', c.dotSize],
+        ['chDotAlpha', c.dotAlpha],
+        ['chInnerLen', c.innerLen],
+        ['chInnerThick', c.innerThick],
+        ['chInnerOffset', c.innerOffset],
+        ['chInnerAlpha', c.innerAlpha],
+        ['chOuterLen', c.outerLen],
+        ['chOuterThick', c.outerThick],
+        ['chOuterOffset', c.outerOffset]
+      ];
+      pairs.forEach(([id, val]) => {
+        const r = document.getElementById(id + 'Range');
+        const n = document.getElementById(id + 'Num');
+        if (r) r.value = val;
+        if (n) n.value = val;
+      });
+
+      const curSens = typeof sensitivity === 'number' ? sensitivity : 1.0;
+      const sr = document.getElementById('chModalSensRange');
+      const sn = document.getElementById('chModalSensNum');
+      if (sr) sr.value = curSens;
+      if (sn) sn.value = curSens.toFixed(2);
+    }
+
+    window.syncChPair = function(prefix, rawVal) {
+      const num = parseFloat(rawVal);
+      if (isNaN(num)) return;
+      document.getElementById(prefix + 'Range').value = num;
+      document.getElementById(prefix + 'Num').value = num;
+      syncChFromUI();
+    };
+
+    window.setChColor = function(hex) {
+      crosshairConfig.color = hex;
+      populateCrosshairUI();
+      applyCrosshairEverywhere();
+      if (typeof saveUserAccount === 'function') saveUserAccount();
+    };
+
+    window.syncChFromUI = function() {
+      crosshairConfig = {
+        color: document.getElementById('chColorPicker').value,
+        outlineOn: document.getElementById('chOutlineOn').checked,
+        outlineWidth: parseFloat(document.getElementById('chOutlineWidthNum').value) || 1,
+        outlineAlpha: parseFloat(document.getElementById('chOutlineAlphaNum').value) ?? 0.75,
+        dotOn: document.getElementById('chDotOn').checked,
+        dotSize: parseFloat(document.getElementById('chDotSizeNum').value) || 2,
+        dotAlpha: parseFloat(document.getElementById('chDotAlphaNum').value) ?? 1,
+        innerLen: parseFloat(document.getElementById('chInnerLenNum').value) ?? 6,
+        innerThick: parseFloat(document.getElementById('chInnerThickNum').value) || 2,
+        innerOffset: parseFloat(document.getElementById('chInnerOffsetNum').value) ?? 3,
+        innerAlpha: parseFloat(document.getElementById('chInnerAlphaNum').value) ?? 1,
+        outerOn: document.getElementById('chOuterOn').checked,
+        outerLen: parseFloat(document.getElementById('chOuterLenNum').value) ?? 3,
+        outerThick: parseFloat(document.getElementById('chOuterThickNum').value) || 2,
+        outerOffset: parseFloat(document.getElementById('chOuterOffsetNum').value) ?? 10,
+        outerAlpha: crosshairConfig.outerAlpha ?? 0.85,
+        recoilError: document.getElementById('chRecoilError').checked
+      };
+      applyCrosshairEverywhere();
+      if (typeof saveUserAccount === 'function') saveUserAccount();
+    };
+
+    window.applyCrosshairPreset = function(presetKey) {
+      crosshairConfig = { ...(CROSSHAIR_PRESETS[presetKey] || DEFAULT_CROSSHAIR) };
+      populateCrosshairUI();
+      applyCrosshairEverywhere();
+      if (typeof saveUserAccount === 'function') saveUserAccount();
+    };
+
+    window.syncModalSensitivity = function(val) {
+      const v = Math.min(10, Math.max(0.05, parseFloat(val) || 1.0));
+      if (typeof updateSensitivityValue === 'function') {
+        updateSensitivityValue(v, true);
+      } else {
+        sensitivity = v;
+        if (typeof saveUserAccount === 'function') saveUserAccount();
+      }
+      const sr = document.getElementById('chModalSensRange');
+      const sn = document.getElementById('chModalSensNum');
+      if (sr) sr.value = v;
+      if (sn) sn.value = v.toFixed(2);
+    };
+
+    let previewBgIdx = 0;
+    window.cyclePreviewBg = function() {
+      const box = document.getElementById('chPreviewBox');
+      const classes = ['', 'bg-light', 'bg-range'];
+      previewBgIdx = (previewBgIdx + 1) % classes.length;
+      box.className = 'ch-preview-box ' + classes[previewBgIdx];
+    };
+
+    window.openCrosshairModal = function() {
+      populateCrosshairUI();
+      applyCrosshairEverywhere();
+      document.getElementById('crosshairModal').style.display = 'flex';
+    };
+
+    window.closeCrosshairModal = function() {
+      document.getElementById('crosshairModal').style.display = 'none';
+    };
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') {
+        const cm = document.getElementById('crosshairModal');
+        if (cm && cm.style.display === 'flex') {
+          closeCrosshairModal();
+        }
+      }
+    });
+
+    applyCrosshairEverywhere();
   </script>
 
 <script>
@@ -13599,6 +13874,45 @@
     return grp;
   }
 
+  // ---- 누락되어 있던 보조 함수 ----
+  const _wallRay = new THREE.Raycaster();
+  function isSegmentBlockedByWall(from, to) {
+    if (typeof wallMeshes === 'undefined') return false;
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const dist = dir.length();
+    if (dist < 0.01) return false;
+    dir.normalize();
+    _wallRay.set(from, dir); _wallRay.near = 0; _wallRay.far = dist;
+    return _wallRay.intersectObjects(wallMeshes, false).length > 0;
+  }
+  const origMoveWithCollision = (dx, dz) => moveWithCollision(dx, dz);
+  function getInputMoveDir() {
+    const { forward, right } = getMoveVectors();
+    const d = new THREE.Vector3();
+    if (keys['KeyW']) d.add(forward);
+    if (keys['KeyS']) d.sub(forward);
+    if (keys['KeyD']) d.add(right);
+    if (keys['KeyA']) d.sub(right);
+    if (d.lengthSq() > 0) d.normalize();
+    return d;
+  }
+  function toggleNeonHighGear() {
+    if (isPrepPhase() || isDead) return;
+    if (neonState.highGearActive) { neonState.highGearActive = false; return; }
+    if (neonState.battery <= 0) return;
+    neonState.highGearActive = true;
+    showSkillNotice('고속 기어(E) 활성화', '#22d3ee');
+  }
+  function triggerNeonSlide() {
+    if (neonState.slidesRemaining <= 0 || neonState.slideTimer > 0 || isDead) return;
+    neonState.slidesRemaining -= 1;
+    const d = getInputMoveDir();
+    if (d.lengthSq() === 0) d.copy(getMoveVectors().forward);
+    neonState.slideDir.copy(d);
+    neonState.slideTimer = 0.45;
+    if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+  }
+
   // C: 추월 차선
   function castNeonFastLane() {
     if (isPrepPhase()) {
@@ -13860,8 +14174,8 @@
     ray.setFromCamera(new THREE.Vector2(0, 0), camera);
 
     const targets = (typeof currentMap !== 'undefined' && currentMap === 'range')
-      ? (window.botHitboxes || [])
-      : [...(window.remoteHitboxes || []), ...(window.brawlBotHitboxes || [])];
+      ? (typeof botHitboxes !== 'undefined' ? botHitboxes : [])
+      : [...remoteHitboxes, ...brawlBotHitboxes];
 
     const hits = ray.intersectObjects(targets, true);
 
@@ -14171,9 +14485,9 @@
     lastTick = now;
 
     // 라운드 변경 시 초기화
-    if (typeof currentRound !== 'undefined') {
-      if (reynaState.lastRoundNum !== currentRound) {
-        reynaState.lastRoundNum = currentRound;
+    if (typeof roundNumber !== 'undefined') {
+      if (reynaState.lastRoundNum !== roundNumber) {
+        reynaState.lastRoundNum = roundNumber;
         reynaState.qeCharges = Math.max(1, reynaState.qeCharges);
         reynaState.empressActive = false;
         reynaState.dismissTimer = 0;
@@ -14182,8 +14496,8 @@
         reynaState.soulOrbs.forEach(o => scene.remove(o.mesh));
         reynaState.soulOrbs = [];
       }
-      if (neonState.lastRoundNum !== currentRound) {
-        neonState.lastRoundNum = currentRound;
+      if (neonState.lastRoundNum !== roundNumber) {
+        neonState.lastRoundNum = roundNumber;
         neonState.battery = 100;
         neonState.highGearActive = false;
         neonState.slidesRemaining = 1;
@@ -14193,7 +14507,8 @@
     }
 
     // 사망 시 궁극기/테더 해제
-    if (isDead) {
+    // 사망 시 궁극기/테더 해제
+    if (typeof isDead !== 'undefined' && isDead) {
       if (reynaState.empressActive) reynaState.empressActive = false;
       if (reynaState.devourBeam || reynaState.devourTimer > 0) clearReynaDevourTether(false);
       if (neonState.overdriveActive) neonState.overdriveActive = false;
@@ -14372,6 +14687,17 @@
       }
     } else {
       neonState.battery = Math.min(100, neonState.battery + 5.55 * dt);
+    }
+
+    // 고속 기어 / 무시 추가 이동 속도
+    if (!isDead && document.pointerLockElement === document.body && neonState.slideTimer <= 0) {
+      let bonus = 0;
+      if (myAgent === 'neon' && neonState.highGearActive) bonus = 7.0;
+      else if (myAgent === 'reyna' && reynaState.dismissTimer > 0) bonus = 8.0;
+      if (bonus > 0) {
+        const md = getInputMoveDir();
+        if (md.lengthSq() > 0) origMoveWithCollision(md.x * bonus * dt, md.z * bonus * dt);
+      }
     }
 
     // 고속 슬라이딩 벡터 이동
@@ -14744,5 +15070,144 @@
   requestAnimationFrame(balanceAndSlideFixTick);
 })();
 </script>
+
+<script>
+(function () {
+  const USERS_KEY = 'mv_users';
+  const SESSION_KEY = 'mv_current_user';
+  let authMode = 'login';
+
+  function getUsers() {
+    try {
+      const raw = localStorage.getItem(USERS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }
+
+  function enterLobbyWithUser(userObj) {
+    const keepEl = document.getElementById('keepLoggedInCheck');
+    const keepLogin = keepEl ? keepEl.checked : true;
+    try {
+      loadUsersDB();
+      const existing = usersDB[userObj.id] || {};
+      usersDB[userObj.id] = Object.assign(
+        { friends: [], history: [], ownedSkins: [], vp: 0, radianite: 0, sensitivity: 1.0 },
+        existing,
+        { id: userObj.id, pw: userObj.pw, password: userObj.pw, nick: userObj.nick, nickname: userObj.nick, tag: userObj.tag }
+      );
+      saveUsersDB();
+      applyAccountSession(userObj.id, keepLogin);
+    } catch (err) {
+      console.error('로그인 처리 오류', err);
+    }
+    if (keepLogin) localStorage.setItem(SESSION_KEY, userObj.id);
+    else localStorage.removeItem(SESSION_KEY);
+
+    const modal = document.getElementById('accountSetupModal');
+    if (modal) { modal.style.display = 'none'; modal.style.pointerEvents = 'none'; }
+    const overlayEl = document.getElementById('overlay');
+    if (overlayEl) { overlayEl.style.zIndex = '50'; overlayEl.style.pointerEvents = 'auto'; }
+  }
+
+  window.switchAuthTab = function (mode) {
+    authMode = (mode === 'signup') ? 'signup' : 'login';
+    const title = document.getElementById('authModalTitle');
+    const signupFields = document.getElementById('signupExtraFields');
+    const loginBtn = document.getElementById('tabLoginBtn');
+    const signupBtn = document.getElementById('tabSignupBtn');
+    const submitBtn = document.getElementById('authSubmitBtn');
+    const errBox = document.getElementById('authErrorMsg');
+
+    if (errBox) errBox.innerText = '';
+    if (authMode === 'signup') {
+      if (title) title.innerText = '신규 요원 회원가입';
+      if (signupFields) signupFields.style.display = 'block';
+      if (loginBtn) loginBtn.className = 'btn-secondary';
+      if (signupBtn) signupBtn.className = 'btn-primary';
+      if (submitBtn) submitBtn.innerText = '계정 생성 및 로비 입장';
+      const tagInp = document.getElementById('setupTagInput');
+      if (tagInp && !tagInp.value) {
+        tagInp.value = String(Math.floor(1000 + Math.random() * 9000));
+      }
+    } else {
+      if (title) title.innerText = '요원 계정 로그인';
+      if (signupFields) signupFields.style.display = 'none';
+      if (loginBtn) loginBtn.className = 'btn-primary';
+      if (signupBtn) signupBtn.className = 'btn-secondary';
+      if (submitBtn) submitBtn.innerText = '로그인 및 로비 입장';
+    }
+  };
+
+  window.submitAuthForm = function () {
+    const idEl = document.getElementById('authIdInput');
+    const pwEl = document.getElementById('authPwInput');
+    const nickEl = document.getElementById('setupNickInput');
+    const tagEl = document.getElementById('setupTagInput');
+    const errBox = document.getElementById('authErrorMsg');
+
+    const id = (idEl ? idEl.value : '').trim();
+    const pw = (pwEl ? pwEl.value : '').trim();
+
+    if (!id || !pw) {
+      if (errBox) errBox.innerText = '아이디와 비밀번호를 모두 입력해주세요.';
+      else alert('아이디와 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    const users = getUsers();
+
+    if (authMode === 'signup') {
+      if (Object.hasOwn(users, id)) {
+        if (errBox) errBox.innerText = '이미 존재하는 아이디입니다.';
+        else alert('이미 존재하는 아이디입니다.');
+        return;
+      }
+      const rawNick = (nickEl ? nickEl.value : '').trim().replace(/#/g, '');
+      const rawTag = (tagEl ? tagEl.value : '').trim().replace(/[^0-9a-zA-Z]/g, '');
+      const nick = (rawNick || id).slice(0, 10);
+      const tag = (rawTag || String(Math.floor(1000 + Math.random() * 9000))).slice(0, 4).toUpperCase();
+
+      const newUser = { id, pw, nick, tag };
+      users[id] = newUser;
+      saveUsers(users);
+      enterLobbyWithUser(newUser);
+    } else {
+      if (!Object.hasOwn(users, id) || users[id].pw !== pw) {
+        if (errBox) errBox.innerText = '아이디가 없거나 비밀번호가 일치하지 않습니다.';
+        else alert('아이디가 없거나 비밀번호가 일치하지 않습니다.');
+        return;
+      }
+      enterLobbyWithUser(users[id]);
+    }
+  };
+
+  window.logoutAccount = function () {
+    localStorage.removeItem(SESSION_KEY);
+    const modal = document.getElementById('accountSetupModal');
+    if (modal) { modal.style.display = 'flex'; modal.style.pointerEvents = 'auto'; modal.style.zIndex = '60'; }
+    window.switchAuthTab('login');
+  };
+
+  window.addEventListener('DOMContentLoaded', function () {
+    const users = getUsers();
+    const savedId = localStorage.getItem(SESSION_KEY);
+    if (savedId && Object.hasOwn(users, savedId)) {
+      enterLobbyWithUser(users[savedId]);
+    } else {
+      const modal = document.getElementById('accountSetupModal');
+      if (modal) { modal.style.display = 'flex'; modal.style.pointerEvents = 'auto'; modal.style.zIndex = '60'; }
+      window.switchAuthTab('login');
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
