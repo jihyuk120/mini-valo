@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>MINI-VALO 3D - 일반전 (13선승) & 사격장</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js';s.onload=function(){try{if(typeof initAccountPeerNode==='function'&&typeof userAccount!=='undefined'&&userAccount)initAccountPeerNode(true);}catch(e){}};document.head.appendChild(s);"></script>
   <style>
     body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
     #crosshair { position: fixed; top: 50%; left: 50%; width: 0; height: 0; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
@@ -5384,7 +5384,7 @@
       }
       while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
       gunGroup.add(getActiveModelForWeapon(getCurrentWeaponKey()));
-      const _hideForUltOrSkill = (typeof myAgent !== 'undefined' && myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) ||
+      const _hideForUltOrSkill = (typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld()) ||
         (typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined' && (reynaState.leerEquipped || reynaState.dismissTimer > 0));
       gunGroup.visible = !_hideForUltOrSkill;
       gunGroup.position.set(0.26, -0.22, -0.42);
@@ -5413,7 +5413,7 @@
       document.getElementById('adsReticle').style.display = isHolo ? 'block' : 'none';
       scopeEl.style.display = isSniper ? 'block' : 'none';
       scopeEl.classList.toggle('araxys-scope', isSniper && ((getCurrentWeaponKey() === 'operator' && equippedSkins.operator === 'araxys') || (getCurrentWeaponKey() === 'outlaw' && equippedSkins.outlaw === 'araxys')));
-      gunGroup.visible = !isSniper;
+      gunGroup.visible = !isSniper && !(typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld());
     }
 
     // 총알 궤적(트레이서) 시스템
@@ -7888,6 +7888,17 @@
           renderFriendListUI();
         } else if (d.type === 'inviteAccept') {
           setNickInBox(`${d.fromRiotId} 님이 파티 초대를 수락했습니다!`);
+          // 폴백: 상대가 4초 내에 내게 연결하지 못하면 내가 상대 peerId로 역방향 연결을 시도
+          if (d.guestPeerId && isHost) {
+            const guestPid = d.guestPeerId;
+            setTimeout(() => {
+              if (!isHost || !peer || !peer.open || connections[guestPid]) return;
+              try {
+                const rc = peer.connect(guestPid, { metadata: { kind: 'party-reverse', fromRiotId: getMyRiotId(), hostPeerId: myPeerId }, reliable: true });
+                setupConnection(rc);
+              } catch (e) {}
+            }, 4000);
+          }
         } else if (d.type === 'inviteDecline') {
           setNickInBox(`${d.fromRiotId} 님이 파티 초대를 거절했습니다.`);
         }
@@ -8045,33 +8056,82 @@
         : `초대 전송에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.`);
     };
 
+    let partyJoin = null;   // { inv, attempt, waitMs, done, timer, conn }
+
+    function failPartyJoin(reason) {
+      const pj = partyJoin;
+      if (!pj || pj.done) return;
+      pj.done = true;
+      if (pj.timer) { clearTimeout(pj.timer); pj.timer = null; }
+      try { if (pj.conn) pj.conn.close(); } catch (e) {}
+      partyJoin = null;
+      if (Object.keys(connections).length === 0) { isHost = false; partyHostId = ''; }
+      // 다시 눌러볼 수 있도록 초대를 복구
+      pendingInvites[canonId(pj.inv.fromRiotId)] = Object.assign({}, pj.inv, { recvAt: Date.now() });
+      setNickInBox(`${pj.inv.fromRiotId} 님의 파티에 연결하지 못했습니다. (${reason}) 다시 \"초대 받기\"를 누르거나 재초대를 요청하세요.`);
+      updateLeaveRoomButtonsVisibility();
+      renderLobbySlotsUI();
+      renderFriendListUI();
+    }
+
+    function attemptPartyJoin() {
+      const pj = partyJoin;
+      if (!pj || pj.done) return;
+      if (pj.timer) { clearTimeout(pj.timer); pj.timer = null; }
+      // 아직 내 P2P 노드가 준비되지 않았으면 잠시 기다림
+      if (!peer || !peer.open) {
+        pj.waitMs += 700;
+        if (pj.waitMs > 20000) { failPartyJoin('내 네트워크 노드가 준비되지 않음'); return; }
+        setNickInBox(`${pj.inv.fromRiotId} 님의 파티에 합류 준비 중... (네트워크 연결 대기)`);
+        pj.timer = setTimeout(attemptPartyJoin, 700);
+        return;
+      }
+      pj.attempt++;
+      if (pj.attempt > 4) { failPartyJoin('파티장 응답 없음 / 방화벽·NAT 차단 가능'); return; }
+      setNickInBox(`${pj.inv.fromRiotId} 님의 파티에 연결 시도 중... (${pj.attempt}/4)`);
+      try { if (pj.conn) { const old = pj.conn; pj.conn = null; old.close(); } } catch (e) {}
+      let conn;
+      try {
+        conn = peer.connect(pj.inv.hostPeerId, { metadata: { kind: 'party', fromRiotId: getMyRiotId() }, reliable: true });
+      } catch (e) {
+        pj.timer = setTimeout(attemptPartyJoin, 1500);
+        return;
+      }
+      pj.conn = conn;
+      setupConnection(conn);
+      conn.on('error', () => {
+        if (partyJoin === pj && !pj.done && pj.conn === conn) {
+          if (pj.timer) clearTimeout(pj.timer);
+          pj.timer = setTimeout(attemptPartyJoin, 1500);
+        }
+      });
+      pj.timer = setTimeout(() => {
+        if (partyJoin !== pj || pj.done || Object.keys(connections).length > 0) return;
+        attemptPartyJoin();
+      }, 9000);
+    }
+
     window.acceptInviteFrom = function(encKey) {
       const key = decodeURIComponent(encKey);
       const inv = pendingInvites[key];
       if (!inv) return;
       delete pendingInvites[key];
       renderFriendListUI();
-      if (!peer || !peer.open) { alert('네트워크 연결 중입니다. 잠시 후 다시 눌러주세요.'); pendingInvites[key] = inv; renderFriendListUI(); return; }
 
+      if (partyJoin && partyJoin.timer) clearTimeout(partyJoin.timer);
       Object.values(connections).forEach(c => { try { c.close(); } catch (e) {} });
       Object.keys(connections).forEach(k => delete connections[k]);
       Object.keys(remotePlayers).forEach(pid => removeRemoteAvatar(pid));
 
       isHost = false;
       partyHostId = inv.hostPeerId;
-      const conn = peer.connect(inv.hostPeerId, { metadata: { kind: 'party' }, reliable: true });
-      setupConnection(conn);
+      partyJoin = { inv: inv, attempt: 0, waitMs: 0, done: false, timer: null, conn: null };
       setNickInBox(`${inv.fromRiotId} 님의 파티에 합류하는 중...`);
       updateLeaveRoomButtonsVisibility();
       renderLobbySlotsUI();
-      ntfyPublish(socialTopic('i', inv.fromRiotId), { type: 'inviteAccept', fromRiotId: getMyRiotId() });
-      setTimeout(() => {
-        if (!isHost && Object.keys(connections).length === 0) {
-          setNickInBox(`${inv.fromRiotId} 님의 파티에 연결하지 못했습니다. (파티장이 나갔거나 연결 불가) 다시 초대를 받아주세요.`);
-        } else {
-          setNickInBox(`${inv.fromRiotId} 님의 파티 로비에 합류했습니다!`);
-        }
-      }, 10000);
+      // 수락 알림 + 내 peerId 전달 (파티장이 역방향으로도 연결 가능)
+      ntfyPublish(socialTopic('i', inv.fromRiotId), { type: 'inviteAccept', fromRiotId: getMyRiotId(), guestPeerId: myPeerId });
+      attemptPartyJoin();
     };
 
     window.declineInviteFrom = function(encKey) {
@@ -8385,6 +8445,13 @@
     function setupConnection(conn) {
       conn.on('open', () => {
         connections[conn.peer] = conn;
+        if (partyJoin && !partyJoin.done && !isHost) {
+          partyJoin.done = true;
+          if (partyJoin.timer) { clearTimeout(partyJoin.timer); partyJoin.timer = null; }
+          partyHostId = conn.peer;
+          setNickInBox(`${partyJoin.inv.fromRiotId} 님의 파티 로비에 합류했습니다!`);
+          partyJoin = null;
+        }
         conn.send({ type: 'info', nick: getMyRiotId(), team: myTeam, agentKey: myAgent, isDead, k: playerStats.k, d: playerStats.d, a: playerStats.a, credits });
 
         if (isHost) {
@@ -8453,7 +8520,7 @@
           renderLobbySlotsUI();
           msg.peers.forEach(pid => {
             if (pid !== myPeerId && !connections[pid] && peer) {
-              const c = peer.connect(pid, { metadata: { kind: 'party' } });
+              const c = peer.connect(pid, { metadata: { kind: 'mesh' }, reliable: true });
               setupConnection(c);
             }
           });
@@ -8557,6 +8624,7 @@
       });
 
       conn.on('close', () => {
+        if (connections[conn.peer] && connections[conn.peer] !== conn) return; // 재시도로 교체된 옛 연결의 close는 무시
         delete connections[conn.peer];
         removeRemoteAvatar(conn.peer);
         if (Object.keys(connections).length === 0) {
@@ -8659,19 +8727,30 @@
       if (badge) { badge.innerText = text; badge.style.color = color; }
     }
 
-    function initAccountPeerNode() {
+    let peerFixedId = '';
+    function newPeerId() { return 'mvp-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+    // isRetry=true 이면 소셜 엔진(초대/친구상태)을 건드리지 않고 P2P 노드만 다시 만든다.
+    function initAccountPeerNode(isRetry) {
       if (!userAccount) return;
-      startSocialEngine();   // 접속상태/초대 (릴레이)
-      if (typeof Peer === 'undefined') return; // 파티 합류용 P2P 라이브러리
+      if (isRetry !== true) startSocialEngine();   // 접속상태/초대 (릴레이) — 로그인 시 1번만
       if (peerRetryTimer) { clearTimeout(peerRetryTimer); peerRetryTimer = null; }
+      if (typeof Peer === 'undefined') {            // P2P 라이브러리 로딩 대기
+        peerRetryTimer = setTimeout(() => initAccountPeerNode(true), 2500);
+        return;
+      }
+      if (peer && peer.open && isRetry === true && !peer.destroyed && !peer.disconnected) return;
       if (peer) { try { peer.destroy(); } catch (e) {} }
-      const randomId = 'mvp-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-      const thisPeer = new Peer(randomId, {
+      if (isRetry !== true || !peerFixedId) peerFixedId = newPeerId();   // 재시도에도 같은 ID를 유지해 초대의 hostPeerId가 깨지지 않게 함
+      const thisPeer = new Peer(peerFixedId, {
         debug: 1,
         config: {
+          iceCandidatePoolSize: 4,
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
             { urls: 'stun:global.stun.twilio.com:3478' },
             { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
             { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
@@ -8692,8 +8771,21 @@
       thisPeer.on('error', (err) => {
         if (peer !== thisPeer) return;
         const type = err && err.type;
-        if (type === 'unavailable-id' || type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed') {
-          peerRetryTimer = setTimeout(initAccountPeerNode, 4000);
+        if (type === 'peer-unavailable') {
+          // 파티장 peerId를 찾지 못함 → 곧 재시도
+          if (partyJoin && !partyJoin.done) {
+            if (partyJoin.timer) clearTimeout(partyJoin.timer);
+            partyJoin.timer = setTimeout(attemptPartyJoin, 1800);
+          }
+          return;
+        }
+        if (type === 'unavailable-id') {
+          peerFixedId = newPeerId();   // 이 ID만 서버에 남아있는 경우에만 새 ID 발급
+          peerRetryTimer = setTimeout(() => initAccountPeerNode(true), 1500);
+          return;
+        }
+        if (type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed') {
+          peerRetryTimer = setTimeout(() => initAccountPeerNode(true), 4000);
         }
       });
       thisPeer.on('connection', handleIncomingSocialConnection);
@@ -8727,8 +8819,30 @@
         });
         return;
       }
+      if (kind === 'party-reverse') {
+        // 파티장이 내게 역방향으로 연결 (내가 방금 초대를 수락한 상태일 때만 허용)
+        const meta = conn.metadata || {};
+        if (partyJoin && !partyJoin.done && canonId(meta.fromRiotId) === canonId(partyJoin.inv.fromRiotId)) {
+          isHost = false;
+          partyHostId = conn.peer;
+          setupConnection(conn);
+        } else {
+          try { conn.close(); } catch (e) {}
+        }
+        return;
+      }
+      if (kind === 'mesh') {
+        // 파티원끼리의 메시 연결: 호스트 여부를 바꾸지 않음
+        setupConnection(conn);
+        return;
+      }
       const sizeEl = document.getElementById('lobbyTeamSizeSelect');
       const maxPlayers = (sizeEl ? parseInt(sizeEl.value, 10) : 5) * 2;
+      // 이미 다른 사람의 파티에 들어가 있는 게스트는 새 호스트가 되면 안 됨
+      if (!isHost && partyHostId && partyHostId !== myPeerId && Object.keys(connections).length > 0) {
+        try { conn.close(); } catch (e) {}
+        return;
+      }
       if (1 + Object.keys(connections).length >= maxPlayers) {
         conn.close();
         return;
@@ -10080,7 +10194,7 @@
         gunGroup.position.set(0.26, -0.22, -0.42);
         gunGroup.rotation.set(0, 0, 0);
       }
-      const _hideSpectateGun = (typeof myAgent !== 'undefined' && myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped) ||
+      const _hideSpectateGun = (typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld()) ||
         (typeof myAgent !== 'undefined' && myAgent === 'reyna' && typeof reynaState !== 'undefined' && (reynaState.leerEquipped || reynaState.dismissTimer > 0));
       gunGroup.visible = !_hideSpectateGun;
       const dBanner = document.getElementById('deathBanner');
@@ -10916,6 +11030,28 @@
     lastTrackedRound: 0,
     glideActive: false
   };
+
+  // 외부 스크립트(메인 루프 등)에서 쓸 수 있도록 안전한 훅만 노출 (상태 객체 자체는 노출하지 않음)
+  window.__abilityHooks = window.__abilityHooks || {};
+  window.__abilityHooks.jett = {
+    rangeFill() {
+      let changed = false;
+      if (jettState.cCharges !== JETT_CONFIG.C.max) { jettState.cCharges = JETT_CONFIG.C.max; changed = true; }
+      if (jettState.qCharges !== JETT_CONFIG.Q.max) { jettState.qCharges = JETT_CONFIG.Q.max; changed = true; }
+      if (jettState.eCharges !== JETT_CONFIG.E.max) { jettState.eCharges = JETT_CONFIG.E.max; changed = true; }
+      if (!jettState.bladeStormActive && jettState.ultPoints !== JETT_CONFIG.X.maxPoints) { jettState.ultPoints = JETT_CONFIG.X.maxPoints; changed = true; }
+      if (changed && typeof renderJettHUD === 'function') { try { renderJettHUD(); } catch (e) {} }
+    },
+    stripToE() {
+      try { if (jettState.bladeStormActive) deactivateBladeStorm(false); } catch (e) {}
+      jettState.cCharges = 0; jettState.qCharges = 0; jettState.ultPoints = 0;
+      jettState.eCharges = JETT_CONFIG.E.max; jettState.eKillsProgress = 0; jettState.tailwindWindowTimer = 0;
+      jettState.bladeStormActive = false; jettState.bladeStormEquipped = false; jettState.knivesRemaining = 0;
+      jettState.roundPurchasedC = 0; jettState.roundPurchasedQ = 0;
+      try { renderJettHUD(); } catch (e) {}
+    }
+  };
+  window.__jettBladeHeld = function () { return !!(jettState.bladeStormActive && jettState.bladeStormEquipped); };
 
   function isJettSkillLockedInPrep(slotKey) {
     const isPrep = (typeof currentMap !== 'undefined' && currentMap === 'brawl' &&
@@ -12145,6 +12281,25 @@
     lastTrackedKills: 0,
     lastTrackedRound: 0,
     lastTrackedHp: 100
+  };
+
+  window.__abilityHooks = window.__abilityHooks || {};
+  window.__abilityHooks.phoenix = {
+    rangeFill() {
+      let changed = false;
+      if (phoenixState.cCharges !== PHOENIX_CONFIG.C.max) { phoenixState.cCharges = PHOENIX_CONFIG.C.max; changed = true; }
+      if (phoenixState.qCharges !== PHOENIX_CONFIG.Q.max) { phoenixState.qCharges = PHOENIX_CONFIG.Q.max; changed = true; }
+      if (phoenixState.eCharges !== PHOENIX_CONFIG.E.max) { phoenixState.eCharges = PHOENIX_CONFIG.E.max; changed = true; }
+      if (!phoenixState.runItBackActive && phoenixState.ultPoints !== PHOENIX_CONFIG.X.maxPoints) { phoenixState.ultPoints = PHOENIX_CONFIG.X.maxPoints; changed = true; }
+      if (changed && typeof renderPhoenixHUD === 'function') { try { renderPhoenixHUD(); } catch (e) {} }
+    },
+    stripToE() {
+      phoenixState.cCharges = 0; phoenixState.qCharges = 0; phoenixState.ultPoints = 0;
+      phoenixState.eCharges = 1; phoenixState.eKillsProgress = 0;
+      phoenixState.runItBackActive = false; phoenixState.runItBackTimer = 0;
+      phoenixState.roundPurchasedC = 0; phoenixState.roundPurchasedQ = 0; phoenixState.roundPurchasedE = 0;
+      try { renderPhoenixHUD(); } catch (e) {}
+    }
   };
 
   const activeBlazeWalls = [];
@@ -13625,6 +13780,19 @@
     leers: []
   };
 
+  window.__abilityHooks = window.__abilityHooks || {};
+  window.__abilityHooks.reyna = {
+    rangeFill() {
+      reynaState.cCharges = REYNA_CONFIG.C.maxCharges;
+      reynaState.qeCharges = REYNA_CONFIG.QE.maxCharges;
+      if (!reynaState.empressActive) reynaState.ultPoints = REYNA_CONFIG.X.maxPoints;
+    },
+    stripToE() {
+      reynaState.cCharges = 0; reynaState.qeCharges = 1; reynaState.ultPoints = 0;
+      reynaState.empressActive = false;
+    }
+  };
+
   function createReynaEyeOrbMesh(scale = 1.0) {
     const eyeGroup = new THREE.Group();
     const eyeball = new THREE.Mesh(
@@ -14036,6 +14204,22 @@
     lightningBeams: []
   };
 
+  window.__abilityHooks = window.__abilityHooks || {};
+  window.__abilityHooks.neon = {
+    rangeFill() {
+      neonState.cCharges = NEON_CONFIG.C.maxCharges;
+      neonState.qCharges = NEON_CONFIG.Q.maxCharges;
+      if (!neonState.overdriveActive) neonState.ultPoints = NEON_CONFIG.X.maxPoints;
+      neonState.battery = 100;
+      neonState.slidesRemaining = 1;
+    },
+    stripToE() {
+      neonState.cCharges = 0; neonState.qCharges = 0; neonState.ultPoints = 0;
+      neonState.overdriveActive = false; neonState.highGearActive = false;
+      neonState.battery = 100; neonState.slidesRemaining = 1; neonState.slideKillsTracker = 0;
+    }
+  };
+
   const concussOverlay = document.createElement('div');
   concussOverlay.id = 'neonConcussOverlay';
   concussOverlay.style.cssText = 'position:fixed; inset:0; pointer-events:none; z-index:901; display:none; backdrop-filter:blur(4px); background:radial-gradient(circle at center, transparent 35%, rgba(148,163,184,0.55) 75%, rgba(15,23,42,0.85) 100%);';
@@ -14130,8 +14314,34 @@
     origin.y = Math.max(0, origin.y - 1.8);
 
     [-2.4, 2.4].forEach(offset => {
-      const wallGeo = new THREE.PlaneGeometry(34, 3.8);
-      const wallMat = new THREE.MeshBasicMaterial({ color: 0x0369a1, transparent: false, opacity: 1.0, side: THREE.DoubleSide });
+      const wallGeo = new THREE.PlaneGeometry(34, 3.8, 1, 1);
+      const wallMat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        uniforms: { uTime: { value: performance.now() * 0.001 } },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: [
+          'varying vec2 vUv; uniform float uTime;',
+          'float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+          'float noise(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);',
+          '  return mix(mix(hash(i), hash(i+vec2(1.0,0.0)), f.x), mix(hash(i+vec2(0.0,1.0)), hash(i+vec2(1.0,1.0)), f.x), f.y); }',
+          'float fbm(vec2 p){ float v = 0.0; float a = 0.5; for(int i=0;i<4;i++){ v += a*noise(p); p *= 2.0; a *= 0.5; } return v; }',
+          'void main(){',
+          '  float h = vUv.y;',
+          '  vec2 p = vec2(vUv.x * 16.0, h * 2.4 - uTime * 1.9);',
+          '  float n = fbm(p + vec2(uTime * 0.25, 0.0));',
+          '  float ragged = h + (n - 0.5) * 0.55;',
+          '  float body = 1.0 - smoothstep(0.42, 0.82, ragged);',
+          '  float alpha = clamp(body, 0.0, 1.0) * 0.96;',
+          '  vec3 base = vec3(0.01, 0.30, 0.72);',
+          '  vec3 mid  = vec3(0.13, 0.83, 0.95);',
+          '  vec3 tip  = vec3(1.0, 0.87, 0.25);',
+          '  vec3 col = mix(base, mid, smoothstep(0.05, 0.5, ragged));',
+          '  col = mix(col, tip, smoothstep(0.45, 0.78, ragged));',
+          '  col += vec3(0.10, 0.18, 0.25) * (1.0 - h) * n;',
+          '  gl_FragColor = vec4(col, alpha);',
+          '}'
+        ].join('\n')
+      });
       const wallMesh = new THREE.Mesh(wallGeo, wallMat);
       wallMesh.position.copy(origin).addScaledVector(right, offset).addScaledVector(forward, 18);
       wallMesh.position.y += 1.9;
@@ -14168,9 +14378,11 @@
     neonState.relayBolts.push({
       mesh: orb,
       vel: dir.multiplyScalar(76),
-      bounced: false
+      bounced: false,
+      fuse: 1.2,        // 던진 지 1.2초 뒤 폭발
+      stuck: false
     });
-    showSkillNotice('릴레이 볼트(Q) 투척! 반사 후 반경 5.5m 대형 진탕 폭발', '#22d3ee');
+    showSkillNotice('릴레이 볼트(Q) 투척! 1.2초 뒤 폭발해 뇌진탕', '#22d3ee');
   }
 
   // 반경 5.5m(지름 11m) 대형 진탕 장판 + 바닥 번개 균열 + 푸른·분홍 전기 파동 벽 테두리
@@ -14245,6 +14457,23 @@
     scene.add(warnRing, warnDisc);
 
     return { pos: new THREE.Vector3(pt.x, floorY, pt.z), radius: zoneRadius, warnRing, warnDisc };
+  }
+
+  // 즉시 폭발: 지정 위치에 대형 뇌진탕 장판을 만들고 범위 안 적에게 뇌진탕 부여
+  function explodeRelayBoltAt(pos, zoneRadius = 5.5) {
+    const floorY = (typeof getFloorHeightAt === 'function' && currentMap === 'brawl') ? getFloorHeightAt(pos.x, pos.z, pos.y) : 0;
+    const center = new THREE.Vector3(pos.x, floorY, pos.z);
+    const zoneMesh = createLargeRelayConcussZoneMesh(zoneRadius);
+    zoneMesh.position.copy(center);
+    scene.add(zoneMesh);
+    neonState.concussZones.push({ mesh: zoneMesh, pos: center.clone(), radius: zoneRadius, life: 3.4, maxLife: 3.4 });
+    const hit = (b) => {
+      if (!b || !b.userData || b.userData.dead) return;
+      if (Math.hypot(b.position.x - center.x, b.position.z - center.z) <= zoneRadius) b.userData.concussedTimer = 3.8;
+    };
+    if (typeof brawlBots !== 'undefined') brawlBots.forEach(b => { if (b.userData && b.userData.team !== myTeam) hit(b); });
+    if (typeof window.practiceBots !== 'undefined' && Array.isArray(window.practiceBots)) window.practiceBots.forEach(hit);
+    try { if (typeof playBeep === 'function') playBeep(); } catch (e) {}
   }
 
   function triggerRelayBoltZones(spot1Pos, spot2PosOrDir) {
@@ -14595,7 +14824,11 @@
       document.getElementById('rnHudX').innerHTML = `<div style="color:#f0abfc;font-weight:bold;">[X] 여제${lockTag}</div><div>${reynaState.empressActive ? 'ACTIVE ∞' : reynaState.ultPoints + ' / 6'}</div>`;
     } else if (isNeon) {
       document.getElementById('neonBatteryWrap').style.display = 'block';
-      document.getElementById('neonBatteryFill').style.width = `${Math.round(neonState.battery)}%`;
+      const _nbFill = document.getElementById('neonBatteryFill');
+      _nbFill.style.width = `${Math.round(neonState.battery)}%`;
+      _nbFill.style.background = (neonState.slidesRemaining > 0)
+        ? 'linear-gradient(90deg,#0284c7 0%,#22d3ee 55%,#fde047 80%,#fffbeb 100%)'   // 슬라이딩 보유: 노랑 섞인 바
+        : 'linear-gradient(90deg,#0284c7,#22d3ee)';                                   // 슬라이딩 사용 후: 기존 청색 바
       document.getElementById('rnShopCTitle').innerText = `C 추월 차선 (${neonState.cCharges}/1)`;
       document.getElementById('rnShopCDesc').innerText = '300 ¤ · 전방 양옆 푸른 전기 장벽 2줄';
       document.getElementById('rnShopQTitle').innerText = `Q 릴레이 볼트 (${neonState.qCharges}/1)`;
@@ -14901,6 +15134,13 @@
     if (neonState.slideTimer > 0 && !isDead && typeof origMoveWithCollision === 'function') {
       neonState.slideTimer -= dt;
       origMoveWithCollision(neonState.slideDir.x * 24 * dt, neonState.slideDir.z * 24 * dt);
+      if (neonState.slideTimer <= 0) {
+        // 슬라이딩이 끝나면 곧바로 총을 든 상태로 복귀 (달리기 팔 숨김 + 고속 기어 해제)
+        neonState.slideTimer = 0;
+        neonState.highGearActive = false;
+        if (window._neonSprintArmsData && window._neonSprintArmsData.armsGrp) window._neonSprintArmsData.armsGrp.visible = false;
+        if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+      }
     }
 
     // 네온 1인칭 양팔 달리기 모델 초기화
@@ -14941,7 +15181,7 @@
     const sprintData = window._neonSprintArmsData;
     const odHandData = ensureNeonOverdriveHandViewModel();
     const isNeonOverdrive = (myAgent === 'neon' && neonState.overdriveActive && !isDead);
-    const isNeonSprinting = (myAgent === 'neon' && neonState.highGearActive && !isDead && !isNeonOverdrive);
+    const isNeonSprinting = (myAgent === 'neon' && neonState.highGearActive && neonState.slideTimer <= 0 && !isDead && !isNeonOverdrive);
 
     // 1인칭 뷰모델 전환: 오버드라이브 손끝 번개 > 고속 기어 양팔 질주 > 기본 총기
     if (isNeonOverdrive) {
@@ -14983,7 +15223,7 @@
       if (odHandData && odHandData.handGrp.visible) odHandData.handGrp.visible = false;
       if (sprintData && sprintData.armsGrp.visible) sprintData.armsGrp.visible = false;
       const _hideGunInAgentLoop = (myAgent === 'reyna' && (reynaState.leerEquipped || reynaState.dismissTimer > 0)) ||
-        (myAgent === 'jett' && typeof jettState !== 'undefined' && jettState.bladeStormActive && jettState.bladeStormEquipped);
+        (typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld());
       if (typeof gunGroup !== 'undefined' && !_hideGunInAgentLoop) {
         gunGroup.visible = true;
       }
@@ -14992,6 +15232,8 @@
     // 추월 차선 전기 장벽 수명
     for (let i = neonState.fastLanes.length - 1; i >= 0; i--) {
       neonState.fastLanes[i].life -= dt;
+      const _fm = neonState.fastLanes[i].mesh.material;
+      if (_fm && _fm.uniforms && _fm.uniforms.uTime) _fm.uniforms.uTime.value = now * 0.001;
       if (neonState.fastLanes[i].life <= 0) {
         scene.remove(neonState.fastLanes[i].mesh);
         neonState.fastLanes.splice(i, 1);
@@ -15001,6 +15243,18 @@
     // 릴레이 볼트 투사체: 1차 충돌 지점에 1번 표식, 반사 후 2차 충돌 지점에 2번 표식을 남기고 1.2초 뒤 동시 폭발
     for (let i = neonState.relayBolts.length - 1; i >= 0; i--) {
       const rb = neonState.relayBolts[i];
+      rb.fuse -= dt;
+      // 폭발 직전 깜빡이며 커지는 연출
+      const _t = Math.max(0, 1.2 - rb.fuse);
+      rb.mesh.scale.setScalar(1 + _t * 0.9);
+      rb.mesh.material.color.setHex((Math.floor(_t * 14) % 2 === 0) ? 0x22d3ee : 0xfde047);
+      if (rb.fuse <= 0) {
+        explodeRelayBoltAt(rb.mesh.position, 5.5);
+        scene.remove(rb.mesh);
+        neonState.relayBolts.splice(i, 1);
+        continue;
+      }
+      if (rb.stuck) continue;
       rb.vel.y -= 5.2 * dt;
       const nextPos = rb.mesh.position.clone().addScaledVector(rb.vel, dt);
 
@@ -15024,16 +15278,15 @@
                 rb.vel.z = -rb.vel.z * 0.85;
               }
             } else {
-              triggerRelayBoltZones(rb.firstImpactPos || rb.mesh.position, { isSpot2: true, pos: rb.mesh.position.clone() });
-              scene.remove(rb.mesh);
-              neonState.relayBolts.splice(i, 1);
+              rb.stuck = true;      // 두 번째 충돌: 그 자리에 멈춰 폭발 대기
+              rb.vel.set(0, 0, 0);
             }
             break;
           }
         }
       }
 
-      if (!neonState.relayBolts[i]) continue;
+      if (!neonState.relayBolts[i] || rb.stuck) continue;
       if (!hitWall) {
         rb.mesh.position.copy(nextPos);
       } else {
@@ -15053,15 +15306,13 @@
           rb.vel.z *= 0.88;
         } else {
           rb.mesh.position.y = floorY + 0.1;
-          triggerRelayBoltZones(rb.firstImpactPos || rb.mesh.position, { isSpot2: true, pos: rb.mesh.position.clone() });
-          scene.remove(rb.mesh);
-          neonState.relayBolts.splice(i, 1);
+          rb.stuck = true;
+          rb.vel.set(0, 0, 0);
           continue;
         }
       }
 
       if (Math.abs(rb.mesh.position.x) > 260 || Math.abs(rb.mesh.position.z) > 260 || rb.mesh.position.y < -30) {
-        triggerRelayBoltZones(rb.firstImpactPos || rb.mesh.position, { isSpot2: true, pos: rb.mesh.position.clone() });
         scene.remove(rb.mesh);
         neonState.relayBolts.splice(i, 1);
       }
@@ -15406,5 +15657,35 @@
 })();
 </script>
 
+
+<script>
+(function abilityRangeAndRoundOneRules() {
+  // 사격장: 모든 요원 스킬 무료·무제한 / 사격장 → 실전 입장(1라운드): 궁극기·C·Q 제거, E만 지급
+  let prevMap = null, prevRound = null;
+  function stripAll() {
+    const hooks = window.__abilityHooks || {};
+    Object.keys(hooks).forEach(k => { try { hooks[k].stripToE(); } catch (e) {} });
+    try { if (typeof updateHUD === 'function') updateHUD(); } catch (e) {}
+  }
+  function tick() {
+    requestAnimationFrame(tick);
+    if (typeof currentMap === 'undefined') return;
+    const hooks = window.__abilityHooks || {};
+    if (currentMap === 'range') {
+      const h = (typeof myAgent !== 'undefined') ? hooks[myAgent] : null;
+      if (h && h.rangeFill) { try { h.rangeFill(); } catch (e) {} }
+    }
+    if (prevMap === 'range' && currentMap !== 'range') stripAll();
+    if (typeof roundNumber !== 'undefined') {
+      if (currentMap === 'brawl' && roundNumber === 1 && prevRound !== null && prevRound !== 1) stripAll();
+      prevRound = roundNumber;
+    }
+    prevMap = currentMap;
+    // 제트 칼날 폭풍 중에는 어떤 루프가 켜더라도 총을 숨김 유지
+    if (typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld() && typeof gunGroup !== 'undefined') gunGroup.visible = false;
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
 </body>
 </html>
