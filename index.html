@@ -7808,88 +7808,200 @@
       broadcastData({ type: 'info', nick: getMyRiotId(), team: myTeam, agentKey: myAgent });
     };
 
-    // ===== P2P 소셜 요청 헬퍼: 상대 피어에 연결 → 메시지 전송 → 응답 대기 =====
-    const peerUnavailableWaiters = {}; // peerId -> [callback]
-    function dispatchPeerUnavailable(err) {
-      const msg = String((err && err.message) || err || '');
-      const m = msg.match(/mv-acct-[0-9a-f]+/i);
-      const keys = m ? [m[0]] : Object.keys(peerUnavailableWaiters);
-      keys.forEach(k => {
-        const list = peerUnavailableWaiters[k];
-        if (list && list.length) list.splice(0).forEach(fn => { try { fn(); } catch (e) {} });
+    // ==========================================================
+    // 소셜 엔진: 공개 릴레이(ntfy.sh)로 접속상태/초대를 주고받음 (WebRTC 불필요)
+    // ==========================================================
+    const NTFY_BASE = 'https://ntfy.sh/';
+    let ntfyES = null, ntfyKey = '', ntfyRestartTimer = null;
+    let hbTimer = null, uiTimer = null, serverSkewMs = 0;
+    const seenMsgIds = new Set();
+    const friendSeen = {};       // canon(friend) -> { srvMs, status, offline }
+    const pendingInvites = {};   // canon(inviter) -> invite
+    let lastFriendSig = '';
+
+    function cyrb53(str, seed) {
+      let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+      for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+    }
+    function canonId(riotId) {
+      const t = String(riotId || '').trim().normalize('NFC');
+      const i = t.lastIndexOf('#');
+      if (i < 0) return t.toLowerCase();
+      return t.slice(0, i).trim().toLowerCase() + '#' + t.slice(i + 1).trim().toUpperCase();
+    }
+    function socialTopic(kind, riotId) {
+      const c = canonId(riotId);
+      return 'mvalo3d-' + kind + '-' + cyrb53(c, 11).toString(36) + cyrb53(c, 29).toString(36);
+    }
+    function nowSrvMs() { return Date.now() + serverSkewMs; }
+
+    function ntfyPublish(topic, obj) {
+      return fetch(NTFY_BASE + topic, { method: 'POST', body: JSON.stringify(obj) })
+        .then(r => r.ok ? r.json().catch(() => ({})) : null)
+        .then(j => {
+          if (j && j.time) serverSkewMs = j.time * 1000 - Date.now();
+          return !!j;
+        })
+        .catch(() => false);
+    }
+
+    function publishHeartbeat() {
+      if (!userAccount) return;
+      ntfyPublish(socialTopic('p', getMyRiotId()), {
+        type: 'hb', riotId: getMyRiotId(), status: getMyCurrentStatus()
+      }).then(ok => {
+        if (ok) setSocialBadge('● 온라인', '#10b981');
+        else setSocialBadge('● 소셜 서버 연결 실패 (재시도 중)', '#ef4444');
       });
     }
 
-    function socialRequest(riotId, kind, payload, expectType, timeoutMs) {
-      return new Promise((resolve) => {
-        if (!peer || !peer.open) return resolve({ ok: false, reason: 'nopeer' });
-        const targetPeer = riotIdToPeerId(riotId);
-        let finished = false, conn = null, timer = null;
-        const onUnavail = () => finish({ ok: false, reason: 'offline' });
-        function finish(res) {
-          if (finished) return;
-          finished = true;
-          clearTimeout(timer);
-          const arr = peerUnavailableWaiters[targetPeer];
-          if (arr) { const i = arr.indexOf(onUnavail); if (i >= 0) arr.splice(i, 1); }
-          if (conn) setTimeout(() => { try { conn.close(); } catch (e) {} }, 300);
-          resolve(res);
+    function friendStatusOf(fId) {
+      if (Object.values(remotePlayers).some(rp => canonId(rp.nick) === canonId(fId))) return 'lobby';
+      const f = friendSeen[canonId(fId)];
+      if (!f || f.offline) return 'offline';
+      if (nowSrvMs() - f.srvMs > 55000) return 'offline';
+      return f.status || 'online';
+    }
+
+    function setNickInBox(text) {
+      const box = document.getElementById('roomStatusBox');
+      if (box) box.innerText = text;
+    }
+
+    function handleSocialMessage(m, d) {
+      if (!d || typeof d !== 'object') return;
+      const myInbox = socialTopic('i', getMyRiotId());
+      if (m.topic === myInbox) {
+        if (d.type === 'partyInvite') {
+          const ageMs = nowSrvMs() - (m.time || 0) * 1000;
+          if (ageMs > 150000) return;
+          if (!d.fromRiotId || canonId(d.fromRiotId) === canonId(getMyRiotId())) return;
+          pendingInvites[canonId(d.fromRiotId)] = Object.assign({}, d, { recvAt: Date.now() });
+          try { if (typeof playBeep === 'function') playBeep(); } catch (e) {}
+          renderFriendListUI();
+        } else if (d.type === 'inviteAccept') {
+          setNickInBox(`${d.fromRiotId} 님이 파티 초대를 수락했습니다!`);
+        } else if (d.type === 'inviteDecline') {
+          setNickInBox(`${d.fromRiotId} 님이 파티 초대를 거절했습니다.`);
         }
-        (peerUnavailableWaiters[targetPeer] = peerUnavailableWaiters[targetPeer] || []).push(onUnavail);
-        timer = setTimeout(() => finish({ ok: false, reason: 'timeout' }), timeoutMs || 10000);
-        try {
-          conn = peer.connect(targetPeer, { metadata: { kind: kind }, reliable: true });
-        } catch (e) { return finish({ ok: false, reason: 'error' }); }
-        conn.on('open', () => { try { conn.send(payload); } catch (e) { finish({ ok: false, reason: 'error' }); } });
-        conn.on('data', (d) => { if (d && d.type === expectType) finish({ ok: true, data: d }); });
-        conn.on('error', () => finish({ ok: false, reason: 'error' }));
-        conn.on('close', () => finish({ ok: false, reason: 'closed' }));
-      });
+        return;
+      }
+      if (d.type === 'hb' && userAccount) {
+        userAccount.friends.forEach(fId => {
+          if (socialTopic('p', fId) !== m.topic) return;
+          const key = canonId(fId);
+          const srvMs = (m.time || 0) * 1000;
+          const prev = friendSeen[key];
+          if (prev && prev.srvMs > srvMs) return;
+          friendSeen[key] = { srvMs: srvMs, status: d.status || 'online', offline: !!d.offline };
+        });
+        renderFriendListUI();
+      }
     }
 
-    let addFriendBusy = false;
-    window.addFriendByTag = async function() {
-      if (!userAccount || addFriendBusy) return;
+    function startSocialStream() {
+      if (!userAccount) return;
+      const topics = [socialTopic('i', getMyRiotId())];
+      userAccount.friends.forEach(f => topics.push(socialTopic('p', f)));
+      const key = topics.join(',');
+      if (ntfyES && key === ntfyKey && ntfyES.readyState !== 2) return;
+      stopSocialStream();
+      ntfyKey = key;
+      let es;
+      try {
+        es = new EventSource(NTFY_BASE + key + '/sse?since=2m');
+      } catch (e) {
+        ntfyRestartTimer = setTimeout(startSocialStream, 5000);
+        return;
+      }
+      ntfyES = es;
+      es.onmessage = (ev) => {
+        let m;
+        try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (!m || m.event !== 'message' || !m.id || seenMsgIds.has(m.id)) return;
+        seenMsgIds.add(m.id);
+        if (seenMsgIds.size > 2000) seenMsgIds.clear();
+        let d;
+        try { d = JSON.parse(m.message); } catch (e) { return; }
+        handleSocialMessage(m, d);
+      };
+      es.onerror = () => {
+        if (es.readyState === 2 && ntfyES === es) {
+          ntfyRestartTimer = setTimeout(() => { ntfyKey = ''; startSocialStream(); }, 4000);
+        }
+      };
+    }
+
+    function stopSocialStream() {
+      if (ntfyRestartTimer) { clearTimeout(ntfyRestartTimer); ntfyRestartTimer = null; }
+      if (ntfyES) { try { ntfyES.close(); } catch (e) {} ntfyES = null; }
+      ntfyKey = '';
+    }
+
+    function startSocialEngine() {
+      if (!userAccount) return;
+      Object.keys(pendingInvites).forEach(k => delete pendingInvites[k]);
+      Object.keys(friendSeen).forEach(k => delete friendSeen[k]);
+      startSocialStream();
+      publishHeartbeat();
+      if (hbTimer) clearInterval(hbTimer);
+      hbTimer = setInterval(publishHeartbeat, 15000);
+      if (uiTimer) clearInterval(uiTimer);
+      uiTimer = setInterval(() => {
+        if (!userAccount) return;
+        const now = Date.now();
+        Object.keys(pendingInvites).forEach(k => {
+          if (now - pendingInvites[k].recvAt > 150000) delete pendingInvites[k];
+        });
+        const sig = userAccount.friends.map(f => friendStatusOf(f)).join(',') + '|' + Object.keys(pendingInvites).join(',');
+        if (sig !== lastFriendSig) renderFriendListUI();
+      }, 3000);
+    }
+
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (userAccount && navigator.sendBeacon) {
+          navigator.sendBeacon(NTFY_BASE + socialTopic('p', getMyRiotId()), JSON.stringify({ type: 'hb', riotId: getMyRiotId(), offline: true }));
+        }
+      } catch (e) {}
+    });
+
+    // ===== 친구 추가: 닉네임#태그 형식만 맞으면 무조건 추가 =====
+    window.addFriendByTag = function() {
+      if (!userAccount) return;
       const inputEl = document.getElementById('addFriendInput');
       const raw = (inputEl.value || '').trim();
-      if (!raw.includes('#')) {
+      const idx = raw.lastIndexOf('#');
+      if (idx < 0) {
         alert('상대방의 "닉네임#태그" 형식으로 입력해주세요. (예: 플레이어#1234)');
         return;
       }
-      const idx = raw.lastIndexOf('#');
       const fNick = raw.slice(0, idx).trim();
       const fTag = raw.slice(idx + 1).trim().toUpperCase();
       if (!fNick || !fTag) { alert('올바른 닉네임#태그를 입력해주세요.'); return; }
       const formatted = `${fNick}#${fTag}`;
-      if (formatted === getMyRiotId()) { alert('자기 자신은 친구로 추가할 수 없습니다.'); return; }
-      if (userAccount.friends.includes(formatted)) { alert('이미 친구 목록에 있는 계정입니다.'); return; }
-      if (!peer || !peer.open) { alert('네트워크 연결 중입니다. 우측 상단이 "● 온라인"이 된 뒤 다시 시도해주세요.'); return; }
-
-      addFriendBusy = true;
-      const statusBox = document.getElementById('roomStatusBox');
-      if (statusBox) statusBox.innerText = `${formatted} 계정을 확인하는 중...`;
-      const r = await socialRequest(formatted, 'presence',
-        { type: 'presencePing', fromRiotId: getMyRiotId(), status: getMyCurrentStatus(), verify: true },
-        'presencePong', 10000);
-      addFriendBusy = false;
-
-      if (!r.ok || !r.data || r.data.riotId !== formatted) {
-        if (statusBox) statusBox.innerText = `${formatted} 계정을 찾지 못했습니다.`;
-        alert(`"${formatted}" 계정을 확인하지 못했어요.\n\n- 존재하지 않는 닉네임#태그이거나\n- 상대가 지금 접속 중이 아니거나 (서버 없이 접속 중인 계정만 확인 가능)\n- 상대가 구버전 파일로 접속 중일 수 있어요.\n\n상대가 접속한 상태에서 정확한 닉네임#태그로 다시 추가해주세요.`);
-        return;
-      }
+      if (canonId(formatted) === canonId(getMyRiotId())) { alert('자기 자신은 친구로 추가할 수 없습니다.'); return; }
+      if (userAccount.friends.some(f => canonId(f) === canonId(formatted))) { alert('이미 친구 목록에 있는 계정입니다.'); return; }
       userAccount.friends.push(formatted);
       saveUserAccount();
-      friendPresenceMap[formatted] = { status: r.data.status || 'online', peerId: riotIdToPeerId(formatted) };
       inputEl.value = '';
-      if (statusBox) statusBox.innerText = `${formatted} 님을 친구로 추가했습니다!`;
+      setNickInBox(`${formatted} 님을 친구로 추가했습니다!`);
       renderFriendListUI();
+      startSocialStream();
     };
 
     window.removeFriendByTag = function(targetTag) {
       if (!userAccount) return;
       userAccount.friends = userAccount.friends.filter(f => f !== targetTag);
       saveUserAccount();
+      startSocialStream();
       renderFriendListUI();
     };
 
@@ -7899,31 +8011,7 @@
       return 'online';
     }
 
-    let probeRunning = false;
-    async function probeAllFriendsPresence() {
-      if (!userAccount || !peer || !peer.open || probeRunning) return;
-      probeRunning = true;
-      try {
-        await Promise.all(userAccount.friends.map(async (fId) => {
-          if (Object.values(remotePlayers).some(rp => rp.nick === fId)) {
-            friendPresenceMap[fId] = { status: 'lobby', peerId: riotIdToPeerId(fId) };
-            return;
-          }
-          const ping = { type: 'presencePing', fromRiotId: getMyRiotId(), status: getMyCurrentStatus() };
-          let r = await socialRequest(fId, 'presence', ping, 'presencePong', 9000);
-          if (!r.ok && r.reason !== 'offline' && r.reason !== 'nopeer') {
-            r = await socialRequest(fId, 'presence', ping, 'presencePong', 9000); // 연결 지연 시 1회 재시도
-          }
-          friendPresenceMap[fId] = {
-            status: (r.ok && r.data) ? (r.data.status || 'online') : 'offline',
-            peerId: riotIdToPeerId(fId)
-          };
-        }));
-      } finally {
-        probeRunning = false;
-        renderFriendListUI();
-      }
-    }
+    function probeAllFriendsPresence() { startSocialStream(); }
 
     window.inviteFriendToParty = async function(friendRiotId) {
       if (!peer || !peer.open) {
@@ -7944,31 +8032,26 @@
         alert(`현재 설정(${sizeEl.value}v${sizeEl.value})의 최대 인원(${maxPlayers}명)이 가득 찼습니다.`);
         return;
       }
-      const statusBox = document.getElementById('roomStatusBox');
-      statusBox.innerText = `${friendRiotId} 님에게 파티 초대를 전송하는 중...`;
-      const r = await socialRequest(friendRiotId, 'invite', {
+      setNickInBox(`${friendRiotId} 님에게 파티 초대를 전송하는 중...`);
+      const ok = await ntfyPublish(socialTopic('i', friendRiotId), {
         type: 'partyInvite',
         fromRiotId: getMyRiotId(),
         hostPeerId: myPeerId,
         teamSize: sizeEl ? sizeEl.value : '5',
         fillBots: document.getElementById('lobbyFillBotsCheck').checked
-      }, 'inviteAck', 10000);
-
-      if (r.ok) {
-        statusBox.innerText = `${friendRiotId} 님에게 초대가 전달되었습니다. 수락을 기다리는 중...`;
-        friendPresenceMap[friendRiotId] = { status: 'online', peerId: riotIdToPeerId(friendRiotId) };
-      } else {
-        statusBox.innerText = `${friendRiotId} 님에게 초대를 전달하지 못했습니다. (오프라인이거나 연결 실패)`;
-        friendPresenceMap[friendRiotId] = { status: 'offline', peerId: riotIdToPeerId(friendRiotId) };
-      }
-      renderFriendListUI();
+      });
+      setNickInBox(ok
+        ? `${friendRiotId} 님에게 초대를 보냈습니다! 상대가 친구 목록에서 수락하면 합류합니다.`
+        : `초대 전송에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.`);
     };
 
-    window.acceptPartyInvite = function() {
-      document.getElementById('inviteToastModal').style.display = 'none';
-      if (!pendingInvite || !peer || !peer.open) return;
-      const inv = pendingInvite;
-      pendingInvite = null;
+    window.acceptInviteFrom = function(encKey) {
+      const key = decodeURIComponent(encKey);
+      const inv = pendingInvites[key];
+      if (!inv) return;
+      delete pendingInvites[key];
+      renderFriendListUI();
+      if (!peer || !peer.open) { alert('네트워크 연결 중입니다. 잠시 후 다시 눌러주세요.'); pendingInvites[key] = inv; renderFriendListUI(); return; }
 
       Object.values(connections).forEach(c => { try { c.close(); } catch (e) {} });
       Object.keys(connections).forEach(k => delete connections[k]);
@@ -7976,46 +8059,91 @@
 
       isHost = false;
       partyHostId = inv.hostPeerId;
-      const conn = peer.connect(inv.hostPeerId, { metadata: { kind: 'party' } });
+      const conn = peer.connect(inv.hostPeerId, { metadata: { kind: 'party' }, reliable: true });
       setupConnection(conn);
-      document.getElementById('roomStatusBox').innerText = `${inv.fromRiotId} 님의 파티 로비에 합류했습니다!`;
+      setNickInBox(`${inv.fromRiotId} 님의 파티에 합류하는 중...`);
       updateLeaveRoomButtonsVisibility();
       renderLobbySlotsUI();
+      ntfyPublish(socialTopic('i', inv.fromRiotId), { type: 'inviteAccept', fromRiotId: getMyRiotId() });
+      setTimeout(() => {
+        if (!isHost && Object.keys(connections).length === 0) {
+          setNickInBox(`${inv.fromRiotId} 님의 파티에 연결하지 못했습니다. (파티장이 나갔거나 연결 불가) 다시 초대를 받아주세요.`);
+        } else {
+          setNickInBox(`${inv.fromRiotId} 님의 파티 로비에 합류했습니다!`);
+        }
+      }, 10000);
     };
 
-    window.declinePartyInvite = function() {
-      pendingInvite = null;
-      document.getElementById('inviteToastModal').style.display = 'none';
+    window.declineInviteFrom = function(encKey) {
+      const key = decodeURIComponent(encKey);
+      const inv = pendingInvites[key];
+      if (!inv) return;
+      delete pendingInvites[key];
+      renderFriendListUI();
+      ntfyPublish(socialTopic('i', inv.fromRiotId), { type: 'inviteDecline', fromRiotId: getMyRiotId() });
     };
+
+    // 이전 팝업 버튼 호환용 (더 이상 팝업은 표시되지 않음)
+    window.acceptPartyInvite = function() {};
+    window.declinePartyInvite = function() { const t = document.getElementById('inviteToastModal'); if (t) t.style.display = 'none'; };
 
     function renderFriendListUI() {
       const box = document.getElementById('friendListContainer');
       if (!box || !userAccount) return;
-      if (userAccount.friends.length === 0) {
+      const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const inviteRow = (inv) => {
+        const k = encodeURIComponent(canonId(inv.fromRiotId));
+        return `<div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:7px; padding:6px 8px; background:rgba(0,255,204,0.10); border:1px solid rgba(0,255,204,0.55); border-radius:4px;">
+            <span style="font-size:11px; color:#00ffcc; font-weight:bold;">🎮 파티 초대 도착 (${esc(inv.teamSize || 5)}v${esc(inv.teamSize || 5)})</span>
+            <span style="display:flex; align-items:center; gap:4px;">
+              <button class="btn-primary" style="padding:4px 9px; font-size:11px;" onclick="acceptInviteFrom('${k}')" title="이 친구의 파티에 참가">초대 받기</button>
+              <button onclick="declineInviteFrom('${k}')" title="초대 거절" style="background:transparent; border:1px solid #64748b; border-radius:3px; color:#ff4655; cursor:pointer; font-size:12px; padding:2px 7px;">✕</button>
+            </span>
+          </div>`;
+      };
+      const shown = new Set();
+      let html = '';
+      // 친구 목록에 없는 사람의 초대도 최상단에 표시
+      Object.keys(pendingInvites).forEach(k => {
+        const isFriend = userAccount.friends.some(f => canonId(f) === k);
+        if (isFriend) return;
+        const inv = pendingInvites[k];
+        html += `<div class="friend-card" style="flex-direction:column; align-items:stretch;">
+          <div style="font-size:13px; font-weight:bold; color:#ece8e1;">${esc(inv.fromRiotId)}</div>
+          ${inviteRow(inv)}</div>`;
+      });
+      if (userAccount.friends.length === 0 && !html) {
         box.innerHTML = '<div style="font-size:12px; color:#64748b; text-align:center; padding:18px 6px;">추가된 친구가 없습니다.<br>상단에 친구의 닉네임#태그를 입력하세요.</div>';
+        lastFriendSig = '|';
         return;
       }
-      box.innerHTML = userAccount.friends.map(fId => {
-        const inMyParty = Object.values(remotePlayers).some(rp => rp.nick === fId);
-        const info = friendPresenceMap[fId] || { status: 'offline' };
-        const st = inMyParty ? 'lobby' : info.status;
+      html += userAccount.friends.map(fId => {
+        const inMyParty = Object.values(remotePlayers).some(rp => canonId(rp.nick) === canonId(fId));
+        const st = friendStatusOf(fId);
         const stLabel = st === 'ingame' ? '게임중' : (st === 'lobby' ? '대기중(파티)' : (st === 'online' ? '온라인' : '오프라인'));
         const dotCls = st === 'ingame' ? 'st-ingame' : (st === 'lobby' ? 'st-lobby' : (st === 'online' ? 'st-online' : 'st-offline'));
+        const enc = encodeURIComponent(fId);
         const actionHtml = inMyParty
           ? '<span style="font-size:11px; color:#00ffcc; font-weight:bold;">파티 합류됨</span>'
-          : `<button class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="inviteFriendToParty('${fId}')">파티 초대</button>`;
+          : `<button class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="inviteFriendToParty(decodeURIComponent('${enc}'))">파티 초대</button>`;
+        const inv = pendingInvites[canonId(fId)];
         return `
-          <div class="friend-card">
-            <div>
-              <div style="font-size:13px; font-weight:bold; color:#ece8e1;">${fId}</div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:2px;"><span class="status-dot ${dotCls}"></span>${stLabel}</div>
+          <div class="friend-card" style="flex-direction:column; align-items:stretch;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:13px; font-weight:bold; color:#ece8e1;">${esc(fId)}</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:2px;"><span class="status-dot ${dotCls}"></span>${stLabel}</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:4px;">
+                ${actionHtml}
+                <button onclick="removeFriendByTag(decodeURIComponent('${enc}'))" title="친구 삭제" style="background:transparent; border:none; color:#64748b; cursor:pointer; font-size:12px;">✕</button>
+              </div>
             </div>
-            <div style="display:flex; align-items:center; gap:4px;">
-              ${actionHtml}
-              <button onclick="removeFriendByTag('${fId}')" title="친구 삭제" style="background:transparent; border:none; color:#64748b; cursor:pointer; font-size:12px;">✕</button>
-            </div>
+            ${inv ? inviteRow(inv) : ''}
           </div>`;
       }).join('');
+      box.innerHTML = html;
+      lastFriendSig = userAccount.friends.map(f => friendStatusOf(f)).join(',') + '|' + Object.keys(pendingInvites).join(',');
     }
 
     function renderRecentMatchesUI() {
@@ -8524,10 +8652,7 @@
       if (overlay) overlay.style.display = 'flex';
     };
 
-    let peerRetryCount = 0;
     let peerRetryTimer = null;
-    let presenceTimer = null;
-    let inviteStatusHandler = null;
 
     function setSocialBadge(text, color) {
       const badge = document.getElementById('socialNetworkBadge');
@@ -8535,16 +8660,13 @@
     }
 
     function initAccountPeerNode() {
-      if (typeof Peer === 'undefined' || !userAccount) {
-        setSocialBadge('● 네트워크 라이브러리 없음', '#ef4444');
-        return;
-      }
+      if (!userAccount) return;
+      startSocialEngine();   // 접속상태/초대 (릴레이)
+      if (typeof Peer === 'undefined') return; // 파티 합류용 P2P 라이브러리
       if (peerRetryTimer) { clearTimeout(peerRetryTimer); peerRetryTimer = null; }
-      if (peer) {
-        try { peer.destroy(); } catch (e) {}
-      }
-      const fixedId = riotIdToPeerId(getMyRiotId());
-      const thisPeer = new Peer(fixedId, {
+      if (peer) { try { peer.destroy(); } catch (e) {} }
+      const randomId = 'mvp-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      const thisPeer = new Peer(randomId, {
         debug: 1,
         config: {
           iceServers: [
@@ -8558,46 +8680,22 @@
         }
       });
       peer = thisPeer;
-      setSocialBadge('● 연결 중...', '#ffcc00');
 
       thisPeer.on('open', (id) => {
         if (peer !== thisPeer) return;
-        peerRetryCount = 0;
         myPeerId = id;
-        setSocialBadge('● 온라인', '#10b981');
-        probeAllFriendsPresence();
-        if (presenceTimer) clearInterval(presenceTimer);
-        presenceTimer = setInterval(() => {
-          if (peer === thisPeer && thisPeer.open) probeAllFriendsPresence();
-        }, 12000);
       });
-
       thisPeer.on('disconnected', () => {
         if (peer !== thisPeer || thisPeer.destroyed) return;
-        setSocialBadge('● 재연결 중...', '#ffcc00');
         try { thisPeer.reconnect(); } catch (e) {}
       });
-
       thisPeer.on('error', (err) => {
         if (peer !== thisPeer) return;
         const type = err && err.type;
-        if (type === 'unavailable-id') {
-          // 새로고침 직후 서버에 이전 세션이 남아 있는 경우: 고정 ID로 계속 재시도해야 초대가 도착함
-          peerRetryCount++;
-          setSocialBadge('● 이전 접속 정리 중... (' + peerRetryCount + ')', '#ffcc00');
-          if (peerRetryCount <= 30) {
-            peerRetryTimer = setTimeout(initAccountPeerNode, 4000);
-          } else {
-            setSocialBadge('● 다른 곳에서 같은 계정으로 접속 중', '#ef4444');
-          }
-        } else if (type === 'peer-unavailable') {
-          dispatchPeerUnavailable(err);
-        } else if (type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed') {
-          setSocialBadge('● 서버 연결 실패 (재시도)', '#ef4444');
-          peerRetryTimer = setTimeout(initAccountPeerNode, 5000);
+        if (type === 'unavailable-id' || type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed') {
+          peerRetryTimer = setTimeout(initAccountPeerNode, 4000);
         }
       });
-
       thisPeer.on('connection', handleIncomingSocialConnection);
     }
 
