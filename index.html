@@ -112,6 +112,7 @@
     .history-item { font-size: 11px; padding: 5px 8px; border-radius: 4px; background: rgba(255,255,255,0.04); margin-bottom: 4px; display: flex; justify-content: space-between; }
 
     #shopModal { pointer-events: auto !important; }
+    #inviteToastModal { z-index: 3000 !important; pointer-events: auto !important; }
     .ch-modal-backdrop { pointer-events: auto !important; }
   </style>
 </head>
@@ -167,7 +168,7 @@
   </div>
 
   <!-- 친구 초대 수신 알림 팝업 -->
-  <div id="inviteToastModal" style="display:none; position:fixed; bottom:24px; right:330px; width:300px; background:#0f1923; border:2px solid #00ffcc; border-radius:8px; padding:15px; z-index:40; box-shadow:0 8px 28px rgba(0,0,0,0.85); color:white;">
+  <div id="inviteToastModal" style="display:none; position:fixed; bottom:24px; right:330px; width:300px; background:#0f1923; border:2px solid #00ffcc; border-radius:8px; padding:15px; z-index:3000; box-shadow:0 8px 28px rgba(0,0,0,0.85); color:white;">
     <div style="font-size:11px; color:#00ffcc; font-weight:bold; letter-spacing:1px;">PARTY INVITE · 파티 초대</div>
     <div id="inviteSenderText" style="font-size:15px; font-weight:bold; margin:6px 0 12px 0;">플레이어#1234 님의 로비 초대</div>
     <div class="row" style="justify-content:flex-end;">
@@ -7898,9 +7899,29 @@
         return;
       }
       const targetPeer = riotIdToPeerId(friendRiotId);
-      const invConn = peer.connect(targetPeer, { metadata: { kind: 'invite' } });
-      document.getElementById('roomStatusBox').innerText = `${friendRiotId} 님에게 파티 초대를 전송했습니다...`;
+      const statusBox = document.getElementById('roomStatusBox');
+      const invConn = peer.connect(targetPeer, { metadata: { kind: 'invite' }, reliable: true });
+      statusBox.innerText = `${friendRiotId} 님에게 파티 초대를 전송하는 중...`;
+      let settled = false;
+      const failTimer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        inviteStatusHandler = null;
+        statusBox.innerText = `${friendRiotId} 님에게 연결하지 못했습니다. (오프라인이거나 친구 ID가 틀렸을 수 있어요)`;
+        try { invConn.close(); } catch (e) {}
+      }, 7000);
+      inviteStatusHandler = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(failTimer);
+        inviteStatusHandler = null;
+        statusBox.innerText = `${friendRiotId} 님이 현재 오프라인입니다. (닉네임#태그를 다시 확인해주세요)`;
+      };
       invConn.on('open', () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(failTimer);
+        inviteStatusHandler = null;
         invConn.send({
           type: 'partyInvite',
           fromRiotId: getMyRiotId(),
@@ -7908,10 +7929,14 @@
           teamSize: sizeEl ? sizeEl.value : '5',
           fillBots: document.getElementById('lobbyFillBotsCheck').checked
         });
-        setTimeout(() => { try { invConn.close(); } catch (e) {} }, 600);
+        statusBox.innerText = `${friendRiotId} 님에게 파티 초대를 보냈습니다!`;
+        setTimeout(() => { try { invConn.close(); } catch (e) {} }, 2500);
       });
       invConn.on('error', () => {
-        document.getElementById('roomStatusBox').innerText = `${friendRiotId} 님이 현재 오프라인 상태입니다.`;
+        if (settled) return;
+        settled = true;
+        clearTimeout(failTimer);
+        statusBox.innerText = `${friendRiotId} 님이 현재 오프라인 상태입니다.`;
       });
     };
 
@@ -8475,35 +8500,69 @@
       if (overlay) overlay.style.display = 'flex';
     };
 
+    let peerRetryCount = 0;
+    let peerRetryTimer = null;
+    let presenceTimer = null;
+    let inviteStatusHandler = null;
+
+    function setSocialBadge(text, color) {
+      const badge = document.getElementById('socialNetworkBadge');
+      if (badge) { badge.innerText = text; badge.style.color = color; }
+    }
+
     function initAccountPeerNode() {
-      if (typeof Peer === 'undefined' || !userAccount) return;
+      if (typeof Peer === 'undefined' || !userAccount) {
+        setSocialBadge('● 네트워크 라이브러리 없음', '#ef4444');
+        return;
+      }
+      if (peerRetryTimer) { clearTimeout(peerRetryTimer); peerRetryTimer = null; }
       if (peer) {
         try { peer.destroy(); } catch (e) {}
       }
       const fixedId = riotIdToPeerId(getMyRiotId());
-      peer = new Peer(fixedId);
-      const badge = document.getElementById('socialNetworkBadge');
-      if (badge) { badge.innerText = '● 연결 중...'; badge.style.color = '#ffcc00'; }
+      const thisPeer = new Peer(fixedId);
+      peer = thisPeer;
+      setSocialBadge('● 연결 중...', '#ffcc00');
 
-      peer.on('open', (id) => {
+      thisPeer.on('open', (id) => {
+        if (peer !== thisPeer) return;
+        peerRetryCount = 0;
         myPeerId = id;
-        if (badge) { badge.innerText = '● 온라인'; badge.style.color = '#10b981'; }
+        setSocialBadge('● 온라인', '#10b981');
         probeAllFriendsPresence();
+        if (presenceTimer) clearInterval(presenceTimer);
+        presenceTimer = setInterval(() => {
+          if (peer === thisPeer && thisPeer.open) probeAllFriendsPresence();
+        }, 20000);
       });
 
-      peer.on('error', (err) => {
-        if (err && err.type === 'unavailable-id') {
-          peer = new Peer();
-          peer.on('open', (id) => {
-            myPeerId = id;
-            if (badge) { badge.innerText = '● 온라인(보조)'; badge.style.color = '#10b981'; }
-            probeAllFriendsPresence();
-          });
-          peer.on('connection', handleIncomingSocialConnection);
+      thisPeer.on('disconnected', () => {
+        if (peer !== thisPeer || thisPeer.destroyed) return;
+        setSocialBadge('● 재연결 중...', '#ffcc00');
+        try { thisPeer.reconnect(); } catch (e) {}
+      });
+
+      thisPeer.on('error', (err) => {
+        if (peer !== thisPeer) return;
+        const type = err && err.type;
+        if (type === 'unavailable-id') {
+          // 새로고침 직후 서버에 이전 세션이 남아 있는 경우: 고정 ID로 계속 재시도해야 초대가 도착함
+          peerRetryCount++;
+          setSocialBadge('● 이전 접속 정리 중... (' + peerRetryCount + ')', '#ffcc00');
+          if (peerRetryCount <= 30) {
+            peerRetryTimer = setTimeout(initAccountPeerNode, 4000);
+          } else {
+            setSocialBadge('● 다른 곳에서 같은 계정으로 접속 중', '#ef4444');
+          }
+        } else if (type === 'peer-unavailable') {
+          if (inviteStatusHandler) inviteStatusHandler(err);
+        } else if (type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed') {
+          setSocialBadge('● 서버 연결 실패 (재시도)', '#ef4444');
+          peerRetryTimer = setTimeout(initAccountPeerNode, 5000);
         }
       });
 
-      peer.on('connection', handleIncomingSocialConnection);
+      thisPeer.on('connection', handleIncomingSocialConnection);
     }
 
     function handleIncomingSocialConnection(conn) {
@@ -8525,7 +8584,11 @@
           if (msg && msg.type === 'partyInvite') {
             pendingInvite = msg;
             document.getElementById('inviteSenderText').innerText = `${msg.fromRiotId} 님의 파티 초대 (${msg.teamSize}v${msg.teamSize})`;
-            document.getElementById('inviteToastModal').style.display = 'block';
+            const toast = document.getElementById('inviteToastModal');
+            toast.style.display = 'block';
+            toast.style.zIndex = '3000';
+            try { if (typeof playBeep === 'function') playBeep(); } catch (e) {}
+            try { conn.send({ type: 'inviteAck' }); } catch (e) {}
           }
         });
         return;
