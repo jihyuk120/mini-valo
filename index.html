@@ -7808,24 +7808,82 @@
       broadcastData({ type: 'info', nick: getMyRiotId(), team: myTeam, agentKey: myAgent });
     };
 
-    window.addFriendByTag = function() {
-      if (!userAccount) return;
-      const raw = (document.getElementById('addFriendInput').value || '').trim();
+    // ===== P2P 소셜 요청 헬퍼: 상대 피어에 연결 → 메시지 전송 → 응답 대기 =====
+    const peerUnavailableWaiters = {}; // peerId -> [callback]
+    function dispatchPeerUnavailable(err) {
+      const msg = String((err && err.message) || err || '');
+      const m = msg.match(/mv-acct-[0-9a-f]+/i);
+      const keys = m ? [m[0]] : Object.keys(peerUnavailableWaiters);
+      keys.forEach(k => {
+        const list = peerUnavailableWaiters[k];
+        if (list && list.length) list.splice(0).forEach(fn => { try { fn(); } catch (e) {} });
+      });
+    }
+
+    function socialRequest(riotId, kind, payload, expectType, timeoutMs) {
+      return new Promise((resolve) => {
+        if (!peer || !peer.open) return resolve({ ok: false, reason: 'nopeer' });
+        const targetPeer = riotIdToPeerId(riotId);
+        let finished = false, conn = null, timer = null;
+        const onUnavail = () => finish({ ok: false, reason: 'offline' });
+        function finish(res) {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          const arr = peerUnavailableWaiters[targetPeer];
+          if (arr) { const i = arr.indexOf(onUnavail); if (i >= 0) arr.splice(i, 1); }
+          if (conn) setTimeout(() => { try { conn.close(); } catch (e) {} }, 300);
+          resolve(res);
+        }
+        (peerUnavailableWaiters[targetPeer] = peerUnavailableWaiters[targetPeer] || []).push(onUnavail);
+        timer = setTimeout(() => finish({ ok: false, reason: 'timeout' }), timeoutMs || 10000);
+        try {
+          conn = peer.connect(targetPeer, { metadata: { kind: kind }, reliable: true });
+        } catch (e) { return finish({ ok: false, reason: 'error' }); }
+        conn.on('open', () => { try { conn.send(payload); } catch (e) { finish({ ok: false, reason: 'error' }); } });
+        conn.on('data', (d) => { if (d && d.type === expectType) finish({ ok: true, data: d }); });
+        conn.on('error', () => finish({ ok: false, reason: 'error' }));
+        conn.on('close', () => finish({ ok: false, reason: 'closed' }));
+      });
+    }
+
+    let addFriendBusy = false;
+    window.addFriendByTag = async function() {
+      if (!userAccount || addFriendBusy) return;
+      const inputEl = document.getElementById('addFriendInput');
+      const raw = (inputEl.value || '').trim();
       if (!raw.includes('#')) {
         alert('상대방의 "닉네임#태그" 형식으로 입력해주세요. (예: 플레이어#1234)');
         return;
       }
-      const [fNick, fTag] = raw.split('#');
+      const idx = raw.lastIndexOf('#');
+      const fNick = raw.slice(0, idx).trim();
+      const fTag = raw.slice(idx + 1).trim().toUpperCase();
       if (!fNick || !fTag) { alert('올바른 닉네임#태그를 입력해주세요.'); return; }
-      const formatted = `${fNick.trim()}#${fTag.trim().toUpperCase()}`;
+      const formatted = `${fNick}#${fTag}`;
       if (formatted === getMyRiotId()) { alert('자기 자신은 친구로 추가할 수 없습니다.'); return; }
-      if (!userAccount.friends.includes(formatted)) {
-        userAccount.friends.push(formatted);
-        saveUserAccount();
+      if (userAccount.friends.includes(formatted)) { alert('이미 친구 목록에 있는 계정입니다.'); return; }
+      if (!peer || !peer.open) { alert('네트워크 연결 중입니다. 우측 상단이 "● 온라인"이 된 뒤 다시 시도해주세요.'); return; }
+
+      addFriendBusy = true;
+      const statusBox = document.getElementById('roomStatusBox');
+      if (statusBox) statusBox.innerText = `${formatted} 계정을 확인하는 중...`;
+      const r = await socialRequest(formatted, 'presence',
+        { type: 'presencePing', fromRiotId: getMyRiotId(), status: getMyCurrentStatus(), verify: true },
+        'presencePong', 10000);
+      addFriendBusy = false;
+
+      if (!r.ok || !r.data || r.data.riotId !== formatted) {
+        if (statusBox) statusBox.innerText = `${formatted} 계정을 찾지 못했습니다.`;
+        alert(`"${formatted}" 계정을 확인하지 못했어요.\n\n- 존재하지 않는 닉네임#태그이거나\n- 상대가 지금 접속 중이 아니거나 (서버 없이 접속 중인 계정만 확인 가능)\n- 상대가 구버전 파일로 접속 중일 수 있어요.\n\n상대가 접속한 상태에서 정확한 닉네임#태그로 다시 추가해주세요.`);
+        return;
       }
-      document.getElementById('addFriendInput').value = '';
+      userAccount.friends.push(formatted);
+      saveUserAccount();
+      friendPresenceMap[formatted] = { status: r.data.status || 'online', peerId: riotIdToPeerId(formatted) };
+      inputEl.value = '';
+      if (statusBox) statusBox.innerText = `${formatted} 님을 친구로 추가했습니다!`;
       renderFriendListUI();
-      probeAllFriendsPresence();
     };
 
     window.removeFriendByTag = function(targetTag) {
@@ -7841,45 +7899,33 @@
       return 'online';
     }
 
-    function probeAllFriendsPresence() {
-      if (!userAccount || !peer || !peer.open) return;
-      userAccount.friends.forEach(fId => {
-        if (Object.values(remotePlayers).some(rp => rp.nick === fId)) {
-          friendPresenceMap[fId] = { status: 'lobby', peerId: riotIdToPeerId(fId) };
-          renderFriendListUI();
-          return;
-        }
-        const targetPeer = riotIdToPeerId(fId);
-        try {
-          const c = peer.connect(targetPeer, { metadata: { kind: 'presence' } });
-          const timer = setTimeout(() => {
-            if (!friendPresenceMap[fId] || friendPresenceMap[fId].status === 'offline') {
-              friendPresenceMap[fId] = { status: 'offline', peerId: targetPeer };
-              renderFriendListUI();
-            }
-            try { c.close(); } catch (e) {}
-          }, 3000);
-          c.on('open', () => {
-            c.send({ type: 'presencePing', fromRiotId: getMyRiotId(), status: getMyCurrentStatus() });
-          });
-          c.on('data', (d) => {
-            if (d && d.type === 'presencePong') {
-              clearTimeout(timer);
-              friendPresenceMap[fId] = { status: d.status || 'online', peerId: targetPeer };
-              renderFriendListUI();
-              setTimeout(() => { try { c.close(); } catch (e) {} }, 200);
-            }
-          });
-          c.on('error', () => {
-            clearTimeout(timer);
-            friendPresenceMap[fId] = { status: 'offline', peerId: targetPeer };
-            renderFriendListUI();
-          });
-        } catch (e) {}
-      });
+    let probeRunning = false;
+    async function probeAllFriendsPresence() {
+      if (!userAccount || !peer || !peer.open || probeRunning) return;
+      probeRunning = true;
+      try {
+        await Promise.all(userAccount.friends.map(async (fId) => {
+          if (Object.values(remotePlayers).some(rp => rp.nick === fId)) {
+            friendPresenceMap[fId] = { status: 'lobby', peerId: riotIdToPeerId(fId) };
+            return;
+          }
+          const ping = { type: 'presencePing', fromRiotId: getMyRiotId(), status: getMyCurrentStatus() };
+          let r = await socialRequest(fId, 'presence', ping, 'presencePong', 9000);
+          if (!r.ok && r.reason !== 'offline' && r.reason !== 'nopeer') {
+            r = await socialRequest(fId, 'presence', ping, 'presencePong', 9000); // 연결 지연 시 1회 재시도
+          }
+          friendPresenceMap[fId] = {
+            status: (r.ok && r.data) ? (r.data.status || 'online') : 'offline',
+            peerId: riotIdToPeerId(fId)
+          };
+        }));
+      } finally {
+        probeRunning = false;
+        renderFriendListUI();
+      }
     }
 
-    window.inviteFriendToParty = function(friendRiotId) {
+    window.inviteFriendToParty = async function(friendRiotId) {
       if (!peer || !peer.open) {
         alert('네트워크 연결 초기화 중입니다. 잠시 후 다시 시도해주세요.');
         return;
@@ -7898,46 +7944,24 @@
         alert(`현재 설정(${sizeEl.value}v${sizeEl.value})의 최대 인원(${maxPlayers}명)이 가득 찼습니다.`);
         return;
       }
-      const targetPeer = riotIdToPeerId(friendRiotId);
       const statusBox = document.getElementById('roomStatusBox');
-      const invConn = peer.connect(targetPeer, { metadata: { kind: 'invite' }, reliable: true });
       statusBox.innerText = `${friendRiotId} 님에게 파티 초대를 전송하는 중...`;
-      let settled = false;
-      const failTimer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        inviteStatusHandler = null;
-        statusBox.innerText = `${friendRiotId} 님에게 연결하지 못했습니다. (오프라인이거나 친구 ID가 틀렸을 수 있어요)`;
-        try { invConn.close(); } catch (e) {}
-      }, 7000);
-      inviteStatusHandler = (err) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(failTimer);
-        inviteStatusHandler = null;
-        statusBox.innerText = `${friendRiotId} 님이 현재 오프라인입니다. (닉네임#태그를 다시 확인해주세요)`;
-      };
-      invConn.on('open', () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(failTimer);
-        inviteStatusHandler = null;
-        invConn.send({
-          type: 'partyInvite',
-          fromRiotId: getMyRiotId(),
-          hostPeerId: myPeerId,
-          teamSize: sizeEl ? sizeEl.value : '5',
-          fillBots: document.getElementById('lobbyFillBotsCheck').checked
-        });
-        statusBox.innerText = `${friendRiotId} 님에게 파티 초대를 보냈습니다!`;
-        setTimeout(() => { try { invConn.close(); } catch (e) {} }, 2500);
-      });
-      invConn.on('error', () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(failTimer);
-        statusBox.innerText = `${friendRiotId} 님이 현재 오프라인 상태입니다.`;
-      });
+      const r = await socialRequest(friendRiotId, 'invite', {
+        type: 'partyInvite',
+        fromRiotId: getMyRiotId(),
+        hostPeerId: myPeerId,
+        teamSize: sizeEl ? sizeEl.value : '5',
+        fillBots: document.getElementById('lobbyFillBotsCheck').checked
+      }, 'inviteAck', 10000);
+
+      if (r.ok) {
+        statusBox.innerText = `${friendRiotId} 님에게 초대가 전달되었습니다. 수락을 기다리는 중...`;
+        friendPresenceMap[friendRiotId] = { status: 'online', peerId: riotIdToPeerId(friendRiotId) };
+      } else {
+        statusBox.innerText = `${friendRiotId} 님에게 초대를 전달하지 못했습니다. (오프라인이거나 연결 실패)`;
+        friendPresenceMap[friendRiotId] = { status: 'offline', peerId: riotIdToPeerId(friendRiotId) };
+      }
+      renderFriendListUI();
     };
 
     window.acceptPartyInvite = function() {
@@ -8520,7 +8544,19 @@
         try { peer.destroy(); } catch (e) {}
       }
       const fixedId = riotIdToPeerId(getMyRiotId());
-      const thisPeer = new Peer(fixedId);
+      const thisPeer = new Peer(fixedId, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+          ]
+        }
+      });
       peer = thisPeer;
       setSocialBadge('● 연결 중...', '#ffcc00');
 
@@ -8533,7 +8569,7 @@
         if (presenceTimer) clearInterval(presenceTimer);
         presenceTimer = setInterval(() => {
           if (peer === thisPeer && thisPeer.open) probeAllFriendsPresence();
-        }, 20000);
+        }, 12000);
       });
 
       thisPeer.on('disconnected', () => {
@@ -8555,7 +8591,7 @@
             setSocialBadge('● 다른 곳에서 같은 계정으로 접속 중', '#ef4444');
           }
         } else if (type === 'peer-unavailable') {
-          if (inviteStatusHandler) inviteStatusHandler(err);
+          dispatchPeerUnavailable(err);
         } else if (type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed') {
           setSocialBadge('● 서버 연결 실패 (재시도)', '#ef4444');
           peerRetryTimer = setTimeout(initAccountPeerNode, 5000);
@@ -8574,7 +8610,7 @@
               friendPresenceMap[msg.fromRiotId] = { status: msg.status || 'online', peerId: conn.peer };
               renderFriendListUI();
             }
-            conn.send({ type: 'presencePong', status: getMyCurrentStatus() });
+            conn.send({ type: 'presencePong', status: getMyCurrentStatus(), riotId: getMyRiotId() });
           }
         });
         return;
