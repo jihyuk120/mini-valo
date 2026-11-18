@@ -7748,26 +7748,7 @@
       document.getElementById('accountSetupModal').style.display = 'none';
       syncAccountUI();
       if (typeof initAccountPeerNode === 'function') initAccountPeerNode();
-    
-
-    saveUsersDB();
-        applyAccountSession(id, keepLogin);
-      } else {
-        if (!Object.prototype.hasOwnProperty.call(usersDB, id) || !usersDB[id]) {
-          errEl.innerText = '존재하지 않는 아이디입니다';
-          return;
-        }
-        const record = usersDB[id];
-        const storedPw = record.pw !== undefined ? record.pw : record.password;
-        if (String(storedPw) !== String(pw)) {
-          errEl.innerText = '비밀번호가 일치하지 않습니다';
-          return;
-        }
-        if (!record.nick && record.nickname) record.nick = record.nickname;
-        if (!record.nickname && record.nick) record.nickname = record.nick;
-        applyAccountSession(id, keepLogin);
-      }
-    };
+    }
 
     window.resetAccountStorageData = function() {
       localStorage.removeItem(USERS_DB_KEY);
@@ -15181,4 +15162,6 @@
 
 </body>
 </html>
-요청하신 세 가지 수정 사항을 모두 반영하여
+
+
+수정된 내용
