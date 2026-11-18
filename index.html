@@ -7809,14 +7809,24 @@
     };
 
     // ==========================================================
-    // 소셜 엔진: 공개 릴레이(ntfy.sh)로 접속상태/초대를 주고받음 (WebRTC 불필요)
+    // 소셜 엔진: PeerJS(WebRTC) 직접 연결로 접속상태/초대를 주고받음
+    //  - 외부 릴레이(ntfy.sh)의 하루 메시지 한도(429) 문제를 피하기 위해 서버 경유 메시지를 쓰지 않음
+    //  - 내 닉네임#태그로 고정된 소셜 피어 ID를 만들고, 친구 ID로 직접 연결해 상태/초대를 전달
     // ==========================================================
-    const NTFY_BASE = 'https://ntfy.sh/';
-    let ntfyES = null, ntfyKey = '', ntfyRestartTimer = null;
-    let hbTimer = null, uiTimer = null, serverSkewMs = 0;
-    const seenMsgIds = new Set();
+    const SOC_PREFIX = 'mvsoc2-';
+    const SOC_STUN = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    ];
+    let socPeer = null, socOpen = false, socRetryTimer = null, socReconnectTimer = null;
+    let hbTimer = null, uiTimer = null;
     const friendSeen = {};       // canon(friend) -> { srvMs, status, offline }
     const pendingInvites = {};   // canon(inviter) -> invite
+    const socLinks = {};         // canon(user) -> { conn, riotId }
+    const socDialing = {};       // canon(user) -> 마지막 연결 시도 시각
     let lastFriendSig = '';
 
     function cyrb53(str, seed) {
@@ -7836,135 +7846,264 @@
       if (i < 0) return t.toLowerCase();
       return t.slice(0, i).trim().toLowerCase() + '#' + t.slice(i + 1).trim().toUpperCase();
     }
-    function socialTopic(kind, riotId) {
+    function socPeerIdOf(riotId) {
       const c = canonId(riotId);
-      return 'mvalo3d-' + kind + '-' + cyrb53(c, 11).toString(36) + cyrb53(c, 29).toString(36);
+      return SOC_PREFIX + cyrb53(c, 11).toString(36) + cyrb53(c, 29).toString(36);
     }
-    function nowSrvMs() { return Date.now() + serverSkewMs; }
-
-    function ntfyPublish(topic, obj) {
-      return fetch(NTFY_BASE + topic, { method: 'POST', body: JSON.stringify(obj) })
-        .then(r => r.ok ? r.json().catch(() => ({})) : null)
-        .then(j => {
-          if (j && j.time) serverSkewMs = j.time * 1000 - Date.now();
-          return !!j;
-        })
-        .catch(() => false);
-    }
-
-    function publishHeartbeat() {
-      if (!userAccount) return;
-      ntfyPublish(socialTopic('p', getMyRiotId()), {
-        type: 'hb', riotId: getMyRiotId(), status: getMyCurrentStatus()
-      }).then(ok => {
-        if (ok) setSocialBadge('● 온라인', '#10b981');
-        else setSocialBadge('● 소셜 서버 연결 실패 (재시도 중)', '#ef4444');
-      });
-    }
-
-    function friendStatusOf(fId) {
-      if (Object.values(remotePlayers).some(rp => canonId(rp.nick) === canonId(fId))) return 'lobby';
-      const f = friendSeen[canonId(fId)];
-      if (!f || f.offline) return 'offline';
-      if (nowSrvMs() - f.srvMs > 55000) return 'offline';
-      return f.status || 'online';
-    }
+    function nowSrvMs() { return Date.now(); }
 
     function setNickInBox(text) {
       const box = document.getElementById('roomStatusBox');
       if (box) box.innerText = text;
     }
 
-    function handleSocialMessage(m, d) {
-      if (!d || typeof d !== 'object') return;
-      const myInbox = socialTopic('i', getMyRiotId());
-      if (m.topic === myInbox) {
-        if (d.type === 'partyInvite') {
-          const ageMs = nowSrvMs() - (m.time || 0) * 1000;
-          if (ageMs > 150000) return;
-          if (!d.fromRiotId || canonId(d.fromRiotId) === canonId(getMyRiotId())) return;
-          pendingInvites[canonId(d.fromRiotId)] = Object.assign({}, d, { recvAt: Date.now() });
-          try { if (typeof playBeep === 'function') playBeep(); } catch (e) {}
+    function friendStatusOf(fId) {
+      if (Object.values(remotePlayers).some(rp => canonId(rp.nick) === canonId(fId))) return 'lobby';
+      const key = canonId(fId);
+      const link = socLinks[key];
+      const f = friendSeen[key];
+      if (!f || f.offline) return 'offline';
+      if (!(link && link.conn && link.conn.open)) return 'offline';
+      if (nowSrvMs() - f.srvMs > 40000) return 'offline';
+      return f.status || 'online';
+    }
+
+    function socMarkSeen(riotId, status) {
+      const key = canonId(riotId);
+      friendSeen[key] = { srvMs: Date.now(), status: status || 'online', offline: false };
+    }
+    function socMarkOffline(key) {
+      if (friendSeen[key]) friendSeen[key].offline = true;
+      else friendSeen[key] = { srvMs: 0, status: 'offline', offline: true };
+    }
+
+    function socWire(conn) {
+      conn.on('data', (d) => socHandleData(conn, d));
+      const onGone = () => {
+        const key = conn.__socKey;
+        if (key && socLinks[key] && socLinks[key].conn === conn) {
+          delete socLinks[key];
+          socMarkOffline(key);
           renderFriendListUI();
-        } else if (d.type === 'inviteAccept') {
-          setNickInBox(`${d.fromRiotId} 님이 파티 초대를 수락했습니다!`);
-          // 폴백: 상대가 4초 내에 내게 연결하지 못하면 내가 상대 peerId로 역방향 연결을 시도
-          if (d.guestPeerId && isHost) {
-            const guestPid = d.guestPeerId;
-            setTimeout(() => {
-              if (!isHost || !peer || !peer.open || connections[guestPid]) return;
-              try {
-                const rc = peer.connect(guestPid, { metadata: { kind: 'party-reverse', fromRiotId: getMyRiotId(), hostPeerId: myPeerId }, reliable: true });
-                setupConnection(rc);
-              } catch (e) {}
-            }, 4000);
-          }
-        } else if (d.type === 'inviteDecline') {
-          setNickInBox(`${d.fromRiotId} 님이 파티 초대를 거절했습니다.`);
         }
+      };
+      conn.on('close', onGone);
+      conn.on('error', onGone);
+    }
+
+    function socHello(conn, isReply) {
+      try { conn.send({ type: 'hello', reply: !!isReply, riotId: getMyRiotId(), status: getMyCurrentStatus() }); } catch (e) {}
+    }
+
+    function socRegister(conn, riotId) {
+      const key = canonId(riotId);
+      conn.__socKey = key;
+      socLinks[key] = { conn: conn, riotId: riotId };
+    }
+
+    function socHandleData(conn, d) {
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'hello' || d.type === 'hb') {
+        if (!d.riotId) return;
+        if (!conn.__socKey || canonId(d.riotId) !== conn.__socKey) socRegister(conn, d.riotId);
+        socMarkSeen(d.riotId, d.status);
+        if (d.type === 'hello' && !d.reply) socHello(conn, true);
+        renderFriendListUI();
         return;
       }
-      if (d.type === 'hb' && userAccount) {
-        userAccount.friends.forEach(fId => {
-          if (socialTopic('p', fId) !== m.topic) return;
-          const key = canonId(fId);
-          const srvMs = (m.time || 0) * 1000;
-          const prev = friendSeen[key];
-          if (prev && prev.srvMs > srvMs) return;
-          friendSeen[key] = { srvMs: srvMs, status: d.status || 'online', offline: !!d.offline };
-        });
+      if (d.type === 'bye') {
+        const key = conn.__socKey || (d.riotId ? canonId(d.riotId) : '');
+        if (key) { socMarkOffline(key); if (socLinks[key] && socLinks[key].conn === conn) delete socLinks[key]; }
         renderFriendListUI();
+        return;
+      }
+      if (d.type === 'partyInvite') {
+        if (!d.fromRiotId || canonId(d.fromRiotId) === canonId(getMyRiotId())) return;
+        pendingInvites[canonId(d.fromRiotId)] = Object.assign({}, d, { recvAt: Date.now() });
+        try { if (typeof playBeep === 'function') playBeep(); } catch (e) {}
+        renderFriendListUI();
+      } else if (d.type === 'inviteAccept') {
+        setNickInBox(`${d.fromRiotId} 님이 파티 초대를 수락했습니다!`);
+        // 폴백: 상대가 4초 내에 내게 연결하지 못하면 내가 상대 peerId로 역방향 연결을 시도
+        if (d.guestPeerId && isHost) {
+          const guestPid = d.guestPeerId;
+          setTimeout(() => {
+            if (!isHost || !peer || !peer.open || connections[guestPid]) return;
+            try {
+              const rc = peer.connect(guestPid, { metadata: { kind: 'party-reverse', fromRiotId: getMyRiotId(), hostPeerId: myPeerId }, reliable: true });
+              setupConnection(rc);
+            } catch (e) {}
+          }, 4000);
+        }
+      } else if (d.type === 'inviteDecline') {
+        setNickInBox(`${d.fromRiotId} 님이 파티 초대를 거절했습니다.`);
       }
     }
 
-    function startSocialStream() {
-      if (!userAccount) return;
-      const topics = [socialTopic('i', getMyRiotId())];
-      userAccount.friends.forEach(f => topics.push(socialTopic('p', f)));
-      const key = topics.join(',');
-      if (ntfyES && key === ntfyKey && ntfyES.readyState !== 2) return;
-      stopSocialStream();
-      ntfyKey = key;
-      let es;
+    // 상대(riotId)에게 소셜 연결 시도 (이미 연결돼 있거나 최근에 시도했으면 건너뜀)
+    function socDial(riotId, force) {
+      if (!socPeer || !socOpen || socPeer.destroyed) return;
+      const key = canonId(riotId);
+      if (key === canonId(getMyRiotId())) return;
+      const link = socLinks[key];
+      if (link && link.conn && link.conn.open) return;
+      const now = Date.now();
+      if (!force && socDialing[key] && now - socDialing[key] < 12000) return;
+      socDialing[key] = now;
+      let conn;
       try {
-        es = new EventSource(NTFY_BASE + key + '/sse?since=2m');
-      } catch (e) {
-        ntfyRestartTimer = setTimeout(startSocialStream, 5000);
+        conn = socPeer.connect(socPeerIdOf(riotId), { metadata: { kind: 'social', fromRiotId: getMyRiotId() }, reliable: true, serialization: 'json' });
+      } catch (e) { return; }
+      conn.__socKey = key;
+      socWire(conn);
+      conn.on('open', () => {
+        socRegister(conn, riotId);
+        socMarkSeen(riotId, 'online');
+        socHello(conn, false);
+        renderFriendListUI();
+      });
+    }
+
+    function socDialAllFriends() {
+      if (!userAccount) return;
+      userAccount.friends.forEach(f => socDial(f, false));
+    }
+
+    // 상대에게 메시지 전달 (연결이 없으면 연결을 만들고 최대 7초 기다림)
+    function sendSocial(riotId, obj) {
+      return new Promise((resolve) => {
+        const key = canonId(riotId);
+        const trySend = () => {
+          const link = socLinks[key];
+          if (link && link.conn && link.conn.open) {
+            try { link.conn.send(obj); return true; } catch (e) { return false; }
+          }
+          return false;
+        };
+        if (trySend()) { resolve(true); return; }
+        if (!socOpen) { resolve(false); return; }
+        socDial(riotId, true);
+        let waited = 0;
+        const iv = setInterval(() => {
+          waited += 250;
+          if (trySend()) { clearInterval(iv); resolve(true); return; }
+          if (waited >= 7000) { clearInterval(iv); resolve(false); }
+        }, 250);
+      });
+    }
+
+    function publishHeartbeat() {
+      if (!userAccount) return;
+      const msg = { type: 'hb', riotId: getMyRiotId(), status: getMyCurrentStatus() };
+      Object.keys(socLinks).forEach(k => {
+        const l = socLinks[k];
+        if (l && l.conn && l.conn.open) { try { l.conn.send(msg); } catch (e) {} }
+      });
+      if (socOpen) setSocialBadge('● 온라인', '#10b981');
+      else setSocialBadge('● 소셜 서버 연결 중... (재시도)', '#f59e0b');
+      socDialAllFriends();
+    }
+
+    function ensureSocialPeer() {
+      if (!userAccount) return;
+      if (socRetryTimer) { clearTimeout(socRetryTimer); socRetryTimer = null; }
+      if (typeof Peer === 'undefined') { socRetryTimer = setTimeout(ensureSocialPeer, 2500); return; }
+      if (socPeer && !socPeer.destroyed) {
+        if (socPeer.disconnected) { try { socPeer.reconnect(); } catch (e) {} }
         return;
       }
-      ntfyES = es;
-      es.onmessage = (ev) => {
-        let m;
-        try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (!m || m.event !== 'message' || !m.id || seenMsgIds.has(m.id)) return;
-        seenMsgIds.add(m.id);
-        if (seenMsgIds.size > 2000) seenMsgIds.clear();
-        let d;
-        try { d = JSON.parse(m.message); } catch (e) { return; }
-        handleSocialMessage(m, d);
-      };
-      es.onerror = () => {
-        if (es.readyState === 2 && ntfyES === es) {
-          ntfyRestartTimer = setTimeout(() => { ntfyKey = ''; startSocialStream(); }, 4000);
+      let p;
+      try {
+        p = new Peer(socPeerIdOf(getMyRiotId()), { debug: 0, config: { iceServers: SOC_STUN } });
+      } catch (e) {
+        socRetryTimer = setTimeout(ensureSocialPeer, 5000);
+        return;
+      }
+      socPeer = p;
+      p.on('open', () => {
+        if (socPeer !== p) return;
+        socOpen = true;
+        setSocialBadge('● 온라인', '#10b981');
+        socDialAllFriends();
+        renderFriendListUI();
+      });
+      p.on('connection', (conn) => {
+        if (socPeer !== p) return;
+        const meta = conn.metadata || {};
+        if (meta.kind !== 'social') { try { conn.close(); } catch (e) {} return; }
+        socWire(conn);
+        if (meta.fromRiotId) {
+          conn.on('open', () => { socRegister(conn, meta.fromRiotId); });
         }
-      };
+      });
+      p.on('disconnected', () => {
+        if (socPeer !== p || p.destroyed) return;
+        socOpen = false;
+        setSocialBadge('● 소셜 서버 연결 중... (재시도)', '#f59e0b');
+        if (socReconnectTimer) clearTimeout(socReconnectTimer);
+        socReconnectTimer = setTimeout(() => { if (socPeer === p && !p.destroyed) { try { p.reconnect(); } catch (e) {} } }, 2500);
+      });
+      p.on('close', () => { if (socPeer === p) { socOpen = false; } });
+      p.on('error', (err) => {
+        if (socPeer !== p) return;
+        const type = err && err.type;
+        if (type === 'peer-unavailable') {
+          // 상대가 오프라인 (소셜 피어가 서버에 없음)
+          const m = /peer\s+(\S+)/.exec(String(err.message || ''));
+          if (m && userAccount) {
+            const pid = m[1];
+            userAccount.friends.forEach(f => { if (socPeerIdOf(f) === pid) socMarkOffline(canonId(f)); });
+            renderFriendListUI();
+          }
+          return;
+        }
+        if (type === 'unavailable-id') {
+          // 같은 계정이 다른 탭/기기에서 접속 중이거나 이전 세션이 아직 서버에 남아있음 → 잠시 후 재시도
+          setSocialBadge('● 이전 접속 정리 중... (재시도)', '#f59e0b');
+          try { p.destroy(); } catch (e) {}
+          socPeer = null; socOpen = false;
+          socRetryTimer = setTimeout(ensureSocialPeer, 6000);
+          return;
+        }
+        if (type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed' || type === 'browser-incompatible') {
+          setSocialBadge('● 소셜 서버 연결 실패 (재시도 중)', '#ef4444');
+          try { p.destroy(); } catch (e) {}
+          socPeer = null; socOpen = false;
+          socRetryTimer = setTimeout(ensureSocialPeer, 5000);
+        }
+      });
     }
+
+    // 친구 추가/삭제 후 호출 (이전 이름 유지)
+    function startSocialStream() { socDialAllFriends(); }
 
     function stopSocialStream() {
-      if (ntfyRestartTimer) { clearTimeout(ntfyRestartTimer); ntfyRestartTimer = null; }
-      if (ntfyES) { try { ntfyES.close(); } catch (e) {} ntfyES = null; }
-      ntfyKey = '';
+      if (socRetryTimer) { clearTimeout(socRetryTimer); socRetryTimer = null; }
+      if (socReconnectTimer) { clearTimeout(socReconnectTimer); socReconnectTimer = null; }
+      Object.keys(socLinks).forEach(k => {
+        const l = socLinks[k];
+        try { if (l && l.conn && l.conn.open) l.conn.send({ type: 'bye', riotId: getMyRiotId() }); } catch (e) {}
+        try { if (l && l.conn) l.conn.close(); } catch (e) {}
+        delete socLinks[k];
+      });
+      if (socPeer) { try { socPeer.destroy(); } catch (e) {} socPeer = null; }
+      socOpen = false;
+    }
+    function stopSocialEngine() {
+      stopSocialStream();
+      if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+      if (uiTimer) { clearInterval(uiTimer); uiTimer = null; }
     }
 
     function startSocialEngine() {
       if (!userAccount) return;
+      stopSocialEngine();
       Object.keys(pendingInvites).forEach(k => delete pendingInvites[k]);
       Object.keys(friendSeen).forEach(k => delete friendSeen[k]);
-      startSocialStream();
-      publishHeartbeat();
-      if (hbTimer) clearInterval(hbTimer);
-      hbTimer = setInterval(publishHeartbeat, 15000);
-      if (uiTimer) clearInterval(uiTimer);
+      Object.keys(socDialing).forEach(k => delete socDialing[k]);
+      setSocialBadge('● 소셜 서버 연결 중...', '#f59e0b');
+      ensureSocialPeer();
+      hbTimer = setInterval(publishHeartbeat, 10000);   // 데이터 채널로만 전송되므로 횟수 제한 없음
       uiTimer = setInterval(() => {
         if (!userAccount) return;
         const now = Date.now();
@@ -7977,11 +8116,7 @@
     }
 
     window.addEventListener('beforeunload', () => {
-      try {
-        if (userAccount && navigator.sendBeacon) {
-          navigator.sendBeacon(NTFY_BASE + socialTopic('p', getMyRiotId()), JSON.stringify({ type: 'hb', riotId: getMyRiotId(), offline: true }));
-        }
-      } catch (e) {}
+      try { stopSocialEngine(); } catch (e) {}
     });
 
     // ===== 친구 추가: 닉네임#태그 형식만 맞으면 무조건 추가 =====
@@ -8044,7 +8179,7 @@
         return;
       }
       setNickInBox(`${friendRiotId} 님에게 파티 초대를 전송하는 중...`);
-      const ok = await ntfyPublish(socialTopic('i', friendRiotId), {
+      const ok = await sendSocial(friendRiotId, {
         type: 'partyInvite',
         fromRiotId: getMyRiotId(),
         hostPeerId: myPeerId,
@@ -8053,7 +8188,7 @@
       });
       setNickInBox(ok
         ? `${friendRiotId} 님에게 초대를 보냈습니다! 상대가 친구 목록에서 수락하면 합류합니다.`
-        : `초대 전송에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.`);
+        : `초대 전송에 실패했습니다. 친구가 오프라인이거나 연결할 수 없습니다. 잠시 후 다시 시도해주세요.`);
     };
 
     let partyJoin = null;   // { inv, attempt, waitMs, done, timer, conn }
@@ -8130,7 +8265,7 @@
       updateLeaveRoomButtonsVisibility();
       renderLobbySlotsUI();
       // 수락 알림 + 내 peerId 전달 (파티장이 역방향으로도 연결 가능)
-      ntfyPublish(socialTopic('i', inv.fromRiotId), { type: 'inviteAccept', fromRiotId: getMyRiotId(), guestPeerId: myPeerId });
+      sendSocial(inv.fromRiotId, { type: 'inviteAccept', fromRiotId: getMyRiotId(), guestPeerId: myPeerId });
       attemptPartyJoin();
     };
 
@@ -8140,7 +8275,7 @@
       if (!inv) return;
       delete pendingInvites[key];
       renderFriendListUI();
-      ntfyPublish(socialTopic('i', inv.fromRiotId), { type: 'inviteDecline', fromRiotId: getMyRiotId() });
+      sendSocial(inv.fromRiotId, { type: 'inviteDecline', fromRiotId: getMyRiotId() });
     };
 
     // 이전 팝업 버튼 호환용 (더 이상 팝업은 표시되지 않음)
@@ -14982,6 +15117,8 @@
         if (window._neonOverdriveHandData) window._neonOverdriveHandData.handGrp.visible = false;
         if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
         showSkillNotice('무기 교체 — 오버드라이브(X) 취소', '#94a3b8');
+        // 게임 자체의 무기 교체 처리가 끝난 뒤 총 모델을 다시 장착해 투명(숨김) 상태가 남지 않게 함
+        window.__neonForceGunRestore();
       }
       // 숫자키(1~3)로 무기를 꺼내면 고속 기어 해제
       if (['Digit1', 'Digit2', 'Digit3'].includes(e.code) && neonState.highGearActive) {
@@ -15007,7 +15144,7 @@
     }
     if (myAgent === 'neon') {
       // 고속 기어(E) 달리기 중 좌클릭 사격 차단
-      if (neonState.highGearActive && !neonState.overdriveActive && e.button === 0) {
+      if (neonState.highGearActive && !neonState.overdriveActive && !(neonState.slideTimer > 0) && e.button === 0) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -15236,6 +15373,7 @@
         neonState.overdriveActive = false;
         neonState.highGearActive = false;
         showSkillNotice('달리기 게이지 소진 — 오버드라이브(X) 종료', '#94a3b8');
+        if (window.__neonForceGunRestore) window.__neonForceGunRestore();
       }
     } else if (neonState.highGearActive && !isDead) {
       neonState.battery = Math.max(0, neonState.battery - 10.0 * dt);
@@ -15537,6 +15675,30 @@
   let _lastTrackedRound = null;
 
   // 2. 네온 슬라이딩 시작 시 즉시 총 꺼내기(무기 장착 복귀) + 팔 애니메이션 숨김
+  // 오버드라이브 취소·종료 후 총이 투명하게 남는 문제 방지: 모델 재장착 + 숨김 상태 해제를 몇 프레임 동안 보장
+  window.__neonForceGunRestore = function () {
+    const apply = (rebuild) => {
+      try {
+        if (typeof neonState !== 'undefined' && neonState.overdriveActive) return;
+        if (window._neonOverdriveHandData && window._neonOverdriveHandData.handGrp) window._neonOverdriveHandData.handGrp.visible = false;
+        if (window._neonSprintArmsData && window._neonSprintArmsData.armsGrp) window._neonSprintArmsData.armsGrp.visible = false;
+        if (typeof gunGroup === 'undefined' || !gunGroup) return;
+        if (rebuild && typeof updateGunVisual === 'function') updateGunVisual();
+        const hide = (typeof window.__jettBladeHeld === 'function' && window.__jettBladeHeld()) ||
+          (typeof neonState !== 'undefined' && neonState.throwLock > 0);
+        if (!hide && !(typeof zoomLevel !== 'undefined' && zoomLevel > 0 && typeof WEAPONS !== 'undefined' && typeof getCurrentWeaponKey === 'function' &&
+            WEAPONS[getCurrentWeaponKey()] && /^sniper/.test(WEAPONS[getCurrentWeaponKey()].zoomType || ''))) {
+          gunGroup.visible = true;
+        }
+        gunGroup.scale.set(1, 1, 1);
+        gunGroup.children.forEach(c => { c.visible = true; });
+      } catch (e) {}
+    };
+    setTimeout(() => apply(true), 0);          // 게임의 switchSlot 처리 직후
+    setTimeout(() => apply(false), 80);
+    setTimeout(() => apply(false), 250);
+  };
+
   function restoreNeonWeaponOnSlide() {
     if (typeof myAgent === 'undefined' || myAgent !== 'neon') return;
     if (typeof neonState === 'undefined') return;
@@ -15771,6 +15933,7 @@
   };
 
   window.logoutAccount = function () {
+    try { if (typeof stopSocialEngine === 'function') stopSocialEngine(); } catch (e) {}
     localStorage.removeItem(SESSION_KEY);
     const modal = document.getElementById('accountSetupModal');
     if (modal) { modal.style.display = 'flex'; modal.style.pointerEvents = 'auto'; modal.style.zIndex = '60'; }
