@@ -7750,25 +7750,6 @@
       if (typeof initAccountPeerNode === 'function') initAccountPeerNode();
     }
 
-    saveUsersDB();
-        applyAccountSession(id, keepLogin);
-      } else {
-        if (!Object.prototype.hasOwnProperty.call(usersDB, id) || !usersDB[id]) {
-          errEl.innerText = '존재하지 않는 아이디입니다';
-          return;
-        }
-        const record = usersDB[id];
-        const storedPw = record.pw !== undefined ? record.pw : record.password;
-        if (String(storedPw) !== String(pw)) {
-          errEl.innerText = '비밀번호가 일치하지 않습니다';
-          return;
-        }
-        if (!record.nick && record.nickname) record.nick = record.nickname;
-        if (!record.nickname && record.nick) record.nickname = record.nick;
-        applyAccountSession(id, keepLogin);
-      }
-    };
-
     window.resetAccountStorageData = function() {
       localStorage.removeItem(USERS_DB_KEY);
       localStorage.removeItem(SESSION_KEY);
@@ -9184,6 +9165,17 @@
       updateSensitivityValue(userAccount.sensitivity, false);
     }
 
+    function enterGameView() {
+      hasEnteredGame = true;
+      isShopOpen = false;
+      if (shopModal) shopModal.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
+      try {
+        const p = document.body.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) {}
+    }
+
     document.getElementById('btnStartBrawl').addEventListener('click', () => {
       const inParty = Object.keys(connections).length > 0;
       if (inParty && !isHost) {
@@ -9198,23 +9190,17 @@
         });
       }
       loadMap('brawl');
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.getElementById('btnStartRange').addEventListener('click', () => {
       loadMap('range');
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     let hasEnteredGame = false;
     document.getElementById('btnResumeGame').addEventListener('click', () => {
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.getElementById('btnFullscreen').addEventListener('click', () => {
@@ -9223,9 +9209,7 @@
     });
 
     document.getElementById('closeShopBtn').addEventListener('click', () => {
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.addEventListener('pointerlockchange', () => {
@@ -10470,6 +10454,15 @@
       renderer.render(scene, camera);
     }
     animate();
+
+    renderer.domElement.addEventListener('click', () => {
+      if (overlay && overlay.style.display === 'none' && !isShopOpen && document.pointerLockElement !== document.body) {
+        try {
+          const p = document.body.requestPointerLock();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (e) {}
+      }
+    });
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -14474,7 +14467,8 @@
     }
 
     // 사망 시 궁극기/테더 해제
-    if (isDead) {
+    // 사망 시 궁극기/테더 해제
+    if (typeof isDead !== 'undefined' && isDead) {
       if (reynaState.empressActive) reynaState.empressActive = false;
       if (reynaState.devourBeam || reynaState.devourTimer > 0) clearReynaDevourTether(false);
       if (neonState.overdriveActive) neonState.overdriveActive = false;
@@ -15180,4 +15174,4 @@
 
 </body>
 </html>
-요청하신 세 가지 수정 사항을 모두 반영하여
+요청하신 대로 검은 화면 문제를 수정한 index.html 파일을
