@@ -9165,6 +9165,17 @@
       updateSensitivityValue(userAccount.sensitivity, false);
     }
 
+    function enterGameView() {
+      hasEnteredGame = true;
+      isShopOpen = false;
+      if (shopModal) shopModal.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
+      try {
+        const p = document.body.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) {}
+    }
+
     document.getElementById('btnStartBrawl').addEventListener('click', () => {
       const inParty = Object.keys(connections).length > 0;
       if (inParty && !isHost) {
@@ -9179,23 +9190,17 @@
         });
       }
       loadMap('brawl');
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.getElementById('btnStartRange').addEventListener('click', () => {
       loadMap('range');
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     let hasEnteredGame = false;
     document.getElementById('btnResumeGame').addEventListener('click', () => {
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.getElementById('btnFullscreen').addEventListener('click', () => {
@@ -9204,9 +9209,7 @@
     });
 
     document.getElementById('closeShopBtn').addEventListener('click', () => {
-      isShopOpen = false;
-      shopModal.style.display = 'none';
-      document.body.requestPointerLock();
+      enterGameView();
     });
 
     document.addEventListener('pointerlockchange', () => {
@@ -10451,6 +10454,15 @@
       renderer.render(scene, camera);
     }
     animate();
+
+    renderer.domElement.addEventListener('click', () => {
+      if (overlay && overlay.style.display === 'none' && !isShopOpen && document.pointerLockElement !== document.body) {
+        try {
+          const p = document.body.requestPointerLock();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (e) {}
+      }
+    });
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -15162,6 +15174,4 @@
 
 </body>
 </html>
-
-
-수정된 내용
+요청하신 대로 검은 화면 문제를 수정한 index.html 파일을
