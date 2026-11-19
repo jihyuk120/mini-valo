@@ -17106,13 +17106,13 @@
   const CFG = {
     sova: {
       C: { cost: 400, max: 1, dur: 10, dartCd: 3.0, speed: 5 },
-      Q: { cost: 150, max: 2, dmg: 90, radius: 5.0 },
+      Q: { cost: 150, max: 2, dmg: 75, radius: 7.5 },
       E: { max: 1, recharge: 40, radius: 32, pulses: [0.4, 2.4], reveal: 1.8 },
-      X: { max: 8, beams: 3, dmg: 80, dur: 15, reveal: 4, charge: 2.0 }
+      X: { max: 8, beams: 3, dmg: 80, dur: 15, reveal: 4, charge: 1.3 }
     },
     clove: {
       C: { cost: 200, max: 1, window: 10, dur: 8, hp: 50, speed: 1.6 },
-      Q: { cost: 250, max: 1, radius: 6.0, dur: 4 },
+      Q: { cost: 250, max: 1, radius: 8.5, dur: 4, fuse: 1.7 },
       E: { max: 2, extra: 150, recharge: 30, radius: 5.4, life: 14 },
       X: { max: 8, window: 2, invuln: 2, prove: 12 }
     }
@@ -17121,7 +17121,7 @@
   const S = window.sovaState = {
     c: 0, q: 0, e: 1, eCd: 0, ult: 0,
     held: null, bounce: 0, charging: false, charge: 0, fireT: 0,
-    drone: null, droneArmed: false, ultActive: false, beams: 0, ultT: 0, ultCharge: 0, ultSndT: 0,
+    drone: null, droneArmed: false, ultActive: false, beams: 0, ultT: 0, ultCharge: 0, ultSndT: 0, floatT: 0, drone2: null,
     arrows: [], sonars: [], fx: [], beamFx: []
   };
   const K = window.cloveState = {
@@ -17132,7 +17132,7 @@
     mapOpen: false, curX: 0, curY: 0, mapPoint: null,
     wasDead: false, deathAt: 0, deathPos: new T.Vector3(), lastPos: new T.Vector3(0, 2, 0),
     revInv: 0, proving: false, proveT: 0, proveKills: 0, assistFlag: false,
-    assistWatch: [], savedStreak: 0, savedRoundKills: 0
+    assistWatch: [], savedStreak: 0, savedRoundKills: 0, target: null, ignoreSmoke: false
   };
   const G = { lastKills: 0, lastRound: -1, selfDecay: 0, outlined: new Map() };
 
@@ -17412,17 +17412,37 @@
     const sleeve = new T.Mesh(new T.BoxGeometry(0.1, 0.1, 0.3), mat(0x4c1d95)); sleeve.position.set(0.02, -0.14, 0.18); sleeve.rotation.x = -0.3; g.add(sleeve);
     return g;
   }
+  function buildDroneHeld() {
+    const g = new T.Group();
+    const d = buildDroneMesh(); d.scale.setScalar(0.55); d.rotation.y = Math.PI; g.add(d);
+    const hand = new T.Mesh(new T.SphereGeometry(0.07, 10, 8), mat(0xf1c9a5)); hand.position.set(0, -0.15, 0.04); hand.scale.set(1.2, 0.8, 1.2); g.add(hand);
+    const sleeve = new T.Mesh(new T.BoxGeometry(0.1, 0.1, 0.3), mat(0x1e3a8a)); sleeve.position.set(0.02, -0.19, 0.2); sleeve.rotation.x = -0.3; g.add(sleeve);
+    return g;
+  }
+  function buildMapHeld() {
+    const g = new T.Group();
+    const disc = new T.Mesh(new T.CircleGeometry(0.25, 40), new T.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.8, side: T.DoubleSide })); g.add(disc);
+    const rim = new T.Mesh(new T.TorusGeometry(0.25, 0.008, 6, 40), new T.MeshBasicMaterial({ color: 0xffffff })); g.add(rim);
+    const outer = new T.Mesh(new T.TorusGeometry(0.31, 0.006, 6, 40), new T.MeshBasicMaterial({ color: 0xe9d5ff, transparent: true, opacity: 0.7 })); g.add(outer); g.userData.outer = outer;
+    const blk = new T.MeshBasicMaterial({ color: 0xf5d0fe, transparent: true, opacity: 0.75 });
+    [[-0.1, 0.08, 0.1, 0.06], [0.05, 0.1, 0.12, 0.05], [-0.04, -0.02, 0.07, 0.12], [0.09, -0.07, 0.1, 0.07], [-0.12, -0.1, 0.06, 0.05]].forEach(b => {
+      const m = new T.Mesh(new T.PlaneGeometry(b[2], b[3]), blk); m.position.set(b[0], b[1], 0.004); g.add(m);
+    });
+    const hm = mat(0xf1c9a5);
+    [-1, 1].forEach(sd => { const h = new T.Mesh(new T.SphereGeometry(0.06, 10, 8), hm); h.position.set(sd * 0.3, -0.12, 0.04); h.scale.set(1, 1.3, 0.8); g.add(h); });
+    return g;
+  }
   function ensureViews() {
     if (views.built) return true;
     if (typeof camera === 'undefined' || !camera) return false;
-    views.shock = buildBow(false); views.recon = buildBow(false); views.ult = buildBow(true); views.orb = buildOrb();
+    views.shock = buildBow(false); views.recon = buildBow(false); views.ult = buildBow(true); views.orb = buildOrb(); views.drone = buildDroneHeld(); views.map = buildMapHeld();
     // 정찰용 화살은 청록 촉
     views.recon.userData.arrow.children[1].material = mat(0x67e8f9, 0x06b6d4);
-    ['shock', 'recon', 'ult', 'orb'].forEach(k => { views[k].visible = false; camera.add(views[k]); });
+    ['shock', 'recon', 'ult', 'orb', 'drone', 'map'].forEach(k => { views[k].visible = false; camera.add(views[k]); });
     views.built = true;
     return true;
   }
-  function allViewsHidden() { ['shock', 'recon', 'ult', 'orb'].forEach(k => { if (views[k]) views[k].visible = false; }); }
+  function allViewsHidden() { ['shock', 'recon', 'ult', 'orb', 'drone', 'map'].forEach(k => { if (views[k]) views[k].visible = false; }); }
   function restoreGun() {
     if (typeof window.__neonForceGunRestore === 'function') window.__neonForceGunRestore();
     else if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
@@ -17431,6 +17451,8 @@
   function unequip() {
     const had = S.held || K.held;
     S.held = null; S.charging = false; S.charge = 0; S.ultCharge = 0; K.held = null;
+    if (K.mapOpen) closeMap();
+    K.target = null; if (mapRing) mapRing.visible = false;
     allViewsHidden();
     const cross = document.getElementById('crosshair'); if (cross) cross.style.display = 'block';
     if (had) restoreGun();
@@ -17439,6 +17461,7 @@
     if (!ensureViews() || dead()) return;
     if (typeof setZoom === 'function') { try { setZoom(0); } catch (e) {} }
     if (typeof isMouseDown !== 'undefined') isMouseDown = false;
+    if (K.mapOpen) closeMap(); K.target = null; if (mapRing) mapRing.visible = false;
     S.held = null; K.held = null; S.charging = false; S.charge = 0; S.ultCharge = 0; S.droneArmed = false;
     if (isSova()) { S.held = which; S.bounce = 0; } else K.held = which;
     allViewsHidden();
@@ -17585,21 +17608,25 @@
     const dir = new T.Vector3(); camera.getWorldDirection(dir);
     const p = camera.position.clone().addScaledVector(dir, 1.0);
     const mesh = buildDroneMesh(); mesh.position.copy(p); scene.add(mesh);
-    S.drone = { p, yaw: typeof yaw !== 'undefined' ? yaw : 0, pitch: 0, t: CFG.sova.C.dur, cd: 0, mesh, keys: {} };
+    S.drone = { p, yaw: typeof yaw !== 'undefined' ? yaw : 0, pitch: 0, t: CFG.sova.C.dur, cd: 0, mesh, keys: {}, self: null };
+    try {   // 드론 시점에서 내 본체도 보이게
+      const body = buildAgent3DCharacterMesh(myAgent, myTeam, {});
+      body.position.set(camera.position.x, camera.position.y - (typeof currentEyeHeight !== 'undefined' ? currentEyeHeight : 2.0), camera.position.z);
+      body.rotation.y = typeof yaw !== 'undefined' ? yaw : 0;
+      scene.add(body); S.drone.self = body;
+    } catch (err) {}
     beep(400, 0.3, 'sine', 0.1, 900);
   }
   function droneKey() {
-    if (S.droneArmed) { startDrone(); return; }
+    if (S.held === 'drone') { unequip(); return; }
     if (S.c <= 0) { notice('올빼미 드론이 없습니다 (상점 B에서 구매 400¤)', '#ff4655'); return; }
     if (isPrep()) { notice('준비 시간에는 사용할 수 없습니다.', '#ff4655'); return; }
-    unequip();
-    S.droneArmed = true;
-    notice('드론 준비 — [C]를 한 번 더 누르면 발진', '#7dd3fc');
-    beep(350, 0.1, 'triangle', 0.08, 600);
+    equip('drone');
   }
   function endDrone(msg) {
     if (!S.drone) return;
     scene.remove(S.drone.mesh);
+    if (S.drone.self) scene.remove(S.drone.self);
     S.drone = null;
     restoreGun();
     if (msg) notice(msg);
@@ -17658,11 +17685,10 @@
   function fireBeam() {
     if (!S.ultActive || S.beams <= 0 || S.fireT > 0 || S.ultCharge > 0) return;
     S.ultCharge = CFG.sova.X.charge; S.ultSndT = 0;
-    notice('기를 모으는 중...', '#38bdf8');
   }
   function releaseBeam() {
     if (!S.ultActive || S.beams <= 0) return;
-    S.beams--; S.fireT = 0.9;
+    S.beams--; S.fireT = 0.9; S.floatT = 0.5;
     const origin = new T.Vector3(), dir = new T.Vector3();
     camera.getWorldPosition(origin); camera.getWorldDirection(dir);
     const ray = new T.Raycaster(origin.clone(), dir.clone());
@@ -17696,18 +17722,32 @@
     origin.addScaledVector(dir, 0.8); origin.y -= 0.1;
     const m = buildOrb(); m.children[m.children.length - 1].visible = false; m.children[m.children.length - 2].visible = false; m.scale.setScalar(1.6);
     m.position.copy(origin); scene.add(m);
-    K.orbs.push({ p: origin.clone(), v: dir.multiplyScalar(30).add(new T.Vector3(0, 2.5, 0)), mesh: m, life: 5, done: false });
+    K.orbs.push({ p: origin.clone(), v: dir.multiplyScalar(30).add(new T.Vector3(0, 2.5, 0)), mesh: m, life: CFG.clove.Q.fuse, done: false });
     K.q--; K.fireT = 0.5;
     if (views.orb) views.orb._kick = 0.12;
     beep(300, 0.2, 'triangle', 0.1, 600);
     if (K.q <= 0) setTimeout(() => { if (K.held === 'orb') unequip(); }, 300);
   }
+  function allyList() {
+    const out = [];
+    if (isRange()) return out;
+    if (typeof brawlBots !== 'undefined' && currentMap === 'brawl') {
+      for (const b of brawlBots) if (b && b.userData && !b.userData.dead && b.userData.team === myTeam) out.push({ pos: b.position, kind: 'bot', ref: b, root: b, ally: true });
+    }
+    if (typeof remotePlayers !== 'undefined') {
+      for (const id in remotePlayers) {
+        const rp = remotePlayers[id];
+        if (rp && rp.mesh && !rp.isDead && rp.team === myTeam) out.push({ pos: rp.mesh.position, kind: 'remote', ref: rp, id, root: rp.mesh, ally: true });
+      }
+    }
+    return out;
+  }
   function decayEnemy(en, secs) {
-    markEnemy(en, secs, 0xa855f7);
+    if (!en.ally) markEnemy(en, secs, 0xa855f7);
     if (en.kind === 'bot' || en.kind === 'range') {
       en.ref.userData.naDecayT = Math.max(en.ref.userData.naDecayT || 0, secs);
       en.ref.userData.hp = Math.min(en.ref.userData.hp, 10);
-      if (en.kind === 'bot') K.assistWatch.push({ ref: en.ref, t: performance.now() });
+      if (en.kind === 'bot' && !en.ally) K.assistWatch.push({ ref: en.ref, t: performance.now() });
     } else if (en.kind === 'remote') {
       sendNet({ type: 'naDecay', targetId: en.id, dur: secs }, en.id);
     }
@@ -17718,21 +17758,38 @@
     spawnBurst(K.fx, o.p, 0xa855f7, C.radius, 0.6);
     spawnBurst(K.fx, o.p, 0xe9d5ff, C.radius * 0.5, 0.35);
     beep(200, 0.4, 'sawtooth', 0.14, 60);
-    for (const en of enemyList()) {
+    // 피아 구분 없음(아군도 부패) · 벽/엄폐물이 가로막으면 적용 안 됨(연막은 시야 차단 아님)
+    const from = o.p.clone(); from.y += 0.4;
+    K.ignoreSmoke = true;
+    for (const en of [...enemyList(), ...allyList()]) {
       const c = new T.Vector3(en.pos.x, en.pos.y + 1.0, en.pos.z);
-      if (c.distanceTo(o.p) <= C.radius) decayEnemy(en, C.dur);
+      if (c.distanceTo(o.p) > C.radius) continue;
+      if (typeof hasLineOfSight === 'function' && !hasLineOfSight(from, c)) continue;
+      decayEnemy(en, C.dur);
     }
+    K.ignoreSmoke = false;
   }
   function stepOrb(o, dt) {
-    o.life -= dt; if (o.life <= 0) { orbExplode(o); return; }
+    o.life -= dt; if (o.life <= 0) { orbExplode(o); return; }   // 공중에서는 일정 시간 뒤 자동 폭발
     const steps = Math.max(1, Math.ceil(o.v.length() * dt / 0.25)), h = dt / steps;
-    const ens = enemyList();
     for (let i = 0; i < steps && !o.done; i++) {
       o.v.y -= 9 * h;
+      const p0 = o.p.clone();
       o.p.addScaledVector(o.v, h);
-      let hit = o.p.y <= 0.15 || Math.abs(o.p.x) > 45 || Math.abs(o.p.z) > 50 || !!inWall(o.p, 0);
-      if (!hit) for (const en of ens) if (Math.abs(o.p.x - en.pos.x) < 0.8 && Math.abs(o.p.z - en.pos.z) < 0.8 && o.p.y > en.pos.y && o.p.y < en.pos.y + 2.2) { hit = true; break; }
-      if (hit) { o.p.y = Math.max(0.15, o.p.y); orbExplode(o); return; }
+      if (o.p.y <= 0.15) { o.p.y = 0.15; orbExplode(o); return; }   // 바닥에 닿으면 즉시 폭발
+      let axis = null;
+      if (Math.abs(o.p.x) > 45) axis = 'x'; else if (Math.abs(o.p.z) > 50) axis = 'z';
+      const c = axis ? null : inWall(o.p, 0);
+      if (c) {
+        const y0 = c.minY !== undefined ? c.minY : 0, y1 = c.maxY !== undefined ? c.maxY : 4;
+        const dx = p0.x < c.minX ? c.minX - p0.x : (p0.x > c.maxX ? p0.x - c.maxX : 0);
+        const dz = p0.z < c.minZ ? c.minZ - p0.z : (p0.z > c.maxZ ? p0.z - c.maxZ : 0);
+        const dy = p0.y < y0 ? y0 - p0.y : (p0.y > y1 ? p0.y - y1 : 0);
+        if (dx >= dz && dx >= dy && dx > 0) axis = 'x'; else if (dz >= dy && dz > 0) axis = 'z'; else if (dy > 0) axis = 'y';
+        if (!axis) { o.p.copy(p0); orbExplode(o); return; }
+        if (axis === 'y' && p0.y > y1) { o.p.copy(p0); orbExplode(o); return; }   // 위에서 착지 = 바닥
+      }
+      if (axis) { o.v[axis] *= -0.55; o.v.x *= 0.85; o.v.z *= 0.85; o.p.copy(p0); beep(500, 0.05, 'square', 0.05, 300); }   // 벽에 튕김
     }
     o.mesh.position.copy(o.p); o.mesh.rotation.x += dt * 8; o.mesh.rotation.y += dt * 6;
   }
@@ -17760,8 +17817,21 @@
     makeSmoke(x, z, false);
     sendNet({ type: 'naSmoke', x, z });
     K.e--; if (K.eCd <= 0) K.eCd = CFG.clove.E.recharge;
+    K.target = null;
     notice(`연막 설치 (남은 계략 ${K.e})`, '#c084fc');
-    if (K.e <= 0) closeMap();
+    closeMap();
+    if (K.e <= 0 && K.held === 'map') unequip();
+    else if (mapRing) mapRing.visible = false;
+  }
+  function mapKey() {
+    if (K.held === 'map') { unequip(); return; }
+    if (K.e <= 0) { notice('계략이 없습니다 (재충전 대기 중)', '#ff4655'); return; }
+    equip('map');
+    notice('[좌클릭] 위치 조정 · [우클릭] 연막 설치', '#c084fc');
+  }
+  function placeAtTarget() {
+    if (!K.target) { notice('좌클릭으로 연막 위치를 먼저 정하세요', '#ff4655'); return; }
+    placeSmoke(K.target.x, K.target.z);
   }
   function tickSmokes(dt) {
     for (let i = K.smokes.length - 1; i >= 0; i--) {
@@ -17805,13 +17875,12 @@
     mapOverlay = document.createElement('div');
     mapOverlay.id = 'naMapOverlay';
     mapOverlay.style.cssText = 'position:fixed; inset:0; z-index:845; pointer-events:none; display:none; border:4px solid #a855f7; box-sizing:border-box;';
-    mapOverlay.innerHTML = '<div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(30,10,60,0.85);color:#e9d5ff;padding:8px 18px;font-weight:bold;border-radius:4px;">계략 — 클릭: 연막 설치 · 우클릭/E: 닫기 <span id="naMapCnt"></span></div><div id="naMapCursor" style="position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border:3px solid #e9d5ff;border-radius:50%;box-shadow:0 0 12px #a855f7;"><div style="position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;background:#e9d5ff;border-radius:50%;"></div></div>';
+    mapOverlay.innerHTML = '<div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(30,10,60,0.85);color:#e9d5ff;padding:8px 18px;font-weight:bold;border-radius:4px;">계략 — 좌클릭: 위치 지정 · 우클릭: 바로 설치 · E: 닫기 <span id="naMapCnt"></span></div><div id="naMapCursor" style="position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border:3px solid #e9d5ff;border-radius:50%;box-shadow:0 0 12px #a855f7;"><div style="position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;background:#e9d5ff;border-radius:50%;"></div></div>';
     document.body.appendChild(mapOverlay);
     return mapOverlay;
   }
   function openMap() {
     if (K.e <= 0) { notice('계략이 없습니다 (재충전 대기 중)', '#ff4655'); return; }
-    unequip();
     K.mapOpen = true; K.curX = window.innerWidth / 2; K.curY = window.innerHeight / 2;
     ensureTopCam(); ensureMapOverlay();
     if (!mapRing) { mapRing = new T.Mesh(new T.RingGeometry(CFG.clove.E.radius - 0.4, CFG.clove.E.radius, 40), new T.MeshBasicMaterial({ color: 0xe9d5ff, side: T.DoubleSide, transparent: true, opacity: 0.9 })); mapRing.rotation.x = -Math.PI / 2; mapRing.position.y = 0.08; scene.add(mapRing); }
@@ -17820,7 +17889,8 @@
   }
   function closeMap() {
     K.mapOpen = false; K.mapPoint = null;
-    if (mapRing) mapRing.visible = false;
+    if (mapRing) mapRing.visible = !!(K.target && K.held === 'map');
+    if (mapRing && K.target && K.held === 'map') mapRing.position.set(K.target.x, 0.08, K.target.z);
     if (mapOverlay) mapOverlay.style.display = 'none';
   }
   function updateMapPoint() {
@@ -17946,7 +18016,7 @@
     } else {
       if (e.code === 'KeyC') pickMeUp();
       else if (e.code === 'KeyQ') { if (K.held === 'orb') unequip(); else if (K.q > 0) equip('orb'); else notice('간섭이 없습니다 (상점 B에서 구매 250¤)', '#ff4655'); }
-      else if (e.code === 'KeyE') { openMap(); e.stopImmediatePropagation(); }
+      else if (e.code === 'KeyE') { mapKey(); e.stopImmediatePropagation(); }
       else if (e.code === 'KeyX') { notice('사망 후 2초 이내에 X를 누르면 부활합니다', '#c084fc'); }
     }
   }, true);
@@ -17970,8 +18040,12 @@
     if (S.drone && isSova()) { e.preventDefault(); e.stopImmediatePropagation(); if (e.button === 0) droneDart(); return; }
     if (K.mapOpen && isClove()) {
       e.preventDefault(); e.stopImmediatePropagation();
-      if (e.button === 0) { if (K.mapPoint) placeSmoke(K.mapPoint.x, K.mapPoint.z); }
-      else if (e.button === 2) closeMap();
+      if (e.button === 0) {
+        if (K.mapPoint) {
+          if (dead()) placeSmoke(K.mapPoint.x, K.mapPoint.z);
+          else { K.target = K.mapPoint.clone(); closeMap(); notice('위치 지정 — [우클릭]으로 연막 설치', '#c084fc'); }
+        }
+      } else if (e.button === 2) { if (K.mapPoint) placeSmoke(K.mapPoint.x, K.mapPoint.z); }
       return;
     }
     if (isClove() && K.revInv > 0) { e.preventDefault(); e.stopImmediatePropagation(); return; }
@@ -17979,10 +18053,12 @@
     e.preventDefault(); e.stopImmediatePropagation();
     if (isSova()) {
       if (S.held === 'ult') { if (e.button === 0) fireBeam(); }
+      else if (S.held === 'drone') { if (e.button === 0) startDrone(); else if (e.button === 2) unequip(); }
       else if (e.button === 0) sovaStartCharge();
       else if (e.button === 2 && !S.charging) { S.bounce = (S.bounce + 1) % 3; notice(`튕김 횟수: ${S.bounce}`, '#7dd3fc'); beep(600 + S.bounce * 150, 0.08, 'square', 0.06); }
     } else {
-      if (e.button === 0) throwOrb(); else if (e.button === 2) unequip();
+      if (K.held === 'map') { if (e.button === 0) { if (K.e > 0) openMap(); } else if (e.button === 2) placeAtTarget(); }
+      else if (e.button === 0) throwOrb(); else if (e.button === 2) unequip();
     }
   }, true);
   document.addEventListener('mouseup', (e) => {
@@ -18091,7 +18167,7 @@
         else if (K.revInv > 0) txt = `무적 ${K.revInv.toFixed(1)}s`;
         else if (K.proving) txt = `킬/어시스트까지 ${K.proveT.toFixed(1)}s`;
         else if (K.pickWin > 0 && K.c > 0) txt = `[C] 활력 징표 사용 가능 (${K.pickWin.toFixed(1)}s)`;
-      } else if (isSova() && S.droneArmed) txt = '[C] 한 번 더 누르면 드론 발진';
+      } else if (isSova() && S.held === 'drone') txt = '[좌클릭] 드론 발진 · [우클릭/C] 넣기';
       else if (isSova() && S.ultActive) txt = `사냥꾼의 분노 — 남은 광선 ${S.beams} · ${Math.max(0, S.ultT).toFixed(1)}s`;
       prompt.style.display = (ag && txt) ? 'block' : 'none';
       prompt.innerText = txt;
@@ -18103,14 +18179,14 @@
     if (ag === 'sova') {
       const C = CFG.sova;
       set('naShopCT', `C 올빼미 드론 (${S.c}/${C.C.max})`);
-      set('naShopCD', `${C.C.cost} ¤ · C 두 번(준비→발진) · 10초간 드론 조종(WASD, Space/Ctrl) · 좌클릭 화살로 적 표시(벽 투시) · C 회수`);
+      set('naShopCD', `${C.C.cost} ¤ · C로 꺼내고 좌클릭으로 발진 · 10초간 드론 조종(WASD, Space/Ctrl) · 좌클릭 화살로 적 표시(벽 투시) · C 회수`);
       set('naShopQT', `Q 충격 화살 (${S.q}/${C.Q.max})`);
-      set('naShopQD', `${C.Q.cost} ¤ · 누르고 있다 놓으면 발사 · 폭발 최대 ${C.Q.dmg} · 우클릭 튕김 0/1/2회`);
+      set('naShopQD', `${C.Q.cost} ¤ · 누르고 있다 놓으면 발사 · 넓은 폭발 최대 ${C.Q.dmg} · 우클릭 튕김 0/1/2회`);
       set('naShopET', `E 정찰용 화살 (${S.e}/${C.E.max})`);
       set('naShopED', `라운드마다 1개 무료 · 사용 후 ${C.E.recharge}초 재충전 · 착탄 지점에서 2회 음파로 적 윤곽 표시 후 사라짐 · 우클릭 튕김`);
       set('naShopXT', `X 사냥꾼의 분노 (${S.ult}/${C.X.max} pt)`);
       set('naShopXD', `거대 활 · 지도 전체/벽 관통 광선 3회 · 적중 시 ${C.X.dmg} 피해 + 위치 노출`);
-      set('naHudC', `<div style="color:${col};font-weight:bold;">[C] 드론</div><div>${S.drone ? S.drone.t.toFixed(1) + 's' : (S.droneArmed ? '발진 대기' : S.c + ' / ' + C.C.max)}</div>`);
+      set('naHudC', `<div style="color:${col};font-weight:bold;">[C] 드론</div><div>${S.drone ? S.drone.t.toFixed(1) + 's' : (S.held === 'drone' ? '들고 있음' : S.c + ' / ' + C.C.max)}</div>`);
       set('naHudQ', `<div style="color:${S.held === 'shock' ? '#fff' : col};font-weight:bold;">[Q] 충격 화살</div><div>${S.q} / ${C.Q.max}${S.held === 'shock' ? ' · 튕김 ' + S.bounce : ''}</div>`);
       set('naHudE', `<div style="color:${S.held === 'recon' ? '#fff' : col};font-weight:bold;">[E] 정찰 화살</div><div>${S.e > 0 ? '준비' + (S.held === 'recon' ? ' · 튕김 ' + S.bounce : '') : Math.ceil(S.eCd) + 's'}</div>`);
       set('naHudX', `<div style="color:#38bdf8;font-weight:bold;">[X] 사냥꾼의 분노${lock}</div><div>${S.ultActive ? 'ACTIVE · ' + S.beams + '발' : S.ult + ' / ' + C.X.max}</div>`);
@@ -18119,14 +18195,14 @@
       set('naShopCT', `C 활력 징표 (${K.c}/${C.C.max})`);
       set('naShopCD', `${C.C.cost} ¤ · 킬/어시스트 직후 사용 · 8초간 이동 속도 대폭 증가 + 임시 체력 ${C.C.hp}`);
       set('naShopQT', `Q 간섭 (${K.q}/${C.Q.max})`);
-      set('naShopQD', `${C.Q.cost} ¤ · 보라색 에너지구 투척 · 폭발 범위 적에게 ${C.Q.dur}초 부패(최대 체력 10)`);
+      set('naShopQD', `${C.Q.cost} ¤ · 보라색 구체 투척 · 벽에 튕김, 바닥 닿으면 즉시/공중에선 ${C.Q.fuse}초 뒤 폭발 · 범위 내 아군·적 모두 ${C.Q.dur}초 부패(체력 10까지, 처치 불가)`);
       set('naShopET', `E 계략 (${K.e}/${C.E.max})`);
-      set('naShopED', `라운드마다 1개 무료 · 추가 1개 ${C.E.extra} ¤ (클릭 구매) · 사용 후 ${C.E.recharge}초마다 1개 충전 · 지도에서 연막 설치`);
+      set('naShopED', `라운드마다 1개 무료 · 추가 1개 ${C.E.extra} ¤ (클릭 구매) · 사용 후 ${C.E.recharge}초마다 1개 충전 · E로 꺼내 좌클릭 위치 지정, 우클릭 설치(준비시간엔 위치 조정만)`);
       set('naShopXT', `X 아직 안 죽었어 (${K.ult}/${C.X.max} pt)`);
       set('naShopXD', `사망 후 2초 이내 X로 제자리 부활 · 2초 무적 · 12초 안에 킬/어시스트 없으면 재사망`);
       set('naHudC', `<div style="color:#c084fc;font-weight:bold;">[C] 활력 징표</div><div>${K.boostT > 0 ? K.boostT.toFixed(1) + 's' : K.c + ' / ' + C.C.max}${K.pickWin > 0 ? ' ★' : ''}</div>`);
       set('naHudQ', `<div style="color:${K.held === 'orb' ? '#fff' : '#c084fc'};font-weight:bold;">[Q] 간섭</div><div>${K.q} / ${C.Q.max}</div>`);
-      set('naHudE', `<div style="color:#c084fc;font-weight:bold;">[E] 계략</div><div>${K.e} / ${C.E.max}${K.e < C.E.max ? ' · ' + Math.ceil(Math.max(0, K.eCd)) + 's' : ''}</div>`);
+      set('naHudE', `<div style="color:${K.held === 'map' ? '#fff' : '#c084fc'};font-weight:bold;">[E] 계략</div><div>${K.e} / ${C.E.max}${K.e < C.E.max ? ' · ' + Math.ceil(Math.max(0, K.eCd)) + 's' : ''}</div>`);
       set('naHudX', `<div style="color:#e9d5ff;font-weight:bold;">[X] 아직 안 죽었어${lock}</div><div>${K.ult} / ${C.X.max}</div>`);
     }
   }
@@ -18146,7 +18222,7 @@
   if (typeof hasLineOfSight === 'function') {
     const _los = window.hasLineOfSight;
     window.hasLineOfSight = function (a, b) {
-      if (K.smokes.length && segHitsSmoke(a, b)) return false;
+      if (K.smokes.length && !K.ignoreSmoke && segHitsSmoke(a, b)) return false;
       return _los.apply(this, arguments);
     };
   }
@@ -18189,7 +18265,7 @@
           const saved = [];
           const hide = (o) => { if (o) { saved.push([o, o.visible]); o.visible = false; } };
           if (typeof gunGroup !== 'undefined') hide(gunGroup);
-          ['shock', 'recon', 'ult', 'orb'].forEach(k => hide(views[k]));
+          ['shock', 'recon', 'ult', 'orb', 'drone', 'map'].forEach(k => hide(views[k]));
           if (S.drone && isSova() && S.drone.mesh) hide(S.drone.mesh);
           const r = _render(s, alt);
           saved.forEach(([o, v]) => { o.visible = v; });
@@ -18263,6 +18339,11 @@
       }
     }
     if (S.droneArmed && (dead() || !isSova())) S.droneArmed = false;
+    // 점프 중 궁 조준/발사 시 무중력 느낌 (공중에서만)
+    if (S.floatT > 0) S.floatT -= dt;
+    if (isSova() && !dead() && (S.ultCharge > 0 || S.floatT > 0) && typeof isGrounded !== 'undefined' && !isGrounded) {
+      velY = Math.max(-0.5, Math.min(1.0, velY * 0.3));
+    }
     if (S.ultActive) { S.ultT -= dt; if (S.ultT <= 0 || dead()) { S.ultActive = false; S.beams = 0; if (S.held === 'ult') unequip(); } }
     if (S.drone && (dead() || !isSova())) endDrone();
     for (let i = S.arrows.length - 1; i >= 0; i--) { const a = S.arrows[i]; if (!a.done) stepArrow(a, dt); if (a.done) S.arrows.splice(i, 1); }
@@ -18281,6 +18362,8 @@
       let hip = [0.24, -0.22, -0.55];
       if (key === 'ult') hip = [0.2, -0.3, -1.1];
       if (key === 'orb') hip = [0.26, -0.24, -0.5];
+      if (key === 'drone') hip = [0.2, -0.2, -0.5];
+      if (key === 'map') { hip = [0, -0.08, -0.52]; if (v.userData.outer) v.userData.outer.rotation.z += dt * 1.5; }
       const swap = v._swap || 0; if (v._swap > 0) v._swap = Math.max(0, v._swap - dt);
       const kick = v._kick || 0; v._kick = kick * 0.8;
       const pull = (key === 'shock' || key === 'recon') && S.charging ? S.charge : (key === 'ult' && S.ultCharge > 0 ? 1 - S.ultCharge / CFG.sova.X.charge : 0);
