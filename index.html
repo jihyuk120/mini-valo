@@ -6532,6 +6532,7 @@
         neonState.cCharges = 0; neonState.qCharges = 0; neonState.ultPoints = 0;
         neonState.overdriveActive = false; neonState.highGearActive = false; neonState.battery = 100;
       }
+      if (typeof window.__chamberResetRound === 'function') window.__chamberResetRound(true);
       teamRoundCredits = { red: 800, blue: 800 };
       slotWeapons = { 1: null, 2: 'classic', 3: 'melee', 4: 'spike' };
       activeSlot = 2;
@@ -9072,6 +9073,7 @@
           if (myAgent === 'phoenix' && typeof phoenixState !== 'undefined') phoenixState.ultPoints = Math.min(6, phoenixState.ultPoints + 1);
           if (myAgent === 'reyna' && typeof reynaState !== 'undefined') reynaState.ultPoints = Math.min(6, reynaState.ultPoints + 1);
           if (myAgent === 'neon' && typeof neonState !== 'undefined') neonState.ultPoints = Math.min(8, neonState.ultPoints + 1);
+          if (myAgent === 'chamber' && typeof chamberState !== 'undefined' && !chamberState.ultActive) chamberState.ultPoints = Math.min(8, chamberState.ultPoints + 1);
         }
         const killerBot = brawlBots.find(b => b.userData.nick === attackerNick);
         if (killerBot) {
@@ -15954,6 +15956,930 @@
 })();
 </script>
 
+
+<script>
+(function chamberAgentModule() {
+  'use strict';
+  // =========================================================
+  // 체임버 (Chamber) — C 트레이드마크 / Q 헤드헌터 / E 랑데부 / X 역작
+  // =========================================================
+  const CFG = {
+    C: { name: '트레이드마크', maxCharges: 1, cost: 200, triggerRadius: 7.0, zoneRadius: 7.5, zoneLife: 6.0, rearm: 12.0, placeRange: 16 },
+    Q: { name: '헤드헌터', maxAmmo: 8, costPerBullet: 100, headDmg: 159, bodyDmg: 55, interval: 0.42 },
+    E: { name: '랑데부', cooldown: 30, teleportRange: 18, placeRange: 16 },
+    X: { name: '역작', maxPoints: 8, ammo: 5, dmg: 150, interval: 1.1, zoneRadius: 5.0, zoneLife: 6.0 }
+  };
+
+  const st = {
+    cCharges: 0,
+    hhAmmo: 0,
+    rdvCharges: 1,
+    rdvCooldown: 0,
+    anchor: null,          // { mesh, pos }
+    ultPoints: 0,
+    ultActive: false,
+    tdfAmmo: 0,
+    held: null,            // null | 'headhunter' | 'tourdeforce'
+    zoomed: false,
+    fireTimer: 0,
+    traps: [],             // { mesh, pos, cooldown, eye }
+    zones: [],             // { mesh, rings, pos, radius, life, maxLife, netTimer }
+    lastTrackedKills: 0,
+    lastRoundNum: -1,
+    selfSlow: 0,
+    fovBase: 75,
+    tracers: []
+  };
+  window.chamberState = st;
+
+  const THREE_ = window.THREE;
+  const isChamber = () => typeof myAgent !== 'undefined' && myAgent === 'chamber';
+  const isPrep = () => (typeof currentMap !== 'undefined' && currentMap === 'brawl' && typeof roundPhase !== 'undefined' && roundPhase === 'PREP');
+  const isRange = () => (typeof currentMap !== 'undefined' && currentMap === 'range');
+  const credAdd = (n) => { credits = Math.max(0, Math.min(typeof MAX_CREDITS !== 'undefined' ? MAX_CREDITS : 9000, credits + n)); if (typeof updateHUD === 'function') updateHUD(); };
+
+  // ---------- 알림 토스트 ----------
+  let toastEl = null, toastTimer = null;
+  function notice(msg, color) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.style.cssText = 'position:fixed; top:22%; left:50%; transform:translateX(-50%); z-index:960; pointer-events:none; padding:8px 18px; font-weight:bold; font-size:15px; background:rgba(15,25,35,0.88); border:1px solid #fbbf24; border-radius:4px; display:none;';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.innerText = msg;
+    toastEl.style.color = color || '#fbbf24';
+    toastEl.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 1800);
+  }
+
+  // ---------- 사운드 ----------
+  function beep(freq, dur, type, vol, slideTo) {
+    try {
+      if (typeof audioCtx === 'undefined' || !audioCtx) { if (typeof initAudio === 'function') initAudio(); }
+      if (typeof audioCtx === 'undefined' || !audioCtx) return;
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, audioCtx.currentTime + dur);
+      g.gain.setValueAtTime(vol || 0.12, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + dur);
+    } catch (e) {}
+  }
+  const sndPlace = () => { beep(520, 0.12, 'triangle', 0.1, 900); };
+  const sndWarn = () => { beep(1100, 0.12, 'square', 0.12); setTimeout(() => beep(1400, 0.14, 'square', 0.12), 130); setTimeout(() => beep(1100, 0.12, 'square', 0.12), 280); };
+  const sndTeleport = () => { beep(200, 0.35, 'sawtooth', 0.12, 1400); };
+  const sndHH = () => { beep(160, 0.22, 'sawtooth', 0.22, 60); beep(900, 0.06, 'square', 0.08, 300); };
+  const sndTDF = () => { beep(90, 0.5, 'sawtooth', 0.3, 40); beep(1500, 0.12, 'square', 0.1, 200); };
+
+  // ---------- 재질 ----------
+  const gold = () => new THREE_.MeshStandardMaterial({ color: 0xd9a21b, metalness: 0.85, roughness: 0.28 });
+  const goldDark = () => new THREE_.MeshStandardMaterial({ color: 0x9a6b0c, metalness: 0.8, roughness: 0.35 });
+  const black = () => new THREE_.MeshStandardMaterial({ color: 0x15171c, metalness: 0.6, roughness: 0.4 });
+  const white = () => new THREE_.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.2, roughness: 0.45 });
+  const glow = (c) => new THREE_.MeshBasicMaterial({ color: c || 0xff9a1f });
+
+  // ---------- 1인칭 모델: 헤드헌터 ----------
+  function buildHeadhunter() {
+    const g = new THREE_.Group();
+    const frame = new THREE_.Mesh(new THREE_.BoxGeometry(0.07, 0.085, 0.40), gold());
+    frame.position.set(0, 0, 0);
+    const rib = new THREE_.Mesh(new THREE_.BoxGeometry(0.05, 0.02, 0.38), goldDark());
+    rib.position.set(0, 0.05, -0.01);
+    const barrelLow = new THREE_.Mesh(new THREE_.BoxGeometry(0.05, 0.045, 0.34), black());
+    barrelLow.position.set(0, -0.058, -0.03);
+    const muzzle = new THREE_.Mesh(new THREE_.BoxGeometry(0.06, 0.07, 0.05), gold());
+    muzzle.position.set(0, 0.0, -0.215);
+    const drum = new THREE_.Mesh(new THREE_.CylinderGeometry(0.05, 0.05, 0.10, 6), gold());
+    drum.rotation.x = Math.PI / 2;
+    drum.position.set(0, 0.0, 0.06);
+    // 황금 문양 홈 3개
+    for (let i = 0; i < 3; i++) {
+      const slot = new THREE_.Mesh(new THREE_.BoxGeometry(0.075, 0.012, 0.03), black());
+      slot.position.set(0, 0.02 - i * 0.022, -0.09 - i * 0.0);
+      slot.rotation.z = 0.0;
+      g.add(slot);
+    }
+    const accent = new THREE_.Mesh(new THREE_.BoxGeometry(0.072, 0.008, 0.18), glow(0xffb02e));
+    accent.position.set(0, 0.0, -0.02);
+    const grip = new THREE_.Mesh(new THREE_.BoxGeometry(0.05, 0.14, 0.075), white());
+    grip.position.set(0, -0.11, 0.19);
+    grip.rotation.x = 0.35;
+    const guard = new THREE_.Mesh(new THREE_.BoxGeometry(0.02, 0.012, 0.09), black());
+    guard.position.set(0, -0.085, 0.09);
+    const hammer = new THREE_.Mesh(new THREE_.BoxGeometry(0.02, 0.04, 0.03), goldDark());
+    hammer.position.set(0, 0.055, 0.21);
+    hammer.rotation.x = -0.5;
+    const sight = new THREE_.Mesh(new THREE_.BoxGeometry(0.012, 0.022, 0.012), glow(0xff7a00));
+    sight.position.set(0, 0.075, -0.19);
+    g.add(frame, rib, barrelLow, muzzle, drum, accent, grip, guard, hammer, sight);
+    // 손 + 소매
+    const skin = new THREE_.MeshStandardMaterial({ color: 0xedc8ae, roughness: 0.6 });
+    const sleeve = new THREE_.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+    const hand = new THREE_.Mesh(new THREE_.BoxGeometry(0.065, 0.07, 0.09), skin);
+    hand.position.set(0.0, -0.13, 0.20);
+    const fore = new THREE_.Mesh(new THREE_.CylinderGeometry(0.036, 0.046, 0.30, 10), sleeve);
+    fore.rotation.x = Math.PI / 2.4;
+    fore.position.set(0.02, -0.20, 0.36);
+    g.add(hand, fore);
+    g.scale.setScalar(1.0);
+    g.userData.muzzle = new THREE_.Object3D();
+    g.userData.muzzle.position.set(0, 0, -0.26);
+    g.add(g.userData.muzzle);
+    return g;
+  }
+
+  // ---------- 1인칭 모델: 역작(Tour De Force) ----------
+  function buildTourDeForce() {
+    const g = new THREE_.Group();
+    const body = new THREE_.Mesh(new THREE_.BoxGeometry(0.07, 0.10, 0.80), gold());
+    body.position.set(0, 0, 0.0);
+    const rail = new THREE_.Mesh(new THREE_.BoxGeometry(0.05, 0.055, 0.55), gold());
+    rail.position.set(0, 0.02, -0.62);
+    const railDark = new THREE_.Mesh(new THREE_.BoxGeometry(0.052, 0.02, 0.50), black());
+    railDark.position.set(0, 0.052, -0.62);
+    // 총신 위 호박색 별 구멍
+    for (let i = 0; i < 5; i++) {
+      const star = new THREE_.Mesh(new THREE_.BoxGeometry(0.056, 0.026, 0.05), glow(0xffa51f));
+      star.position.set(0, 0.052, -0.42 - i * 0.09);
+      g.add(star);
+    }
+    const lower = new THREE_.Mesh(new THREE_.BoxGeometry(0.045, 0.035, 0.7), black());
+    lower.position.set(0, -0.06, -0.3);
+    // 흰색 중앙 손잡이/하부
+    const whiteMid = new THREE_.Mesh(new THREE_.BoxGeometry(0.055, 0.07, 0.34), white());
+    whiteMid.position.set(0, -0.075, 0.10);
+    const grip = new THREE_.Mesh(new THREE_.BoxGeometry(0.05, 0.14, 0.07), white());
+    grip.position.set(0, -0.16, 0.20);
+    grip.rotation.x = 0.3;
+    const stock = new THREE_.Mesh(new THREE_.BoxGeometry(0.06, 0.12, 0.26), gold());
+    stock.position.set(0, -0.02, 0.50);
+    const stockWhite = new THREE_.Mesh(new THREE_.BoxGeometry(0.062, 0.05, 0.2), white());
+    stockWhite.position.set(0, -0.07, 0.52);
+    // 스코프
+    const scope = new THREE_.Mesh(new THREE_.CylinderGeometry(0.032, 0.032, 0.34, 14), black());
+    scope.rotation.x = Math.PI / 2;
+    scope.position.set(0, 0.115, -0.05);
+    [-0.21, 0.11].forEach(z => {
+      const ring = new THREE_.Mesh(new THREE_.CylinderGeometry(0.04, 0.04, 0.03, 14), gold());
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, 0.115, z);
+      g.add(ring);
+    });
+    const mount = new THREE_.Mesh(new THREE_.BoxGeometry(0.03, 0.04, 0.10), goldDark());
+    mount.position.set(0, 0.075, -0.05);
+    // 금색 문양 패널
+    for (let i = 0; i < 3; i++) {
+      const pn = new THREE_.Mesh(new THREE_.BoxGeometry(0.074, 0.012, 0.06), black());
+      pn.position.set(0, 0.0 + (i - 1) * 0.03, 0.18 + i * 0.01);
+      g.add(pn);
+    }
+    g.add(body, rail, railDark, lower, whiteMid, grip, stock, stockWhite, scope, mount);
+    const skin = new THREE_.MeshStandardMaterial({ color: 0xedc8ae, roughness: 0.6 });
+    const sleeve = new THREE_.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+    const hand = new THREE_.Mesh(new THREE_.BoxGeometry(0.065, 0.07, 0.09), skin);
+    hand.position.set(0.0, -0.2, 0.20);
+    const fore = new THREE_.Mesh(new THREE_.CylinderGeometry(0.036, 0.046, 0.30, 10), sleeve);
+    fore.rotation.x = Math.PI / 2.4;
+    fore.position.set(0.02, -0.27, 0.40);
+    g.add(hand, fore);
+    g.userData.muzzle = new THREE_.Object3D();
+    g.userData.muzzle.position.set(0, 0.02, -0.92);
+    g.add(g.userData.muzzle);
+    return g;
+  }
+
+  const views = { headhunter: null, tourdeforce: null };
+  function ensureViews() {
+    if (typeof camera === 'undefined') return false;
+    if (!views.headhunter) {
+      views.headhunter = buildHeadhunter();
+      views.headhunter.visible = false;
+      camera.add(views.headhunter);
+    }
+    if (!views.tourdeforce) {
+      views.tourdeforce = buildTourDeForce();
+      views.tourdeforce.visible = false;
+      camera.add(views.tourdeforce);
+    }
+    return true;
+  }
+
+  // ---------- 줌 오버레이 ----------
+  let overlayEl = null;
+  function ensureOverlay() {
+    if (overlayEl) return overlayEl;
+    overlayEl = document.createElement('div');
+    overlayEl.id = 'chamberScopeOverlay';
+    overlayEl.style.cssText = 'position:fixed; inset:0; z-index:850; pointer-events:none; display:none;';
+    overlayEl.innerHTML = `
+      <svg id="chHhFrame" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="position:absolute; left:50%; top:50%; width:46vmin; height:46vmin; transform:translate(-50%,-50%); display:none; filter:drop-shadow(0 0 6px #ff9a1f);">
+        <polygon points="14,30 24,22 76,22 86,30 86,70 76,78 24,78 14,70" fill="rgba(255,154,31,0.05)" stroke="#ff9a1f" stroke-width="1.6"/>
+        <circle cx="50" cy="50" r="0.9" fill="#fff"/>
+      </svg>
+      <svg id="chTdfFrame" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; display:none;">
+        <polygon points="0,0 100,0 100,100 0,100 0,0 5,9 12,5 88,5 95,9 95,91 88,95 12,95 5,91 5,9" fill="rgba(10,6,0,0.78)" fill-rule="evenodd"/>
+        <polygon points="5,9 12,5 88,5 95,9 95,91 88,95 12,95 5,91" fill="none" stroke="#fbbf24" stroke-width="0.45" vector-effect="non-scaling-stroke" style="stroke-width:3px; filter:drop-shadow(0 0 5px #f59e0b);"/>
+        <line x1="50" y1="9" x2="50" y2="46" stroke="rgba(251,191,36,0.85)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+        <line x1="50" y1="54" x2="50" y2="91" stroke="rgba(251,191,36,0.85)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+        <line x1="9" y1="50" x2="46" y2="50" stroke="rgba(251,191,36,0.85)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+        <line x1="54" y1="50" x2="91" y2="50" stroke="rgba(251,191,36,0.85)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div id="chAmmoBadge" style="position:absolute; right:7%; bottom:8%; color:#fbbf24; font-weight:bold; font-size:22px; text-shadow:0 0 6px #000;"></div>
+    `;
+    document.body.appendChild(overlayEl);
+    return overlayEl;
+  }
+
+  // ---------- 장착/해제 ----------
+  function restoreGun() {
+    if (typeof window.__neonForceGunRestore === 'function') window.__neonForceGunRestore();
+    else if (typeof gunGroup !== 'undefined') gunGroup.visible = true;
+  }
+  function setZoomState(on) {
+    st.zoomed = !!on && !!st.held;
+    if (st.zoomed) st.fovBase = (st.held === 'tourdeforce') ? 21 : 46;
+  }
+  function unequip(silent) {
+    if (!st.held) return;
+    st.held = null;
+    st.zoomed = false;
+    if (views.headhunter) views.headhunter.visible = false;
+    if (views.tourdeforce) views.tourdeforce.visible = false;
+    const cross = document.getElementById('crosshair');
+    if (cross) cross.style.display = 'block';
+    restoreGun();
+    if (!silent) notice('체임버 무기 해제', '#94a3b8');
+  }
+  function equip(which) {
+    if (!ensureViews()) return;
+    if (typeof isDead !== 'undefined' && isDead) return;
+    if (which === 'headhunter' && st.hhAmmo <= 0) { notice('헤드헌터 탄환이 없습니다 (상점 B에서 구매)', '#ff4655'); return; }
+    if (which === 'tourdeforce' && !(st.ultActive && st.tdfAmmo > 0)) return;
+    if (typeof setZoom === 'function') { try { setZoom(0); } catch (e) {} }
+    if (typeof isMouseDown !== 'undefined') isMouseDown = false;
+    st.held = which;
+    st.zoomed = false;
+    st.fireTimer = 0.35;
+    views.headhunter.visible = (which === 'headhunter');
+    views.tourdeforce.visible = (which === 'tourdeforce');
+    const v = views[which];
+    v._swap = 0.3;
+    if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+    beep(300, 0.12, 'triangle', 0.08, 700);
+  }
+
+  // ---------- 지면 레이캐스트 ----------
+  function aimFloorPoint(maxRange) {
+    const origin = new THREE_.Vector3(), dir = new THREE_.Vector3();
+    camera.getWorldPosition(origin);
+    camera.getWorldDirection(dir);
+    if (dir.y > -0.02) return null;                 // 바닥을 보고 있지 않음
+    const t = -origin.y / dir.y;                     // y=0 평면
+    if (!(t > 0) || t > maxRange) return null;
+    const p = origin.clone().addScaledVector(dir, t);
+    p.y = 0;
+    // 중간에 벽이 가로막는지 확인
+    if (typeof wallColliders !== 'undefined' && Array.isArray(wallColliders)) {
+      const ray = new THREE_.Ray(origin, dir);
+      const box = new THREE_.Box3(), hit = new THREE_.Vector3();
+      for (const c of wallColliders) {
+        box.min.set(c.minX, c.minY ?? 0, c.minZ);
+        box.max.set(c.maxX, c.maxY ?? 4, c.maxZ);
+        if (ray.intersectBox(box, hit) && origin.distanceTo(hit) < t - 0.05) return null;
+      }
+    }
+    return p;
+  }
+
+  // ---------- 둔화 장판 ----------
+  function spawnZone(pos, radius, life, tint) {
+    const grp = new THREE_.Group();
+    const col = tint || 0xfbbf24;
+    const disc = new THREE_.Mesh(new THREE_.CircleGeometry(radius, 40), new THREE_.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.20, depthWrite: false, side: THREE_.DoubleSide }));
+    disc.rotation.x = -Math.PI / 2;
+    const ring1 = new THREE_.Mesh(new THREE_.RingGeometry(radius - 0.18, radius, 48), new THREE_.MeshBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.85, depthWrite: false, side: THREE_.DoubleSide }));
+    ring1.rotation.x = -Math.PI / 2;
+    const ring2 = new THREE_.Mesh(new THREE_.RingGeometry(radius * 0.55, radius * 0.58, 40), new THREE_.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.7, depthWrite: false, side: THREE_.DoubleSide }));
+    ring2.rotation.x = -Math.PI / 2;
+    const dome = new THREE_.Mesh(new THREE_.SphereGeometry(radius, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE_.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.07, depthWrite: false, side: THREE_.DoubleSide }));
+    [disc, ring1, ring2].forEach((m, i) => { m.position.y = 0.04 + i * 0.01; });
+    grp.add(disc, ring1, ring2, dome);
+    grp.position.set(pos.x, 0, pos.z);
+    scene.add(grp);
+    st.zones.push({ mesh: grp, ring2, pos: new THREE_.Vector3(pos.x, 0, pos.z), radius, life, maxLife: life, netTimer: 0 });
+  }
+
+  // ---------- C: 트레이드마크 ----------
+  function buildTrapMesh() {
+    const g = new THREE_.Group();
+    const base = new THREE_.Mesh(new THREE_.CylinderGeometry(0.30, 0.34, 0.08, 8), black());
+    base.position.y = 0.04;
+    const ringG = new THREE_.Mesh(new THREE_.TorusGeometry(0.26, 0.025, 8, 20), gold());
+    ringG.rotation.x = Math.PI / 2; ringG.position.y = 0.09;
+    const mast = new THREE_.Mesh(new THREE_.CylinderGeometry(0.03, 0.05, 0.42, 8), gold());
+    mast.position.y = 0.30;
+    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.09, 12, 12), glow(0xff9a1f));
+    eye.position.y = 0.56;
+    const dish = new THREE_.Mesh(new THREE_.CylinderGeometry(0.16, 0.05, 0.05, 10), goldDark());
+    dish.position.y = 0.47;
+    g.add(base, ringG, mast, dish, eye);
+    g.userData.eye = eye;
+    return g;
+  }
+  function placeTrap() {
+    if (st.cCharges <= 0) { notice('트레이드마크가 없습니다 (상점 B에서 구매 200¤)', '#ff4655'); return; }
+    const p = aimFloorPoint(CFG.C.placeRange);
+    if (!p) { notice('바닥을 조준해서 설치하세요 (사거리 ' + CFG.C.placeRange + 'm)', '#ff4655'); return; }
+    st.cCharges -= 1;
+    const mesh = buildTrapMesh();
+    mesh.position.copy(p);
+    scene.add(mesh);
+    st.traps.push({ mesh, pos: p.clone(), cooldown: 0, eye: mesh.userData.eye });
+    sndPlace();
+    notice('트레이드마크(C) 설치! F로 회수', '#fbbf24');
+    if (typeof updateHUD === 'function') updateHUD();
+  }
+
+  function enemyList() {
+    // { pos:Vector3, kind:'bot'|'remote', ref, id }
+    const out = [];
+    if (typeof brawlBots !== 'undefined' && typeof currentMap !== 'undefined' && currentMap === 'brawl') {
+      for (const b of brawlBots) {
+        if (b && b.userData && !b.userData.dead && b.userData.team !== myTeam) out.push({ pos: b.position, kind: 'bot', ref: b });
+      }
+    }
+    if (isRange() && Array.isArray(window.practiceBots)) {
+      for (const b of window.practiceBots) { if (b && b.userData && !b.userData.dead) out.push({ pos: b.position, kind: 'bot', ref: b }); }
+    }
+    if (typeof remotePlayers !== 'undefined') {
+      for (const id in remotePlayers) {
+        const rp = remotePlayers[id];
+        if (rp && rp.mesh && !rp.isDead && rp.team !== myTeam) out.push({ pos: rp.mesh.position, kind: 'remote', ref: rp, id });
+      }
+    }
+    return out;
+  }
+
+  function slowEnemy(en, secs) {
+    if (en.kind === 'bot') {
+      en.ref.userData.chSlow = Math.max(en.ref.userData.chSlow || 0, secs);
+    } else if (en.kind === 'remote') {
+      const payload = { type: 'chamberSlow', targetId: en.id, dur: secs };
+      try {
+        if (typeof connections !== 'undefined' && connections[en.id] && connections[en.id].open) connections[en.id].send(payload);
+        else if (typeof broadcastData === 'function') broadcastData(payload);
+      } catch (e) {}
+    }
+  }
+
+  // ---------- E: 랑데부 ----------
+  function buildAnchorMesh() {
+    const g = new THREE_.Group();
+    const base = new THREE_.Mesh(new THREE_.CylinderGeometry(0.34, 0.38, 0.06, 6), goldDark());
+    base.position.y = 0.03;
+    const ring = new THREE_.Mesh(new THREE_.TorusGeometry(0.42, 0.03, 8, 28), glow(0xfbbf24));
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.08;
+    const core = new THREE_.Mesh(new THREE_.OctahedronGeometry(0.22), glow(0xffd24a));
+    core.position.y = 0.62;
+    const beam = new THREE_.Mesh(new THREE_.CylinderGeometry(0.03, 0.03, 1.0, 8), new THREE_.MeshBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.55 }));
+    beam.position.y = 0.55;
+    g.add(base, ring, core, beam);
+    g.userData.core = core; g.userData.ring = ring;
+    return g;
+  }
+  function clearAnchor() {
+    if (st.anchor) { scene.remove(st.anchor.mesh); st.anchor = null; }
+  }
+  function castRendezvous() {
+    if (st.anchor) {
+      const d = Math.hypot(camera.position.x - st.anchor.pos.x, camera.position.z - st.anchor.pos.z);
+      if (d > CFG.E.teleportRange) { notice('앵커 범위 밖입니다 (' + CFG.E.teleportRange + 'm 이내에서 E)', '#ff4655'); return; }
+      // 순간이동
+      const feetOff = (typeof currentEyeHeight !== 'undefined') ? currentEyeHeight : 1.7;
+      camera.position.set(st.anchor.pos.x, feetOff, st.anchor.pos.z);
+      if (typeof velY !== 'undefined') velY = 0;
+      clearAnchor();
+      st.rdvCooldown = CFG.E.cooldown;
+      sndTeleport();
+      notice('랑데부(E) 순간이동!', '#fde047');
+      return;
+    }
+    if (st.rdvCooldown > 0) { notice('랑데부 쿨타임 ' + Math.ceil(st.rdvCooldown) + '초', '#ff4655'); return; }
+    if (st.rdvCharges <= 0) return;
+    const p = aimFloorPoint(CFG.E.placeRange);
+    if (!p) { notice('바닥을 조준해서 설치하세요', '#ff4655'); return; }
+    const mesh = buildAnchorMesh();
+    mesh.position.copy(p);
+    scene.add(mesh);
+    st.anchor = { mesh, pos: p.clone() };
+    sndPlace();
+    notice('랑데부 앵커 설치! 범위 안에서 E = 순간이동 · F = 회수', '#fbbf24');
+  }
+
+  // ---------- F: 회수 ----------
+  function lookedAt(pos, maxDist, coneDot) {
+    const origin = new THREE_.Vector3(), dir = new THREE_.Vector3();
+    camera.getWorldPosition(origin);
+    camera.getWorldDirection(dir);
+    const to = new THREE_.Vector3(pos.x, pos.y + 0.4, pos.z).sub(origin);
+    const dist = to.length();
+    if (dist > maxDist) return false;
+    return to.normalize().dot(dir) > (coneDot || 0.93);
+  }
+  function tryRetrieve() {
+    if (st.anchor && lookedAt(st.anchor.pos, 5, 0.9)) {
+      clearAnchor();
+      st.rdvCooldown = CFG.E.cooldown;
+      notice('앵커 회수 — 쿨타임 ' + CFG.E.cooldown + '초', '#fbbf24');
+      return true;
+    }
+    for (let i = 0; i < st.traps.length; i++) {
+      const t = st.traps[i];
+      if (lookedAt(t.pos, 5, 0.9)) {
+        scene.remove(t.mesh);
+        st.traps.splice(i, 1);
+        st.cCharges = Math.min(CFG.C.maxCharges, st.cCharges + 1);
+        notice('트레이드마크 회수', '#fbbf24');
+        if (typeof updateHUD === 'function') updateHUD();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ---------- X: 역작 ----------
+  function castUlt() {
+    if (st.ultActive && st.tdfAmmo > 0) {
+      if (st.held === 'tourdeforce') unequip(); else equip('tourdeforce');
+      return;
+    }
+    if (typeof isPrep === 'function' && isPrep()) { notice('준비 시간에는 역작(X)을 사용할 수 없습니다.', '#ff4655'); return; }
+    if (st.ultPoints < CFG.X.maxPoints) { notice('궁극기 포인트 부족 (' + st.ultPoints + '/' + CFG.X.maxPoints + ')', '#ff4655'); return; }
+    if (!isRange()) st.ultPoints = 0;
+    st.ultActive = true;
+    st.tdfAmmo = CFG.X.ammo;
+    equip('tourdeforce');
+    notice('역작(X) 장착! 스나이퍼 ' + CFG.X.ammo + '발', '#fbbf24');
+  }
+
+  // ---------- 사격 ----------
+  function spawnTracer(from, to, color, thick) {
+    const diff = to.clone().sub(from);
+    const len = diff.length();
+    if (len < 0.01) return;
+    const m = new THREE_.Mesh(new THREE_.CylinderGeometry(thick, thick, len, 6), new THREE_.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }));
+    m.position.copy(from).addScaledVector(diff, 0.5);
+    m.quaternion.setFromUnitVectors(new THREE_.Vector3(0, 1, 0), diff.clone().normalize());
+    scene.add(m);
+    st.tracers.push({ mesh: m, life: 0.12 });
+  }
+
+  function fireHeld() {
+    if (!st.held || (typeof isDead !== 'undefined' && isDead)) return;
+    if (st.fireTimer > 0) return;
+    if (isPrep()) { notice('준비 시간에는 사격할 수 없습니다.', '#ff4655'); st.fireTimer = 0.4; return; }
+    const isTdf = st.held === 'tourdeforce';
+    if (isTdf ? st.tdfAmmo <= 0 : st.hhAmmo <= 0) { unequip(true); return; }
+    if (isTdf) st.tdfAmmo -= 1; else st.hhAmmo -= 1;
+    const interval = isTdf ? CFG.X.interval : CFG.Q.interval;
+    const slowMul = st.selfSlow > 0 ? 1.8 : 1.0;      // 둔화 상태에서는 연사 속도 감소
+    st.fireTimer = interval * slowMul;
+
+    const spread = st.zoomed ? 0.0 : (isTdf ? 0.075 : 0.028);
+    const ndc = new THREE_.Vector2((Math.random() - 0.5) * spread * 3, (Math.random() - 0.5) * spread * 3);
+    const ray = new THREE_.Raycaster();
+    ray.setFromCamera(ndc, camera);
+
+    const targets = isRange()
+      ? (typeof botHitboxes !== 'undefined' ? botHitboxes : [])
+      : [...(typeof remoteHitboxes !== 'undefined' ? remoteHitboxes : []), ...(typeof brawlBotHitboxes !== 'undefined' ? brawlBotHitboxes : [])];
+    const hits = ray.intersectObjects(targets, true);
+
+    const muzzleW = new THREE_.Vector3();
+    const view = views[st.held];
+    if (view && view.userData.muzzle) view.userData.muzzle.getWorldPosition(muzzleW); else camera.getWorldPosition(muzzleW);
+    let end = ray.ray.origin.clone().addScaledVector(ray.ray.direction, 120);
+    let wallDist = Infinity;
+    if (typeof wallColliders !== 'undefined' && Array.isArray(wallColliders)) {
+      const box = new THREE_.Box3(), hp = new THREE_.Vector3();
+      for (const c of wallColliders) {
+        box.min.set(c.minX, c.minY ?? 0, c.minZ);
+        box.max.set(c.maxX, c.maxY ?? 4, c.maxZ);
+        if (ray.ray.intersectBox(box, hp)) {
+          const d = ray.ray.origin.distanceTo(hp);
+          if (d < wallDist) { wallDist = d; end = hp.clone(); }
+        }
+      }
+    }
+
+    // 반동 연출
+    if (view) { view._kick = isTdf ? 0.16 : 0.09; }
+    if (isTdf) sndTDF(); else sndHH();
+
+    if (hits.length > 0 && hits[0].distance <= wallDist + 0.05) {
+      end = hits[0].point.clone();
+      applyHit(hits[0], isTdf);
+    }
+    spawnTracer(muzzleW, end, isTdf ? 0xfde047 : 0xffa51f, isTdf ? 0.02 : 0.012);
+
+    if (isTdf && st.tdfAmmo <= 0) { st.ultActive = false; setTimeout(() => unequip(true), 450); }
+    else if (!isTdf && st.hhAmmo <= 0) { setTimeout(() => unequip(true), 300); }
+    if (st.zoomed && isTdf) { st.zoomed = false; setTimeout(() => { if (st.held === 'tourdeforce') st.zoomed = true; }, 380); }
+  }
+
+  function applyHit(hit, isTdf) {
+    let obj = hit.object;
+    let ud = obj.userData || {};
+    while (obj && !ud.targetType && !ud.botRoot && obj.parent) {
+      obj = obj.parent;
+      if (obj.userData) ud = Object.assign({}, obj.userData, ud);
+    }
+    const isHead = (ud.part === 'head' || hit.object.name === 'head');
+    let dmg;
+    if (isTdf) dmg = CFG.X.dmg;
+    else dmg = isHead ? CFG.Q.headDmg : CFG.Q.bodyDmg;
+    const weaponName = isTdf ? '역작' : '헤드헌터';
+
+    const playHit = () => {
+      if (typeof playHitMarkerSound === 'function') playHitMarkerSound(isHead);
+      if (typeof spawnHitSpark === 'function') spawnHitSpark(hit.point, isHead);
+      if (typeof showHitmarker === 'function') showHitmarker(isHead);
+    };
+    const myNick = (document.getElementById('nickInput') && document.getElementById('nickInput').value) || '플레이어';
+    const afterKill = (pos) => { if (isTdf) spawnZone(pos, CFG.X.zoneRadius, CFG.X.zoneLife, 0xfbbf24); };
+
+    if (ud.targetType === 'brawlBot' && ud.botRoot && !ud.botRoot.userData.dead && ud.botRoot.userData.team !== myTeam) {
+      const botRoot = ud.botRoot, bd = botRoot.userData;
+      let rem = dmg;
+      if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+      bd.hp -= rem;
+      playHit();
+      if (bd.hp <= 0) {
+        bd.dead = true;
+        botRoot.visible = false;
+        if (bd.weaponKey && bd.weaponKey !== 'classic' && typeof spawnDroppedItem === 'function') spawnDroppedItem('weapon', bd.weaponKey, botRoot.position);
+        playerStats.k += 1;
+        st.lastTrackedKills = playerStats.k;
+        if (isChamber()) st.ultPoints = Math.min(CFG.X.maxPoints, st.ultPoints + 1);
+        if (typeof playerRoundKills !== 'undefined') playerRoundKills += 1;
+        bd.d = (bd.d || 0) + 1;
+        if (typeof getBotStat === 'function') getBotStat(bd.nick).d += 1;
+        credAdd(200);
+        if (typeof triggerScoreStreak === 'function') triggerScoreStreak(1, isHead, true);
+        if (typeof addKillFeed === 'function') addKillFeed(`${myNick} [${weaponName}] ➔ ${bd.nick}${isHead ? ' [헤드샷]' : ''}`, true);
+        afterKill(botRoot.position);
+        if (typeof countAliveTeams === 'function' && typeof endBrawlRound === 'function') {
+          const { redAlive, blueAlive } = countAliveTeams();
+          const enemyTeam = myTeam === 'red' ? 'blue' : 'red';
+          if ((enemyTeam === 'red' ? redAlive : blueAlive) === 0) endBrawlRound(myTeam, botRoot.position.clone(), false);
+        }
+      }
+    } else if (ud.targetType === 'bot' && ud.botRoot) {
+      const bd = ud.botRoot.userData;
+      let rem = dmg;
+      if (bd.shield > 0) { const abs = Math.min(bd.shield, rem); bd.shield -= abs; rem -= abs; }
+      bd.hp -= rem;
+      playHit();
+      if (bd.hp <= 0) {
+        if (typeof triggerScoreStreak === 'function') triggerScoreStreak(1, isHead, true);
+        if (typeof addKillFeed === 'function') addKillFeed(`[${weaponName}] 훈련봇 타겟 완료${isHead ? ' [헤드샷]' : ''}`, true);
+        afterKill(ud.botRoot.position);
+        if (typeof respawnBot === 'function') respawnBot(ud.botRoot);
+      }
+    } else if ((ud.targetType === 'player' || ud.targetType === 'remote') && ud.peerId) {
+      const targetPeerId = ud.peerId;
+      const rp = (typeof remotePlayers !== 'undefined') ? remotePlayers[targetPeerId] : null;
+      if (rp && !rp.isDead && rp.team !== myTeam) {
+        const payload = {
+          type: 'hit', targetId: targetPeerId, part: isHead ? 'head' : 'body', dmg,
+          attackerId: myPeerId, attackerNick: myNick, attackerTeam: myTeam,
+          attackerPos: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+          weaponName, isHead
+        };
+        if (connections[targetPeerId] && connections[targetPeerId].open) connections[targetPeerId].send(payload);
+        else if (typeof broadcastData === 'function') broadcastData(payload);
+        playHit();
+        if (isTdf) spawnZone(rp.mesh.position, CFG.X.zoneRadius, CFG.X.zoneLife, 0xfbbf24);   // 역작은 항상 즉사
+      }
+    }
+  }
+
+  // ---------- 입력 ----------
+  document.addEventListener('keydown', (e) => {
+    if (!isChamber()) return;
+    if (document.pointerLockElement !== document.body || (typeof isDead !== 'undefined' && isDead)) return;
+    if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code) && st.held) {
+      unequip(true);          // 게임의 기본 무기 교체가 이어서 처리됨
+      return;
+    }
+    if (st.held && (e.code === 'KeyR' || e.code === 'KeyY')) { e.stopImmediatePropagation(); e.preventDefault(); return; }
+    if (e.repeat) return;
+    if (e.code === 'KeyC') { placeTrap(); }
+    else if (e.code === 'KeyQ') { if (st.held === 'headhunter') unequip(); else equip('headhunter'); }
+    else if (e.code === 'KeyE') { castRendezvous(); }
+    else if (e.code === 'KeyX') { castUlt(); }
+    else if (e.code === 'KeyF') {
+      if (tryRetrieve()) { e.stopImmediatePropagation(); e.preventDefault(); }
+    }
+  }, true);
+
+  document.addEventListener('mousedown', (e) => {
+    if (!isChamber() || !st.held) return;
+    if (document.pointerLockElement !== document.body || (typeof isDead !== 'undefined' && isDead)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.button === 0) fireHeld();
+    else if (e.button === 2) setZoomState(!st.zoomed);
+  }, true);
+  document.addEventListener('mouseup', (e) => {
+    if (!isChamber() || !st.held) return;
+    e.stopImmediatePropagation();
+  }, true);
+
+  // ---------- 상점 / HUD ----------
+  function ensureUI() {
+    const shopModalEl = document.getElementById('shopModal');
+    if (shopModalEl && !document.getElementById('chamberShopBar')) {
+      const bar = document.createElement('div');
+      bar.id = 'chamberShopBar';
+      bar.style.cssText = 'width:1160px; max-width:96vw; margin-top:10px; display:none; grid-template-columns:repeat(4,1fr); gap:10px; background:rgba(15,25,35,0.92); padding:10px 14px; border-top:3px solid #fbbf24; color:#fff;';
+      bar.innerHTML = `
+        <div class="shop-item" id="chShopC" style="cursor:pointer; margin:0;"><strong id="chShopCT"></strong><div id="chShopCD" style="font-size:12px; color:#ccc;"></div></div>
+        <div class="shop-item" id="chShopQ" style="cursor:pointer; margin:0;"><strong id="chShopQT"></strong><div id="chShopQD" style="font-size:12px; color:#ccc;"></div></div>
+        <div class="shop-item" style="margin:0; opacity:0.9;"><strong id="chShopET"></strong><div id="chShopED" style="font-size:12px; color:#ccc;"></div></div>
+        <div class="shop-item" style="margin:0; opacity:0.9;"><strong id="chShopXT"></strong><div id="chShopXD" style="font-size:12px; color:#ccc;"></div></div>
+      `;
+      shopModalEl.appendChild(bar);
+      document.getElementById('chShopC').onclick = () => {
+        if (!isChamber()) return;
+        if (st.cCharges < CFG.C.maxCharges && credits >= CFG.C.cost) { credits -= CFG.C.cost; st.cCharges++; if (typeof updateHUD === 'function') updateHUD(); }
+      };
+      document.getElementById('chShopC').addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (!isChamber() || (typeof roundPhase !== 'undefined' && currentMap === 'brawl' && roundPhase !== 'PREP')) return;
+        if (st.cCharges > 0) { st.cCharges--; credAdd(CFG.C.cost); }
+      });
+      document.getElementById('chShopQ').onclick = () => {
+        if (!isChamber()) return;
+        if (st.hhAmmo < CFG.Q.maxAmmo && credits >= CFG.Q.costPerBullet) { credits -= CFG.Q.costPerBullet; st.hhAmmo++; if (typeof updateHUD === 'function') updateHUD(); }
+      };
+      document.getElementById('chShopQ').addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (!isChamber() || (typeof roundPhase !== 'undefined' && currentMap === 'brawl' && roundPhase !== 'PREP')) return;
+        if (st.hhAmmo > 0) { st.hhAmmo--; credAdd(CFG.Q.costPerBullet); }
+      });
+    }
+    if (!document.getElementById('chamberBottomHud')) {
+      const hud = document.createElement('div');
+      hud.id = 'chamberBottomHud';
+      hud.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); display:none; gap:10px; background:rgba(15,25,35,0.88); padding:8px 16px; border-bottom:3px solid #fbbf24; border-radius:4px; color:#fff; font-size:12px; text-align:center; z-index:500; pointer-events:none;';
+      hud.innerHTML = '<div id="chHudC" style="min-width:78px;"></div><div id="chHudQ" style="min-width:78px;"></div><div id="chHudE" style="min-width:90px;"></div><div id="chHudX" style="min-width:90px;"></div>';
+      document.body.appendChild(hud);
+    }
+  }
+
+  function renderUI() {
+    ensureUI();
+    const bar = document.getElementById('chamberShopBar');
+    const hud = document.getElementById('chamberBottomHud');
+    const on = isChamber();
+    if (bar) bar.style.display = on ? 'grid' : 'none';
+    if (hud) hud.style.display = on ? 'flex' : 'none';
+    if (!on) return;
+    const lock = isPrep() ? ' <span style="color:#ff4655;">[잠금]</span>' : '';
+    const set = (id, h) => { const el = document.getElementById(id); if (el) el.innerHTML = h; };
+    set('chShopCT', `C 트레이드마크 (${st.cCharges}/${CFG.C.maxCharges})`);
+    set('chShopCD', `${CFG.C.cost} ¤ · 조준한 바닥에 감시 함정 설치 · 적 접근 시 둔화 장판 (F 회수)`);
+    set('chShopQT', `Q 헤드헌터 (${st.hhAmmo}/${CFG.Q.maxAmmo}발)`);
+    set('chShopQD', `1발당 ${CFG.Q.costPerBullet} ¤ (클릭 구매) · 헤드 ${CFG.Q.headDmg} 즉사 / 몸통 ${CFG.Q.bodyDmg} · 우클릭 줌`);
+    set('chShopET', 'E 랑데부 (라운드마다 1개 무료)');
+    set('chShopED', '앵커 설치 → 범위 안에서 E = 순간이동 · F 회수 · 쿨타임 30초');
+    set('chShopXT', `X 역작 (${st.ultPoints}/${CFG.X.maxPoints} pt)`);
+    set('chShopXD', '전용 스나이퍼 5발 · 우클릭 줌 · 부위 불문 150 즉사 · 사망 지점 둔화 장판');
+    const rdvTxt = st.anchor ? '설치됨' : (st.rdvCooldown > 0 ? Math.ceil(st.rdvCooldown) + 's' : '준비');
+    set('chHudC', `<div style="color:#fbbf24;font-weight:bold;">[C] 트레이드마크</div><div>${st.cCharges} / ${CFG.C.maxCharges}</div>`);
+    set('chHudQ', `<div style="color:${st.held === 'headhunter' ? '#ff9a1f' : '#fbbf24'};font-weight:bold;">[Q] 헤드헌터</div><div>${st.hhAmmo} / ${CFG.Q.maxAmmo}</div>`);
+    set('chHudE', `<div style="color:${st.anchor ? '#fde047' : '#fbbf24'};font-weight:bold;">[E] 랑데부</div><div>${rdvTxt}</div>`);
+    set('chHudX', `<div style="color:#fde047;font-weight:bold;">[X] 역작${lock}</div><div>${st.ultActive ? 'ACTIVE · ' + st.tdfAmmo + '발' : st.ultPoints + ' / ' + CFG.X.maxPoints}</div>`);
+  }
+
+  // ---------- 둔화(플레이어 본인) ----------
+  if (typeof moveWithCollision === 'function') {
+    const _origMove = window.moveWithCollision;
+    window.moveWithCollision = function (dx, dz) {
+      if (st.selfSlow > 0) { dx *= 0.45; dz *= 0.45; }
+      return _origMove.call(this, dx, dz);
+    };
+  }
+  if (typeof moveBrawlBotWithCollision === 'function') {
+    const _origBotMove = window.moveBrawlBotWithCollision;
+    window.moveBrawlBotWithCollision = function (bot, dx, dz) {
+      if (bot && bot.userData && bot.userData.chSlow > 0) { dx *= 0.4; dz *= 0.4; }
+      return _origBotMove.call(this, bot, dx, dz);
+    };
+  }
+  if (typeof setupConnection === 'function') {
+    const _origSetup = window.setupConnection;
+    window.setupConnection = function (conn) {
+      try {
+        conn.on('data', (msg) => {
+          if (msg && msg.type === 'chamberSlow' && (!msg.targetId || msg.targetId === myPeerId)) {
+            st.selfSlow = Math.max(st.selfSlow, Math.min(2, msg.dur || 1));
+          }
+        });
+      } catch (e) {}
+      return _origSetup.apply(this, arguments);
+    };
+  }
+
+  // 렌더 직전: 줌 FOV 적용 + 총 숨김 유지
+  if (typeof renderer !== 'undefined' && renderer && !renderer.__chamberPatched) {
+    renderer.__chamberPatched = true;
+    const _render = renderer.render.bind(renderer);
+    renderer.render = function (s, c) {
+      if (isChamber() && st.held) {
+        if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
+        if (st.zoomed && c === camera) {
+          camera.fov = st.fovBase;
+          camera.updateProjectionMatrix();
+        }
+      }
+      return _render(s, c);
+    };
+  }
+
+  // ---------- 프레임 루프 ----------
+  function resetRound(full) {
+    st.rdvCharges = 1;
+    st.rdvCooldown = 0;
+    clearAnchor();
+    st.traps.forEach(t => scene.remove(t.mesh)); st.traps = [];
+    st.zones.forEach(z => scene.remove(z.mesh)); st.zones = [];
+    st.ultActive = false; st.tdfAmmo = 0;
+    st.selfSlow = 0;
+    if (st.held) unequip(true);
+    if (full) { st.cCharges = 0; st.hhAmmo = 0; st.ultPoints = 0; }
+  }
+  window.__chamberResetRound = resetRound;
+
+  let last = performance.now();
+  function loop(now) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    renderUI();
+
+    // 라운드 변경
+    if (typeof roundNumber !== 'undefined' && st.lastRoundNum !== roundNumber) {
+      st.lastRoundNum = roundNumber;
+      resetRound(false);
+    }
+    if (typeof playerStats !== 'undefined' && playerStats.k > st.lastTrackedKills) {
+      const gained = playerStats.k - st.lastTrackedKills;
+      st.lastTrackedKills = playerStats.k;
+      if (isChamber() && !st.ultActive) st.ultPoints = Math.min(CFG.X.maxPoints, st.ultPoints + gained);
+    } else if (typeof playerStats !== 'undefined' && playerStats.k < st.lastTrackedKills) {
+      st.lastTrackedKills = playerStats.k;
+    }
+
+    // 사망 / 다른 요원
+    const dead = (typeof isDead !== 'undefined' && isDead);
+    if ((dead || !isChamber()) && st.held) unequip(true);
+    if (dead && st.ultActive) { st.ultActive = false; st.tdfAmmo = 0; }
+
+    if (st.fireTimer > 0) st.fireTimer -= dt;
+    if (st.rdvCooldown > 0) { st.rdvCooldown -= dt; if (st.rdvCooldown <= 0) st.rdvCooldown = 0; }
+    if (st.selfSlow > 0) {
+      st.selfSlow = Math.max(0, st.selfSlow - dt);
+      if (typeof fireCooldown !== 'undefined' && fireCooldown > 0) fireCooldown += dt * 0.5;   // 연사 둔화
+    }
+
+    // 줌 오버레이 / 크로스헤어
+    const ov = ensureOverlay();
+    const showHh = isChamber() && st.held === 'headhunter' && st.zoomed;
+    const showTdf = isChamber() && st.held === 'tourdeforce' && st.zoomed;
+    ov.style.display = (showHh || showTdf) ? 'block' : 'none';
+    document.getElementById('chHhFrame').style.display = showHh ? 'block' : 'none';
+    document.getElementById('chTdfFrame').style.display = showTdf ? 'block' : 'none';
+    const badge = document.getElementById('chAmmoBadge');
+    if (badge) badge.innerText = (showHh || showTdf) ? (showTdf ? st.tdfAmmo : st.hhAmmo) + ' 발' : '';
+    const cross = document.getElementById('crosshair');
+    if (cross && isChamber() && st.held) cross.style.display = st.zoomed ? 'none' : 'block';
+
+    // 뷰모델 위치 / 반동
+    ['headhunter', 'tourdeforce'].forEach(k => {
+      const v = views[k];
+      if (!v || st.held !== k) { if (v) v.visible = false; return; }
+      v._kick = Math.max(0, (v._kick || 0) - dt * 0.9);
+      v._swap = Math.max(0, (v._swap || 0) - dt);
+      const swapDrop = v._swap > 0 ? (v._swap / 0.3) * 0.28 : 0;
+      if (k === 'headhunter') {
+        const tx = st.zoomed ? 0.0 : 0.24, ty = (st.zoomed ? -0.10 : -0.20) - swapDrop, tz = st.zoomed ? -0.42 : -0.46;
+        v.position.x += (tx - v.position.x) * 0.25;
+        v.position.y += (ty - v.position.y) * 0.25;
+        v.position.z += ((tz + v._kick) - v.position.z) * 0.35;
+        v.rotation.x = v._kick * 1.4;
+      } else {
+        const tx = st.zoomed ? 0.0 : 0.22, ty = (st.zoomed ? -0.06 : -0.20) - swapDrop, tz = st.zoomed ? -0.30 : -0.42;
+        v.position.x += (tx - v.position.x) * 0.25;
+        v.position.y += (ty - v.position.y) * 0.25;
+        v.position.z += ((tz + v._kick) - v.position.z) * 0.35;
+        v.rotation.x = v._kick * 0.9;
+      }
+      v.visible = !st.zoomed;     // 줌 중에는 오버레이만 표시 (st.held === k 일 때만 이 줄에 도달)
+    });
+
+    // 트랩 트리거
+    const enemies = enemyList();
+    for (let i = st.traps.length - 1; i >= 0; i--) {
+      const t = st.traps[i];
+      t.eye.rotation.y += dt * 4;
+      if (t.cooldown > 0) {
+        t.cooldown -= dt;
+        t.eye.material.color.setHex(0x44331a);
+        continue;
+      }
+      t.eye.material.color.setHex(0xff9a1f);
+      t.eye.scale.setScalar(1 + Math.sin(now * 0.008) * 0.15);
+      let triggered = false;
+      for (const en of enemies) {
+        if (Math.hypot(en.pos.x - t.pos.x, en.pos.z - t.pos.z) <= CFG.C.triggerRadius) { triggered = true; break; }
+      }
+      if (triggered) {
+        t.cooldown = CFG.C.rearm;
+        spawnZone(t.pos, CFG.C.zoneRadius, CFG.C.zoneLife, 0xfbbf24);
+        sndWarn();
+        notice('⚠ 트레이드마크 감지! 적 접근', '#ff9a1f');
+      }
+    }
+
+    // 둔화 장판 갱신 / 적용
+    st.zones = st.zones.filter(z => {
+      z.life -= dt;
+      if (z.life <= 0) { scene.remove(z.mesh); return false; }
+      z.ring2.rotation.z += dt * 2.5;
+      const f = Math.min(1, z.life / 1.0);
+      z.mesh.children[0].material.opacity = 0.20 * f + 0.05 * Math.sin(now * 0.006);
+      z.netTimer -= dt;
+      for (const en of enemies) {
+        if (Math.hypot(en.pos.x - z.pos.x, en.pos.z - z.pos.z) <= z.radius) {
+          if (en.kind === 'bot') en.ref.userData.chSlow = Math.max(en.ref.userData.chSlow || 0, 0.3);
+          else if (z.netTimer <= 0) slowEnemy(en, 0.8);
+        }
+      }
+      if (z.netTimer <= 0) z.netTimer = 0.4;
+      return true;
+    });
+
+    // 봇 둔화 타이머 / 연사 둔화
+    if (typeof brawlBots !== 'undefined') {
+      for (const b of brawlBots) {
+        const bd = b && b.userData;
+        if (!bd || !(bd.chSlow > 0)) continue;
+        bd.chSlow = Math.max(0, bd.chSlow - dt);
+        if (bd.fireCooldown > 0) bd.fireCooldown += dt * 0.55;
+      }
+    }
+
+    // 앵커 연출
+    if (st.anchor) {
+      st.anchor.mesh.userData.core.rotation.y += dt * 2.2;
+      st.anchor.mesh.userData.core.position.y = 0.62 + Math.sin(now * 0.004) * 0.06;
+      st.anchor.mesh.userData.ring.rotation.z += dt * 1.5;
+    }
+
+    // 트레이서
+    for (let i = st.tracers.length - 1; i >= 0; i--) {
+      const tr = st.tracers[i];
+      tr.life -= dt;
+      tr.mesh.material.opacity = Math.max(0, tr.life / 0.12) * 0.85;
+      if (tr.life <= 0) { scene.remove(tr.mesh); st.tracers.splice(i, 1); }
+    }
+  }
+  requestAnimationFrame(loop);
+
+  // ---------- 사격장 / 라운드 훅 ----------
+  window.__abilityHooks = window.__abilityHooks || {};
+  window.__abilityHooks.chamber = {
+    rangeFill() {
+      st.cCharges = CFG.C.maxCharges;
+      st.hhAmmo = CFG.Q.maxAmmo;
+      st.rdvCharges = 1;
+      st.rdvCooldown = 0;
+      if (!st.ultActive) st.ultPoints = CFG.X.maxPoints;
+    },
+    stripToE() {
+      st.cCharges = 0; st.hhAmmo = 0; st.ultPoints = 0;
+      st.ultActive = false; st.tdfAmmo = 0;
+      if (st.held) unequip(true);
+    }
+  };
+})();
+
+</script>
 
 <script>
 (function abilityRangeAndRoundOneRules() {
