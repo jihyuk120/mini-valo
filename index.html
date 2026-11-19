@@ -15965,7 +15965,7 @@
   // =========================================================
   const CFG = {
     C: { name: '트레이드마크', maxCharges: 1, cost: 200, triggerRadius: 7.0, zoneRadius: 7.5, zoneLife: 6.0, rearm: 12.0, placeRange: 16, retrieveRange: 50 },
-    Q: { name: '헤드헌터', maxAmmo: 8, costPerBullet: 100, headDmg: 159, bodyDmg: 55, interval: 0.42 },
+    Q: { name: '헤드헌터', maxAmmo: 8, costPerBullet: 100, headDmg: 159, bodyDmg: 55, interval: 0.34 },
     E: { name: '랑데부', cooldown: 30, teleportRange: 30, placeRange: 16, retrieveRange: 50 },
     X: { name: '역작', maxPoints: 8, ammo: 5, dmg: 150, interval: 1.1, zoneRadius: 5.0, zoneLife: 6.0 }
   };
@@ -15991,6 +15991,7 @@
     fovKick: 0,
     hhHeat: 0,
     hhHeatTimer: 0,
+    lastHhShot: 0,
     tracers: []
   };
   window.chamberState = st;
@@ -16035,6 +16036,19 @@
   const sndWarn = () => { beep(1100, 0.12, 'square', 0.12); setTimeout(() => beep(1400, 0.14, 'square', 0.12), 130); setTimeout(() => beep(1100, 0.12, 'square', 0.12), 280); };
   const sndTeleport = () => { beep(200, 0.35, 'sawtooth', 0.12, 1400); };
   const sndHH = () => { beep(160, 0.22, 'sawtooth', 0.22, 60); beep(900, 0.06, 'square', 0.08, 300); };
+  const ULT_SND = ['valorant-chamber-enemy-ult.mp3', './valorant-chamber-enemy-ult.mp3'];
+  function playUltSound() {
+    let i = 0;
+    const tryNext = () => {
+      if (i >= ULT_SND.length) return;
+      const a = new Audio(ULT_SND[i++]);
+      a.volume = 0.9;
+      a.addEventListener('error', tryNext);
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(() => {});
+    };
+    tryNext();
+  }
   const sndTDF = () => { beep(90, 0.5, 'sawtooth', 0.3, 40); beep(1500, 0.12, 'square', 0.1, 200); };
 
   // ---------- 재질 ----------
@@ -16309,21 +16323,29 @@
     const origin = new THREE_.Vector3(), dir = new THREE_.Vector3();
     camera.getWorldPosition(origin);
     camera.getWorldDirection(dir);
-    if (dir.y > -0.02) return null;                 // 바닥을 보고 있지 않음
-    const t = -origin.y / dir.y;                     // y=0 평면
-    if (!(t > 0) || t > maxRange) return null;
-    const p = origin.clone().addScaledVector(dir, t);
-    p.y = 0;
-    // 중간에 벽이 가로막는지 확인
+    let best = null;      // { t, y, top }
+    if (dir.y < -0.02) {
+      const t = -origin.y / dir.y;
+      if (t > 0 && t <= maxRange) best = { t, y: 0, top: true };
+    }
     if (typeof wallColliders !== 'undefined' && Array.isArray(wallColliders)) {
       const ray = new THREE_.Ray(origin, dir);
       const box = new THREE_.Box3(), hit = new THREE_.Vector3();
       for (const c of wallColliders) {
+        const maxY = (c.maxY ?? 4);
         box.min.set(c.minX, c.minY ?? 0, c.minZ);
-        box.max.set(c.maxX, c.maxY ?? 4, c.maxZ);
-        if (ray.intersectBox(box, hit) && origin.distanceTo(hit) < t - 0.05) return null;
+        box.max.set(c.maxX, maxY, c.maxZ);
+        if (box.containsPoint(origin)) continue;
+        if (!ray.intersectBox(box, hit)) continue;
+        const d = origin.distanceTo(hit);
+        if (d > maxRange || (best && d >= best.t - 0.01)) continue;
+        const isTop = dir.y < 0 && Math.abs(hit.y - maxY) < 0.08;
+        best = { t: d, y: isTop ? maxY : 0, top: isTop };
       }
     }
+    if (!best || !best.top) return null;             // 벽 옆면은 설치 불가, 지형지물 윗면/바닥만 가능
+    const p = origin.clone().addScaledVector(dir, best.t);
+    p.y = best.y;
     return p;
   }
 
@@ -16426,7 +16448,11 @@
     core.position.y = 0.31;
     const beam = new THREE_.Mesh(new THREE_.CylinderGeometry(0.05, 0.05, 1.4, 8), new THREE_.MeshBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.35, depthWrite: false }));
     beam.position.y = 1.2;
-    g.add(base, frame, slab, core, beam);
+    const rng = new THREE_.Mesh(new THREE_.RingGeometry(CFG.E.teleportRange - 0.15, CFG.E.teleportRange, 96), new THREE_.MeshBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.6, depthWrite: false, side: THREE_.DoubleSide }));
+    rng.rotation.x = -Math.PI / 2; rng.position.y = 0.07;
+    const fill = new THREE_.Mesh(new THREE_.CircleGeometry(CFG.E.teleportRange, 64), new THREE_.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.05, depthWrite: false, side: THREE_.DoubleSide }));
+    fill.rotation.x = -Math.PI / 2; fill.position.y = 0.05;
+    g.add(base, frame, slab, core, beam, rng, fill);
     g.userData.core = core; g.userData.ring = beam;
     return g;
   }
@@ -16482,10 +16508,9 @@
       if (d > CFG.E.teleportRange) { notice('앵커 범위 밖입니다 (' + CFG.E.teleportRange + 'm 이내에서 E)', '#ff4655'); return; }
       // 순간이동
       const feetOff = (typeof currentEyeHeight !== 'undefined') ? currentEyeHeight : 1.7;
-      camera.position.set(st.anchor.pos.x, feetOff, st.anchor.pos.z);
+      camera.position.set(st.anchor.pos.x, st.anchor.pos.y + feetOff, st.anchor.pos.z);
       if (typeof velY !== 'undefined') velY = 0;
-      clearAnchor();
-      st.rdvCooldown = CFG.E.cooldown;
+      // 앵커는 회수하기 전까지 그 자리에 남아 있음 (쿨타임 없음)
       sndTeleport();
       playTeleportFx();
       notice('랑데부(E) 순간이동!', '#fde047');
@@ -16511,8 +16536,8 @@
   function tryRetrieve() {
     if (st.anchor && lookedAt(st.anchor.pos, CFG.E.retrieveRange)) {
       clearAnchor();
-      st.rdvCooldown = CFG.E.cooldown;
-      notice('앵커 회수 — 쿨타임 ' + CFG.E.cooldown + '초', '#fbbf24');
+      if (isPrep()) { st.rdvCooldown = 0; notice('앵커 회수', '#fbbf24'); }
+      else { st.rdvCooldown = CFG.E.cooldown; notice('앵커 회수 — 쿨타임 ' + CFG.E.cooldown + '초', '#fbbf24'); }
       return true;
     }
     for (let i = 0; i < st.traps.length; i++) {
@@ -16540,6 +16565,7 @@
     if (!isRange()) st.ultPoints = 0;
     st.ultActive = true;
     st.tdfAmmo = CFG.X.ammo;
+    playUltSound();
     equip('tourdeforce');
     notice('역작(X) 장착! 스나이퍼 ' + CFG.X.ammo + '발', '#fbbf24');
   }
@@ -16569,15 +16595,15 @@
     const slowMul = st.selfSlow > 0 ? 1.8 : 1.0;      // 둔화 상태에서는 연사 속도 감소
     st.fireTimer = interval * slowMul;
 
-    // 헤드헌터: 초탄은 오차 없음, 연사할수록 탄퍼짐/반동 증가 (조준 시 절반 이하)
+    // 헤드헌터: 평소엔 반동·탄퍼짐 없음. 쿨타임 한계로 광클(연타)할 때만 탄퍼짐 증가
     let spread;
     if (isTdf) spread = st.zoomed ? 0.0 : 0.075;
     else {
-      const heat = st.hhHeat;
-      const base = heat <= 0 ? 0 : Math.min(0.20, 0.04 + 0.045 * heat);
-      spread = base * 0.45;               // 줌 여부와 상관없이 동일한 탄퍼짐
-      st.hhHeat = Math.min(4, st.hhHeat + 1);
-      st.hhHeatTimer = 1.0;
+      const nowMs = performance.now();
+      const gap = (nowMs - st.lastHhShot) / 1000;
+      st.lastHhShot = nowMs;
+      st.hhHeat = (gap < 0.42) ? Math.min(4, st.hhHeat + 1) : 0;
+      spread = st.hhHeat <= 0 ? 0 : Math.min(0.12, 0.025 + 0.025 * st.hhHeat);
     }
     const ndc = new THREE_.Vector2((Math.random() - 0.5) * spread * 2, (Math.random() - 0.5) * spread * 2);
     const ray = new THREE_.Raycaster();
@@ -16606,8 +16632,8 @@
     }
 
     // 반동 연출
-    if (view) { view._kick = isTdf ? 0.16 : (0.09 + 0.03 * st.hhHeat); }
-    st.fovKick = isTdf ? 3 : (st.zoomed ? 4 + st.hhHeat * 1.5 : 1.5);
+    if (view) { view._kick = isTdf ? 0.16 : (st.hhHeat > 0 ? 0.05 : 0.02); }
+    st.fovKick = isTdf ? 3 : (st.hhHeat > 0 ? 1.5 : 0);
     if (isTdf) sndTDF(); else sndHH();
 
     if (hits.length > 0 && hits[0].distance <= wallDist + 0.05) {
@@ -16790,7 +16816,7 @@
     set('chShopQT', `Q 헤드헌터 (${st.hhAmmo}/${CFG.Q.maxAmmo}발)`);
     set('chShopQD', `1발당 ${CFG.Q.costPerBullet} ¤ (클릭 구매) · 헤드 ${CFG.Q.headDmg} 즉사 / 몸통 ${CFG.Q.bodyDmg} · 우클릭 줌`);
     set('chShopET', 'E 랑데부 (라운드마다 1개 무료)');
-    set('chShopED', '앵커 설치 → 30m 안에서 E = 순간이동 · F 회수(50m) · 쿨타임 30초');
+    set('chShopED', '앵커 설치(30m 범위 표시) → 범위 안에서 E = 순간이동 · 회수 전까지 유지 · F 회수(50m) · 회수 후 쿨타임 30초 (준비시간 제외)');
     set('chShopXT', `X 역작 (${st.ultPoints}/${CFG.X.maxPoints} pt)`);
     set('chShopXD', '전용 스나이퍼 5발 · 우클릭 줌 · 부위 불문 150 즉사 · 사망 지점 둔화 장판');
     const rdvTxt = st.anchor ? '설치됨' : (st.rdvCooldown > 0 ? Math.ceil(st.rdvCooldown) + 's' : '준비');
@@ -17034,7 +17060,6 @@
     // 앵커 연출
     if (st.anchor) {
       st.anchor.mesh.userData.ring.material.opacity = 0.28 + Math.sin(now * 0.005) * 0.08;
-      st.anchor.mesh.rotation.y += dt * 0.6;
     }
 
     // 트레이서
