@@ -15964,9 +15964,9 @@
   // 체임버 (Chamber) — C 트레이드마크 / Q 헤드헌터 / E 랑데부 / X 역작
   // =========================================================
   const CFG = {
-    C: { name: '트레이드마크', maxCharges: 1, cost: 200, triggerRadius: 7.0, zoneRadius: 7.5, zoneLife: 6.0, rearm: 12.0, placeRange: 16 },
+    C: { name: '트레이드마크', maxCharges: 1, cost: 200, triggerRadius: 7.0, zoneRadius: 7.5, zoneLife: 6.0, rearm: 12.0, placeRange: 16, retrieveRange: 50 },
     Q: { name: '헤드헌터', maxAmmo: 8, costPerBullet: 100, headDmg: 159, bodyDmg: 55, interval: 0.42 },
-    E: { name: '랑데부', cooldown: 30, teleportRange: 18, placeRange: 16 },
+    E: { name: '랑데부', cooldown: 30, teleportRange: 30, placeRange: 16, retrieveRange: 50 },
     X: { name: '역작', maxPoints: 8, ammo: 5, dmg: 150, interval: 1.1, zoneRadius: 5.0, zoneLife: 6.0 }
   };
 
@@ -16182,9 +16182,9 @@
     card.position.set(0, 0.06, -0.012);
     const edge = new THREE_.Mesh(new THREE_.BoxGeometry(0.205, 0.012, 0.02), gold());
     edge.position.set(0, 0.19, -0.01);
-    const screen = new THREE_.Mesh(new THREE_.BoxGeometry(0.16, 0.20, 0.004), glow(0x2dd4bf));
+    const screen = new THREE_.Mesh(new THREE_.BoxGeometry(0.16, 0.20, 0.004), glow(0x7e22ce));
     screen.position.set(0, 0.06, 0.0);
-    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.03, 10, 10), glow(0xff9a1f));
+    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.03, 10, 10), glow(0xe879f9));
     eye.position.set(0, 0.06, 0.012);
     g.add(hand, card, edge, screen, eye);
     g.userData.eye = eye;
@@ -16285,7 +16285,6 @@
     const cross = document.getElementById('crosshair');
     if (cross) cross.style.display = 'block';
     restoreGun();
-    if (!silent) notice('체임버 무기 해제', '#94a3b8');
   }
   function equip(which) {
     if (!ensureViews()) return;
@@ -16349,15 +16348,24 @@
   // ---------- C: 트레이드마크 ----------
   function buildTrapMesh() {
     const g = new THREE_.Group();
-    const base = new THREE_.Mesh(new THREE_.BoxGeometry(0.46, 0.06, 0.46), black());
-    base.position.y = 0.03;
-    const cube = new THREE_.Mesh(new THREE_.BoxGeometry(0.34, 0.34, 0.34), new THREE_.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.9 }));
-    cube.position.y = 0.23;
-    const trim = new THREE_.Mesh(new THREE_.BoxGeometry(0.36, 0.05, 0.36), gold());
-    trim.position.y = 0.42;
-    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.08, 12, 12), glow(0xff9a1f));
-    eye.position.y = 0.52;
-    g.add(base, cube, trim, eye);
+    const legMat = new THREE_.MeshStandardMaterial({ color: 0x7a3b2a, metalness: 0.5, roughness: 0.5 });
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI * 2 / 3 + 0.4;
+      const leg = new THREE_.Mesh(new THREE_.CylinderGeometry(0.018, 0.03, 0.62, 6), legMat);
+      leg.position.set(Math.cos(a) * 0.17, 0.30, Math.sin(a) * 0.17);
+      leg.rotation.z = Math.cos(a) * -0.42;
+      leg.rotation.x = Math.sin(a) * 0.42;
+      g.add(leg);
+    }
+    const hub = new THREE_.Mesh(new THREE_.CylinderGeometry(0.07, 0.07, 0.08, 8), black());
+    hub.position.y = 0.60;
+    const cup = new THREE_.Mesh(new THREE_.CylinderGeometry(0.13, 0.06, 0.07, 10), legMat);
+    cup.position.y = 0.66;
+    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.13, 14, 14), glow(0xc026d3));
+    eye.position.y = 0.78;
+    const halo = new THREE_.Mesh(new THREE_.SphereGeometry(0.19, 14, 14), new THREE_.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.35, depthWrite: false }));
+    halo.position.y = 0.78;
+    g.add(hub, cup, halo, eye);
     g.userData.eye = eye;
     return g;
   }
@@ -16408,16 +16416,18 @@
   // ---------- E: 랑데부 ----------
   function buildAnchorMesh() {
     const g = new THREE_.Group();
-    const base = new THREE_.Mesh(new THREE_.CylinderGeometry(0.34, 0.38, 0.06, 6), goldDark());
-    base.position.y = 0.03;
-    const ring = new THREE_.Mesh(new THREE_.TorusGeometry(0.42, 0.03, 8, 28), glow(0xfbbf24));
-    ring.rotation.x = Math.PI / 2; ring.position.y = 0.08;
-    const core = new THREE_.Mesh(new THREE_.OctahedronGeometry(0.22), glow(0xffd24a));
-    core.position.y = 0.62;
-    const beam = new THREE_.Mesh(new THREE_.CylinderGeometry(0.03, 0.03, 1.0, 8), new THREE_.MeshBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.55 }));
-    beam.position.y = 0.55;
-    g.add(base, ring, core, beam);
-    g.userData.core = core; g.userData.ring = ring;
+    const base = new THREE_.Mesh(new THREE_.BoxGeometry(0.34, 0.05, 0.22), gold());
+    base.position.y = 0.025;
+    const frame = new THREE_.Mesh(new THREE_.BoxGeometry(0.26, 0.52, 0.06), goldDark());
+    frame.position.y = 0.31;
+    const slab = new THREE_.Mesh(new THREE_.BoxGeometry(0.21, 0.46, 0.07), new THREE_.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.88 }));
+    slab.position.y = 0.31;
+    const core = new THREE_.Mesh(new THREE_.BoxGeometry(0.09, 0.30, 0.075), new THREE_.MeshBasicMaterial({ color: 0xa7f3d0 }));
+    core.position.y = 0.31;
+    const beam = new THREE_.Mesh(new THREE_.CylinderGeometry(0.05, 0.05, 1.4, 8), new THREE_.MeshBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.35, depthWrite: false }));
+    beam.position.y = 1.2;
+    g.add(base, frame, slab, core, beam);
+    g.userData.core = core; g.userData.ring = beam;
     return g;
   }
   function clearAnchor() {
@@ -16432,7 +16442,7 @@
     scene.add(mesh);
     st.anchor = { mesh, pos: p.clone() };
     sndPlace();
-    notice('랑데부 앵커 설치! 범위 안에서 E = 순간이동 · F = 회수', '#fbbf24');
+    notice('랑데부 앵커 설치! 30m 안에서 E = 순간이동 · F = 회수', '#fbbf24');
     unequip(true);
   }
 
@@ -16487,17 +16497,19 @@
   }
 
   // ---------- F: 회수 ----------
-  function lookedAt(pos, maxDist, coneDot) {
+  function lookedAt(pos, maxDist) {
     const origin = new THREE_.Vector3(), dir = new THREE_.Vector3();
     camera.getWorldPosition(origin);
     camera.getWorldDirection(dir);
-    const to = new THREE_.Vector3(pos.x, pos.y + 0.4, pos.z).sub(origin);
+    const to = new THREE_.Vector3(pos.x, pos.y + 0.35, pos.z).sub(origin);
     const dist = to.length();
     if (dist > maxDist) return false;
-    return to.normalize().dot(dir) > (coneDot || 0.93);
+    // 거리와 상관없이 반경 약 1.4m 안을 조준하면 인식
+    const need = Math.cos(Math.atan2(1.4, Math.max(dist, 0.5)));
+    return to.normalize().dot(dir) > Math.min(0.97, need);
   }
   function tryRetrieve() {
-    if (st.anchor && lookedAt(st.anchor.pos, 5, 0.9)) {
+    if (st.anchor && lookedAt(st.anchor.pos, CFG.E.retrieveRange)) {
       clearAnchor();
       st.rdvCooldown = CFG.E.cooldown;
       notice('앵커 회수 — 쿨타임 ' + CFG.E.cooldown + '초', '#fbbf24');
@@ -16505,7 +16517,7 @@
     }
     for (let i = 0; i < st.traps.length; i++) {
       const t = st.traps[i];
-      if (lookedAt(t.pos, 5, 0.9)) {
+      if (lookedAt(t.pos, CFG.C.retrieveRange)) {
         scene.remove(t.mesh);
         st.traps.splice(i, 1);
         st.cCharges = Math.min(CFG.C.maxCharges, st.cCharges + 1);
@@ -16563,7 +16575,7 @@
     else {
       const heat = st.hhHeat;
       const base = heat <= 0 ? 0 : Math.min(0.20, 0.04 + 0.045 * heat);
-      spread = base * (st.zoomed ? 0.45 : 1.0);
+      spread = base * 0.45;               // 줌 여부와 상관없이 동일한 탄퍼짐
       st.hhHeat = Math.min(4, st.hhHeat + 1);
       st.hhHeatTimer = 1.0;
     }
@@ -16606,7 +16618,7 @@
 
     if (isTdf && st.tdfAmmo <= 0) { st.ultActive = false; setTimeout(() => unequip(true), 450); }
     else if (!isTdf && st.hhAmmo <= 0) { setTimeout(() => unequip(true), 300); }
-    if (st.zoomed && isTdf) { st.zoomed = false; setTimeout(() => { if (st.held === 'tourdeforce') st.zoomed = true; }, 380); }
+    if (st.zoomed && isTdf) st.zoomed = false;     // 발사하면 줌 해제 (다시 우클릭해야 줌)
   }
 
   function applyHit(hit, isTdf) {
@@ -16778,7 +16790,7 @@
     set('chShopQT', `Q 헤드헌터 (${st.hhAmmo}/${CFG.Q.maxAmmo}발)`);
     set('chShopQD', `1발당 ${CFG.Q.costPerBullet} ¤ (클릭 구매) · 헤드 ${CFG.Q.headDmg} 즉사 / 몸통 ${CFG.Q.bodyDmg} · 우클릭 줌`);
     set('chShopET', 'E 랑데부 (라운드마다 1개 무료)');
-    set('chShopED', '앵커 설치 → 범위 안에서 E = 순간이동 · F 회수 · 쿨타임 30초');
+    set('chShopED', '앵커 설치 → 30m 안에서 E = 순간이동 · F 회수(50m) · 쿨타임 30초');
     set('chShopXT', `X 역작 (${st.ultPoints}/${CFG.X.maxPoints} pt)`);
     set('chShopXD', '전용 스나이퍼 5발 · 우클릭 줌 · 부위 불문 150 즉사 · 사망 지점 둔화 장판');
     const rdvTxt = st.anchor ? '설치됨' : (st.rdvCooldown > 0 ? Math.ceil(st.rdvCooldown) + 's' : '준비');
@@ -16948,8 +16960,8 @@
     }
     let canRetrieve = false;
     if (isChamber() && !dead && !st.held) {
-      if (st.anchor && lookedAt(st.anchor.pos, 5, 0.9)) canRetrieve = true;
-      else for (const t of st.traps) { if (lookedAt(t.pos, 5, 0.9)) { canRetrieve = true; break; } }
+      if (st.anchor && lookedAt(st.anchor.pos, CFG.E.retrieveRange)) canRetrieve = true;
+      else for (const t of st.traps) { if (lookedAt(t.pos, CFG.C.retrieveRange)) { canRetrieve = true; break; } }
     }
     fp.style.display = canRetrieve ? 'block' : 'none';
 
@@ -16971,10 +16983,10 @@
       t.eye.rotation.y += dt * 4;
       if (t.cooldown > 0) {
         t.cooldown -= dt;
-        t.eye.material.color.setHex(0x44331a);
+        t.eye.material.color.setHex(0x4a2a55);
         continue;
       }
-      t.eye.material.color.setHex(0xff9a1f);
+      t.eye.material.color.setHex(0xc026d3);
       t.eye.scale.setScalar(1 + Math.sin(now * 0.008) * 0.15);
       let triggered = false;
       for (const en of enemies) {
@@ -17021,9 +17033,8 @@
 
     // 앵커 연출
     if (st.anchor) {
-      st.anchor.mesh.userData.core.rotation.y += dt * 2.2;
-      st.anchor.mesh.userData.core.position.y = 0.62 + Math.sin(now * 0.004) * 0.06;
-      st.anchor.mesh.userData.ring.rotation.z += dt * 1.5;
+      st.anchor.mesh.userData.ring.material.opacity = 0.28 + Math.sin(now * 0.005) * 0.08;
+      st.anchor.mesh.rotation.y += dt * 0.6;
     }
 
     // 트레이서
