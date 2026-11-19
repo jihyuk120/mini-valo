@@ -15988,6 +15988,9 @@
     lastRoundNum: -1,
     selfSlow: 0,
     fovBase: 75,
+    fovKick: 0,
+    hhHeat: 0,
+    hhHeatTimer: 0,
     tracers: []
   };
   window.chamberState = st;
@@ -16151,7 +16154,75 @@
     return g;
   }
 
-  const views = { headhunter: null, tourdeforce: null };
+  // ---------- 1인칭 모델: 트레이드마크 / 랑데부 기기 (손에 들고 바닥을 조준해 설치) ----------
+  function buildHand(side) {
+    const g = new THREE_.Group();
+    const skin = new THREE_.MeshStandardMaterial({ color: 0xedc8ae, roughness: 0.6 });
+    const sleeve = new THREE_.MeshStandardMaterial({ color: 0x7a1d1d, roughness: 0.5 });
+    const glove = new THREE_.MeshStandardMaterial({ color: 0x2a1515, roughness: 0.55 });
+    const palm = new THREE_.Mesh(new THREE_.BoxGeometry(0.075, 0.03, 0.09), glove);
+    palm.position.set(0, -0.02, 0.03);
+    const fore = new THREE_.Mesh(new THREE_.CylinderGeometry(0.038, 0.05, 0.34, 10), sleeve);
+    fore.rotation.x = Math.PI / 2.3;
+    fore.position.set(0.0, -0.075, 0.24);
+    for (let i = 0; i < 4; i++) {
+      const f = new THREE_.Mesh(new THREE_.CylinderGeometry(0.009, 0.01, 0.065, 6), skin);
+      f.rotation.x = Math.PI / 2;
+      f.position.set(-0.026 + i * 0.0175, 0.0, -0.045);
+      g.add(f);
+    }
+    g.add(palm, fore);
+    g.userData.side = side;
+    return g;
+  }
+  function buildTrapDevice() {
+    const g = new THREE_.Group();
+    const hand = buildHand(1);
+    const card = new THREE_.Mesh(new THREE_.BoxGeometry(0.20, 0.26, 0.016), black());
+    card.position.set(0, 0.06, -0.012);
+    const edge = new THREE_.Mesh(new THREE_.BoxGeometry(0.205, 0.012, 0.02), gold());
+    edge.position.set(0, 0.19, -0.01);
+    const screen = new THREE_.Mesh(new THREE_.BoxGeometry(0.16, 0.20, 0.004), glow(0x2dd4bf));
+    screen.position.set(0, 0.06, 0.0);
+    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.03, 10, 10), glow(0xff9a1f));
+    eye.position.set(0, 0.06, 0.012);
+    g.add(hand, card, edge, screen, eye);
+    g.userData.eye = eye;
+    return g;
+  }
+  function buildRdvDevice() {
+    const g = new THREE_.Group();
+    const hand = buildHand(1);
+    const phone = new THREE_.Mesh(new THREE_.BoxGeometry(0.105, 0.19, 0.014), black());
+    phone.position.set(0, 0.07, -0.01);
+    const bezel = new THREE_.Mesh(new THREE_.BoxGeometry(0.11, 0.014, 0.018), gold());
+    bezel.position.set(0, 0.168, -0.01);
+    const screen = new THREE_.Mesh(new THREE_.BoxGeometry(0.088, 0.15, 0.004), glow(0x34d399));
+    screen.position.set(0, 0.07, 0.0);
+    const core = new THREE_.Mesh(new THREE_.OctahedronGeometry(0.022), glow(0xfde047));
+    core.position.set(0, 0.07, 0.016);
+    g.add(hand, phone, bezel, screen, core);
+    g.userData.core = core;
+    return g;
+  }
+  let previewMesh = null;
+  function ensurePreview() {
+    if (previewMesh || typeof scene === 'undefined') return previewMesh;
+    previewMesh = new THREE_.Group();
+    const ring = new THREE_.Mesh(new THREE_.RingGeometry(0.30, 0.38, 28), new THREE_.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.9, depthWrite: false, side: THREE_.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03;
+    const dot = new THREE_.Mesh(new THREE_.CircleGeometry(0.12, 16), new THREE_.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.95, depthWrite: false, side: THREE_.DoubleSide }));
+    dot.rotation.x = -Math.PI / 2; dot.position.y = 0.035;
+    const arrow = new THREE_.Mesh(new THREE_.ConeGeometry(0.1, 0.22, 4), new THREE_.MeshBasicMaterial({ color: 0x38bdf8 }));
+    arrow.rotation.x = Math.PI; arrow.position.y = 0.55;
+    previewMesh.add(ring, dot, arrow);
+    previewMesh.userData.arrow = arrow;
+    previewMesh.visible = false;
+    scene.add(previewMesh);
+    return previewMesh;
+  }
+
+  const views = { headhunter: null, tourdeforce: null, trap: null, rdv: null };
   function ensureViews() {
     if (typeof camera === 'undefined') return false;
     if (!views.headhunter) {
@@ -16164,6 +16235,9 @@
       views.tourdeforce.visible = false;
       camera.add(views.tourdeforce);
     }
+    if (!views.trap) { views.trap = buildTrapDevice(); views.trap.visible = false; camera.add(views.trap); }
+    if (!views.rdv) { views.rdv = buildRdvDevice(); views.rdv.visible = false; camera.add(views.rdv); }
+    ensurePreview();
     return true;
   }
 
@@ -16206,8 +16280,8 @@
     if (!st.held) return;
     st.held = null;
     st.zoomed = false;
-    if (views.headhunter) views.headhunter.visible = false;
-    if (views.tourdeforce) views.tourdeforce.visible = false;
+    Object.keys(views).forEach(k => { if (views[k]) views[k].visible = false; });
+    if (previewMesh) previewMesh.visible = false;
     const cross = document.getElementById('crosshair');
     if (cross) cross.style.display = 'block';
     restoreGun();
@@ -16218,13 +16292,13 @@
     if (typeof isDead !== 'undefined' && isDead) return;
     if (which === 'headhunter' && st.hhAmmo <= 0) { notice('헤드헌터 탄환이 없습니다 (상점 B에서 구매)', '#ff4655'); return; }
     if (which === 'tourdeforce' && !(st.ultActive && st.tdfAmmo > 0)) return;
+    if (which === 'trap' && st.cCharges <= 0) { notice('트레이드마크가 없습니다 (상점 B에서 구매 200¤)', '#ff4655'); return; }
     if (typeof setZoom === 'function') { try { setZoom(0); } catch (e) {} }
     if (typeof isMouseDown !== 'undefined') isMouseDown = false;
     st.held = which;
     st.zoomed = false;
     st.fireTimer = 0.35;
-    views.headhunter.visible = (which === 'headhunter');
-    views.tourdeforce.visible = (which === 'tourdeforce');
+    Object.keys(views).forEach(k => { views[k].visible = (k === which); });
     const v = views[which];
     v._swap = 0.3;
     if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
@@ -16275,22 +16349,20 @@
   // ---------- C: 트레이드마크 ----------
   function buildTrapMesh() {
     const g = new THREE_.Group();
-    const base = new THREE_.Mesh(new THREE_.CylinderGeometry(0.30, 0.34, 0.08, 8), black());
-    base.position.y = 0.04;
-    const ringG = new THREE_.Mesh(new THREE_.TorusGeometry(0.26, 0.025, 8, 20), gold());
-    ringG.rotation.x = Math.PI / 2; ringG.position.y = 0.09;
-    const mast = new THREE_.Mesh(new THREE_.CylinderGeometry(0.03, 0.05, 0.42, 8), gold());
-    mast.position.y = 0.30;
-    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.09, 12, 12), glow(0xff9a1f));
-    eye.position.y = 0.56;
-    const dish = new THREE_.Mesh(new THREE_.CylinderGeometry(0.16, 0.05, 0.05, 10), goldDark());
-    dish.position.y = 0.47;
-    g.add(base, ringG, mast, dish, eye);
+    const base = new THREE_.Mesh(new THREE_.BoxGeometry(0.46, 0.06, 0.46), black());
+    base.position.y = 0.03;
+    const cube = new THREE_.Mesh(new THREE_.BoxGeometry(0.34, 0.34, 0.34), new THREE_.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.9 }));
+    cube.position.y = 0.23;
+    const trim = new THREE_.Mesh(new THREE_.BoxGeometry(0.36, 0.05, 0.36), gold());
+    trim.position.y = 0.42;
+    const eye = new THREE_.Mesh(new THREE_.SphereGeometry(0.08, 12, 12), glow(0xff9a1f));
+    eye.position.y = 0.52;
+    g.add(base, cube, trim, eye);
     g.userData.eye = eye;
     return g;
   }
   function placeTrap() {
-    if (st.cCharges <= 0) { notice('트레이드마크가 없습니다 (상점 B에서 구매 200¤)', '#ff4655'); return; }
+    if (st.cCharges <= 0) { notice('트레이드마크가 없습니다 (상점 B에서 구매 200¤)', '#ff4655'); unequip(true); return; }
     const p = aimFloorPoint(CFG.C.placeRange);
     if (!p) { notice('바닥을 조준해서 설치하세요 (사거리 ' + CFG.C.placeRange + 'm)', '#ff4655'); return; }
     st.cCharges -= 1;
@@ -16301,6 +16373,7 @@
     sndPlace();
     notice('트레이드마크(C) 설치! F로 회수', '#fbbf24');
     if (typeof updateHUD === 'function') updateHUD();
+    unequip(true);
   }
 
   function enemyList() {
@@ -16310,9 +16383,6 @@
       for (const b of brawlBots) {
         if (b && b.userData && !b.userData.dead && b.userData.team !== myTeam) out.push({ pos: b.position, kind: 'bot', ref: b });
       }
-    }
-    if (isRange() && Array.isArray(window.practiceBots)) {
-      for (const b of window.practiceBots) { if (b && b.userData && !b.userData.dead) out.push({ pos: b.position, kind: 'bot', ref: b }); }
     }
     if (typeof remotePlayers !== 'undefined') {
       for (const id in remotePlayers) {
@@ -16353,7 +16423,50 @@
   function clearAnchor() {
     if (st.anchor) { scene.remove(st.anchor.mesh); st.anchor = null; }
   }
+  function placeAnchor() {
+    if (st.anchor) { unequip(true); return; }
+    const p = aimFloorPoint(CFG.E.placeRange);
+    if (!p) { notice('바닥을 조준해서 설치하세요', '#ff4655'); return; }
+    const mesh = buildAnchorMesh();
+    mesh.position.copy(p);
+    scene.add(mesh);
+    st.anchor = { mesh, pos: p.clone() };
+    sndPlace();
+    notice('랑데부 앵커 설치! 범위 안에서 E = 순간이동 · F = 회수', '#fbbf24');
+    unequip(true);
+  }
+
+  function playTeleportFx() {
+    let el = document.getElementById('chTeleportFx');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'chTeleportFx';
+      el.style.cssText = 'position:fixed; inset:0; z-index:955; pointer-events:none; display:none; overflow:hidden;';
+      const colors = ['#ffe600', '#ffb800', '#ff5a1f', '#e11d48', '#c026d3'];
+      let html = '<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute; left:0; top:-50%; width:100%; height:200%;">';
+      colors.forEach((c, i) => {
+        const y0 = 14 + i * 14;
+        let d = 'M0,' + y0;
+        for (let x = 0; x <= 100; x += 5) d += ' L' + x + ',' + (y0 + Math.sin(x * 0.12 + i) * 5);
+        for (let x = 100; x >= 0; x -= 5) d += ' L' + x + ',' + (y0 + 13 + Math.sin(x * 0.12 + i) * 5);
+        html += '<path class="chBand" d="' + d + ' Z" fill="' + c + '"/>';
+      });
+      html += '</svg>';
+      el.innerHTML = html;
+      document.body.appendChild(el);
+    }
+    el.style.display = 'block';
+    el.style.opacity = '1';
+    const bands = el.querySelectorAll('.chBand');
+    bands.forEach((b, i) => {
+      try { b.animate([{ transform: 'translateY(-18%)' }, { transform: 'translateY(22%)' }], { duration: 650, delay: i * 40, easing: 'ease-in-out', fill: 'both' }); } catch (e) {}
+    });
+    try { el.animate([{ opacity: 1 }, { opacity: 1, offset: 0.6 }, { opacity: 0 }], { duration: 700, fill: 'forwards' }); } catch (e) {}
+    setTimeout(() => { el.style.display = 'none'; }, 760);
+  }
+
   function castRendezvous() {
+    if (st.held === 'rdv') { unequip(); return; }
     if (st.anchor) {
       const d = Math.hypot(camera.position.x - st.anchor.pos.x, camera.position.z - st.anchor.pos.z);
       if (d > CFG.E.teleportRange) { notice('앵커 범위 밖입니다 (' + CFG.E.teleportRange + 'm 이내에서 E)', '#ff4655'); return; }
@@ -16364,19 +16477,13 @@
       clearAnchor();
       st.rdvCooldown = CFG.E.cooldown;
       sndTeleport();
+      playTeleportFx();
       notice('랑데부(E) 순간이동!', '#fde047');
       return;
     }
     if (st.rdvCooldown > 0) { notice('랑데부 쿨타임 ' + Math.ceil(st.rdvCooldown) + '초', '#ff4655'); return; }
     if (st.rdvCharges <= 0) return;
-    const p = aimFloorPoint(CFG.E.placeRange);
-    if (!p) { notice('바닥을 조준해서 설치하세요', '#ff4655'); return; }
-    const mesh = buildAnchorMesh();
-    mesh.position.copy(p);
-    scene.add(mesh);
-    st.anchor = { mesh, pos: p.clone() };
-    sndPlace();
-    notice('랑데부 앵커 설치! 범위 안에서 E = 순간이동 · F = 회수', '#fbbf24');
+    equip('rdv');
   }
 
   // ---------- F: 회수 ----------
@@ -16440,6 +16547,8 @@
   function fireHeld() {
     if (!st.held || (typeof isDead !== 'undefined' && isDead)) return;
     if (st.fireTimer > 0) return;
+    if (st.held === 'trap') { placeTrap(); return; }
+    if (st.held === 'rdv') { placeAnchor(); return; }
     if (isPrep()) { notice('준비 시간에는 사격할 수 없습니다.', '#ff4655'); st.fireTimer = 0.4; return; }
     const isTdf = st.held === 'tourdeforce';
     if (isTdf ? st.tdfAmmo <= 0 : st.hhAmmo <= 0) { unequip(true); return; }
@@ -16448,8 +16557,17 @@
     const slowMul = st.selfSlow > 0 ? 1.8 : 1.0;      // 둔화 상태에서는 연사 속도 감소
     st.fireTimer = interval * slowMul;
 
-    const spread = st.zoomed ? 0.0 : (isTdf ? 0.075 : 0.028);
-    const ndc = new THREE_.Vector2((Math.random() - 0.5) * spread * 3, (Math.random() - 0.5) * spread * 3);
+    // 헤드헌터: 초탄은 오차 없음, 연사할수록 탄퍼짐/반동 증가 (조준 시 절반 이하)
+    let spread;
+    if (isTdf) spread = st.zoomed ? 0.0 : 0.075;
+    else {
+      const heat = st.hhHeat;
+      const base = heat <= 0 ? 0 : Math.min(0.20, 0.04 + 0.045 * heat);
+      spread = base * (st.zoomed ? 0.45 : 1.0);
+      st.hhHeat = Math.min(4, st.hhHeat + 1);
+      st.hhHeatTimer = 1.0;
+    }
+    const ndc = new THREE_.Vector2((Math.random() - 0.5) * spread * 2, (Math.random() - 0.5) * spread * 2);
     const ray = new THREE_.Raycaster();
     ray.setFromCamera(ndc, camera);
 
@@ -16476,7 +16594,8 @@
     }
 
     // 반동 연출
-    if (view) { view._kick = isTdf ? 0.16 : 0.09; }
+    if (view) { view._kick = isTdf ? 0.16 : (0.09 + 0.03 * st.hhHeat); }
+    st.fovKick = isTdf ? 3 : (st.zoomed ? 4 + st.hhHeat * 1.5 : 1.5);
     if (isTdf) sndTDF(); else sndHH();
 
     if (hits.length > 0 && hits[0].distance <= wallDist + 0.05) {
@@ -16577,7 +16696,7 @@
     }
     if (st.held && (e.code === 'KeyR' || e.code === 'KeyY')) { e.stopImmediatePropagation(); e.preventDefault(); return; }
     if (e.repeat) return;
-    if (e.code === 'KeyC') { placeTrap(); }
+    if (e.code === 'KeyC') { if (st.held === 'trap') unequip(); else equip('trap'); }
     else if (e.code === 'KeyQ') { if (st.held === 'headhunter') unequip(); else equip('headhunter'); }
     else if (e.code === 'KeyE') { castRendezvous(); }
     else if (e.code === 'KeyX') { castUlt(); }
@@ -16592,7 +16711,10 @@
     e.preventDefault();
     e.stopImmediatePropagation();
     if (e.button === 0) fireHeld();
-    else if (e.button === 2) setZoomState(!st.zoomed);
+    else if (e.button === 2) {
+      if (st.held === 'trap' || st.held === 'rdv') unequip();     // 설치 모드 우클릭 = 취소
+      else setZoomState(!st.zoomed);
+    }
   }, true);
   document.addEventListener('mouseup', (e) => {
     if (!isChamber() || !st.held) return;
@@ -16703,7 +16825,7 @@
       if (isChamber() && st.held) {
         if (typeof gunGroup !== 'undefined') gunGroup.visible = false;
         if (st.zoomed && c === camera) {
-          camera.fov = st.fovBase;
+          camera.fov = st.fovBase + st.fovKick;
           camera.updateProjectionMatrix();
         }
       }
@@ -16770,27 +16892,77 @@
     if (cross && isChamber() && st.held) cross.style.display = st.zoomed ? 'none' : 'block';
 
     // 뷰모델 위치 / 반동
-    ['headhunter', 'tourdeforce'].forEach(k => {
+    const POSE = {
+      headhunter: { hip: [0.24, -0.20, -0.46], ads: [0.0, -0.13, -0.44], kick: 1.4, hideAds: false },
+      tourdeforce: { hip: [0.22, -0.20, -0.42], ads: [0.0, -0.06, -0.30], kick: 0.9, hideAds: true },
+      trap: { hip: [0.22, -0.30, -0.40], ads: null, kick: 0, hideAds: false },
+      rdv: { hip: [0.24, -0.30, -0.38], ads: null, kick: 0, hideAds: false }
+    };
+    Object.keys(views).forEach(k => {
       const v = views[k];
-      if (!v || st.held !== k) { if (v) v.visible = false; return; }
+      if (!v) return;
+      if (st.held !== k) { v.visible = false; return; }
+      const pose = POSE[k];
       v._kick = Math.max(0, (v._kick || 0) - dt * 0.9);
       v._swap = Math.max(0, (v._swap || 0) - dt);
       const swapDrop = v._swap > 0 ? (v._swap / 0.3) * 0.28 : 0;
-      if (k === 'headhunter') {
-        const tx = st.zoomed ? 0.0 : 0.24, ty = (st.zoomed ? -0.10 : -0.20) - swapDrop, tz = st.zoomed ? -0.42 : -0.46;
-        v.position.x += (tx - v.position.x) * 0.25;
-        v.position.y += (ty - v.position.y) * 0.25;
-        v.position.z += ((tz + v._kick) - v.position.z) * 0.35;
-        v.rotation.x = v._kick * 1.4;
+      const tgt = (st.zoomed && pose.ads) ? pose.ads : pose.hip;
+      v.position.x += (tgt[0] - v.position.x) * 0.25;
+      v.position.y += ((tgt[1] - swapDrop) - v.position.y) * 0.25;
+      v.position.z += ((tgt[2] + v._kick) - v.position.z) * 0.35;
+      if (k === 'trap' || k === 'rdv') {
+        v.rotation.set(-0.55 + Math.sin(now * 0.004) * 0.03, -0.12, 0.05);
+        if (v.userData.core) v.userData.core.rotation.y += dt * 3;
+        if (v.userData.eye) v.userData.eye.scale.setScalar(1 + Math.sin(now * 0.01) * 0.2);
       } else {
-        const tx = st.zoomed ? 0.0 : 0.22, ty = (st.zoomed ? -0.06 : -0.20) - swapDrop, tz = st.zoomed ? -0.30 : -0.42;
-        v.position.x += (tx - v.position.x) * 0.25;
-        v.position.y += (ty - v.position.y) * 0.25;
-        v.position.z += ((tz + v._kick) - v.position.z) * 0.35;
-        v.rotation.x = v._kick * 0.9;
+        v.rotation.x = v._kick * pose.kick;
       }
-      v.visible = !st.zoomed;     // 줌 중에는 오버레이만 표시 (st.held === k 일 때만 이 줄에 도달)
+      v.visible = !(st.zoomed && pose.hideAds);     // 헤드헌터는 줌에서도 총이 보임, 역작은 스코프 화면만
     });
+
+    // 설치 미리보기 마커 (영상처럼 바닥 조준점 표시)
+    if (previewMesh) {
+      if (isChamber() && (st.held === 'trap' || st.held === 'rdv')) {
+        const range = st.held === 'trap' ? CFG.C.placeRange : CFG.E.placeRange;
+        const pp = aimFloorPoint(range);
+        previewMesh.visible = !!pp;
+        if (pp) {
+          previewMesh.position.copy(pp);
+          previewMesh.userData.arrow.position.y = 0.55 + Math.sin(now * 0.008) * 0.07;
+        }
+      } else previewMesh.visible = false;
+    }
+
+    // 헤드헌터 연사 열(탄퍼짐) 회복 / FOV 반동 회복
+    if (st.hhHeatTimer > 0) { st.hhHeatTimer -= dt; if (st.hhHeatTimer <= 0) st.hhHeat = 0; }
+    if (st.fovKick > 0) st.fovKick = Math.max(0, st.fovKick - dt * 28);
+
+    // F 회수 안내
+    let fp = document.getElementById('chFPrompt');
+    if (!fp) {
+      fp = document.createElement('div');
+      fp.id = 'chFPrompt';
+      fp.style.cssText = 'position:fixed; left:50%; top:60%; transform:translateX(-50%); z-index:700; pointer-events:none; display:none; padding:6px 14px; background:rgba(15,25,35,0.85); border:1px solid #fbbf24; color:#fff; font-weight:bold; font-size:14px; border-radius:4px;';
+      fp.innerHTML = '<span style="color:#fbbf24;">[F]</span> 회수';
+      document.body.appendChild(fp);
+    }
+    let canRetrieve = false;
+    if (isChamber() && !dead && !st.held) {
+      if (st.anchor && lookedAt(st.anchor.pos, 5, 0.9)) canRetrieve = true;
+      else for (const t of st.traps) { if (lookedAt(t.pos, 5, 0.9)) { canRetrieve = true; break; } }
+    }
+    fp.style.display = canRetrieve ? 'block' : 'none';
+
+    // 둔화 상태 표시
+    let tag = document.getElementById('chSlowTag');
+    if (!tag) {
+      tag = document.createElement('div');
+      tag.id = 'chSlowTag';
+      tag.style.cssText = 'position:fixed; left:50%; bottom:110px; transform:translateX(-50%); z-index:700; pointer-events:none; display:none; padding:4px 12px; background:rgba(120,70,0,0.8); border:1px solid #fbbf24; color:#fde047; font-weight:bold; font-size:13px; border-radius:4px;';
+      tag.innerText = '둔화 중';
+      document.body.appendChild(tag);
+    }
+    tag.style.display = st.selfSlow > 0 ? 'block' : 'none';
 
     // 트랩 트리거
     const enemies = enemyList();
@@ -16824,6 +16996,9 @@
       const f = Math.min(1, z.life / 1.0);
       z.mesh.children[0].material.opacity = 0.20 * f + 0.05 * Math.sin(now * 0.006);
       z.netTimer -= dt;
+      if (isRange() && isChamber() && !dead && Math.hypot(camera.position.x - z.pos.x, camera.position.z - z.pos.z) <= z.radius) {
+        st.selfSlow = Math.max(st.selfSlow, 0.3);      // 사격장에서는 내가 장판에 들어가도 둔화를 확인할 수 있음
+      }
       for (const en of enemies) {
         if (Math.hypot(en.pos.x - z.pos.x, en.pos.z - z.pos.z) <= z.radius) {
           if (en.kind === 'bot') en.ref.userData.chSlow = Math.max(en.ref.userData.chSlow || 0, 0.3);
