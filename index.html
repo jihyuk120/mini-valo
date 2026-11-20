@@ -588,6 +588,16 @@
   </div>
   <div id="killfeed"></div>
 
+  <!-- 좌측 하단 구석: 로컬 Ascent.glb 직접 로드 버튼 -->
+  <div id="localMapLoaderBox" style="position:fixed; bottom:16px; left:16px; z-index:120; pointer-events:auto; display:flex; align-items:center; gap:8px;">
+    <input type="file" id="localGlbInput" accept=".glb,.gltf" style="display:none;" onchange="handleLocalGlbSelect(event)">
+    <button type="button" id="btnLocalGlb" onclick="document.getElementById('localGlbInput').click()"
+      style="background:rgba(15,25,35,0.92); color:#00ffcc; border:1px solid #00ffcc; padding:8px 13px; border-radius:5px; font-size:12px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.65);">
+      📂 로컬 맵 파일 선택 (Ascent.glb)
+    </button>
+    <span id="localGlbStatus" style="font-size:11px; color:#ffcc00; text-shadow:1px 1px 2px #000;"></span>
+  </div>
+
 
   <style>
     #tabLeaderboard {
@@ -3169,9 +3179,11 @@
     }
 
     // =========================================================================
-    // [설정] 깃허브 릴리즈에 업로드한 어센트(Ascent) .glb 파일의 실제 URL을 입력하세요
+    // [설정] 깃허브 릴리즈(https://github.com/jihyuk120/valorant-asent/releases/tag/v1.0) 실제 에셋 주소
     // =========================================================================
-    const ASCENT_GLB_URL = 'https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/v1.0/ascent.glb';
+    const ASCENT_RELEASE_PAGE_URL = 'https://github.com/jihyuk120/valorant-asent/releases/tag/v1.0';
+    const ASCENT_GLB_URL = 'https://github.com/jihyuk120/valorant-asent/releases/download/v1.0/Ascent.glb';
+    const ASCENT_GLB_FALLBACK_URL = 'https://github.com/jihyuk120/valorant-asent/releases/download/v1.0/ascent.glb';
 
     let floorZones = [];
     let ascentLoadedModel = null;
@@ -3239,16 +3251,11 @@
       }
     }
 
-    // 깃허브 릴리즈 링크 CORS 차단을 우회하여 안전하게 ArrayBuffer로 다운로드
-    async function fetchGlbWithCorsFallback(rawUrl) {
-      const candidates = [
-        rawUrl,
-        'https://corsproxy.io/?' + encodeURIComponent(rawUrl),
-        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(rawUrl),
-        'https://api.allorigins.win/raw?url=' + encodeURIComponent(rawUrl)
-      ];
+    // 프록시 없이 깃허브 릴리즈 원본 URL에서 직접 ArrayBuffer 다운로드 (214MB 대용량 대응)
+    async function fetchGlbDirect() {
+      const directUrls = [ASCENT_GLB_URL, ASCENT_GLB_FALLBACK_URL];
       let lastErr = null;
-      for (const url of candidates) {
+      for (const url of directUrls) {
         try {
           const res = await fetch(url, { mode: 'cors' });
           if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -3258,7 +3265,70 @@
           lastErr = err;
         }
       }
-      throw lastErr || new Error('GLB 로드 실패');
+      throw lastErr || new Error('GLB 직접 로드 실패 (CORS 또는 네트워크 차단)');
+    }
+
+    // 파싱된 GLTF 씬을 맵에 적용하는 공통 함수
+    function applyLoadedAscentGltf(gltf, sourceLabel) {
+      ascentLoadedModel = gltf.scene;
+      if (currentMap === 'brawl') {
+        while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
+        wallColliders = [];
+        wallMeshes = [];
+        ascentDoors = [];
+        destructibleMeshes = [];
+        ascentFloorMeshes = [];
+
+        mapGroup.add(ascentLoadedModel);
+        setupAscentGltfEnvironment(ascentLoadedModel);
+        addKillFeed(`[맵 완료] ${sourceLabel} 어센트 3D 맵 로드 완료 (문 ${ascentDoors.length}개 연동)`, true);
+      }
+    }
+
+    // 내 컴퓨터의 로컬 Ascent.glb 파일 직접 불러오기
+    function handleLocalGlbSelect(event) {
+      const file = event.target && event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const statusEl = document.getElementById('localGlbStatus');
+      if (statusEl) statusEl.textContent = `로딩 중: ${file.name}...`;
+      addKillFeed(`[로컬 맵] ${file.name} 파일을 불러오는 중...`, false);
+
+      if (typeof THREE.GLTFLoader === 'undefined') {
+        if (statusEl) statusEl.textContent = 'GLTFLoader 오류';
+        return;
+      }
+
+      const gltfLoader = new THREE.GLTFLoader();
+      if (typeof THREE.DRACOLoader !== 'undefined') {
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+        dracoLoader.setDecoderConfig({ type: 'js' });
+        gltfLoader.setDRACOLoader(dracoLoader);
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const arrayBuffer = e.target.result;
+        gltfLoader.parse(
+          arrayBuffer,
+          '',
+          gltf => {
+            if (statusEl) statusEl.textContent = `적용 완료: ${file.name}`;
+            applyLoadedAscentGltf(gltf, `로컬 파일(${file.name})`);
+          },
+          err => {
+            console.error('로컬 GLB 파싱 오류:', err);
+            if (statusEl) statusEl.textContent = '파싱 실패';
+            addKillFeed('[오류] 선택한 로컬 GLB 파일 파싱에 실패했습니다.', false);
+          }
+        );
+      };
+      reader.onerror = function() {
+        if (statusEl) statusEl.textContent = '파일 읽기 실패';
+        addKillFeed('[오류] 로컬 GLB 파일을 읽지 못했습니다.', false);
+      };
+      reader.readAsArrayBuffer(file);
     }
 
     // GLTF 모델 내 Door A, Door B 오브젝트를 기존 ascentDoors 시스템과 연동
@@ -3539,25 +3609,13 @@
 
       addKillFeed('[맵 로딩] 깃허브 릴리즈에서 어센트 3D 맵을 불러오는 중...', false);
 
-      fetchGlbWithCorsFallback(ASCENT_GLB_URL)
+      fetchGlbDirect()
         .then(arrayBuffer => {
           gltfLoader.parse(
             arrayBuffer,
             '',
             gltf => {
-              ascentLoadedModel = gltf.scene;
-              if (currentMap === 'brawl') {
-                while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
-                wallColliders = [];
-                wallMeshes = [];
-                ascentDoors = [];
-                destructibleMeshes = [];
-                ascentFloorMeshes = [];
-
-                mapGroup.add(ascentLoadedModel);
-                setupAscentGltfEnvironment(ascentLoadedModel);
-                addKillFeed(`[맵 완료] 어센트 3D 맵 로드 완료 (문 ${ascentDoors.length}개 연동)`, true);
-              }
+              applyLoadedAscentGltf(gltf, '깃허브 릴리즈');
             },
             err => {
               console.error('GLTF 파싱 오류:', err);
@@ -3566,8 +3624,8 @@
           );
         })
         .catch(err => {
-          console.error('어센트 GLB 다운로드 오류:', err);
-          addKillFeed('[오류] 깃허브 릴리즈 GLB 로드 실패 (URL 및 릴리즈 공개 여부 확인)', false);
+          console.error('어센트 GLB 직접 다운로드 오류:', err);
+          addKillFeed('[안내] 브라우저 CORS 보안으로 원격 GLB가 차단되었습니다. 좌측 하단 [로컬 맵 파일 선택] 버튼으로 Ascent.glb를 직접 불러오세요.', false);
         });
     }
 
