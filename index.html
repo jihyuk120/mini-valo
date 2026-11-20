@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>MINI-VALO 3D - 일반전 (13선승) & 사격장</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js';s.onload=function(){try{if(typeof initAccountPeerNode==='function'&&typeof userAccount!=='undefined'&&userAccount)initAccountPeerNode(true);}catch(e){}};document.head.appendChild(s);"></script>
   <style>
     body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
@@ -3166,7 +3168,17 @@
       ascentGlassPanes.push(glassObj);
     }
 
+    // =========================================================================
+    // [설정] 깃허브 릴리즈에 업로드한 어센트(Ascent) .glb 파일의 실제 URL을 입력하세요
+    // =========================================================================
+    const ASCENT_GLB_URL = 'https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/v1.0/ascent.glb';
+
     let floorZones = [];
+    let ascentLoadedModel = null;
+    let ascentFloorMeshes = [];
+    const floorRaycaster = new THREE.Raycaster();
+    const downVector = new THREE.Vector3(0, -1, 0);
+
     function getFloorHeightAt(x, z, feetY = null) {
       let h = 0;
       for (const fz of floorZones) {
@@ -3193,6 +3205,20 @@
           }
         }
       }
+      // GLTF 어센트 3D 맵 실제 바닥 메쉬 높이 검출 (계단, 경사로, 2층 헤븐 등)
+      if (currentMap === 'brawl' && ascentFloorMeshes.length > 0) {
+        const originY = feetY !== null ? feetY + 0.75 : 25.0;
+        floorRaycaster.set(new THREE.Vector3(x, originY, z), downVector);
+        floorRaycaster.near = 0;
+        floorRaycaster.far = originY + 10.0;
+        const hits = floorRaycaster.intersectObjects(ascentFloorMeshes, false);
+        if (hits.length > 0) {
+          const hitY = hits[0].point.y;
+          if (feetY === null || hitY <= feetY + 0.65) {
+            if (hitY > h) h = hitY;
+          }
+        }
+      }
       return h;
     }
 
@@ -3213,6 +3239,264 @@
       }
     }
 
+    // 깃허브 릴리즈 링크 CORS 차단을 우회하여 안전하게 ArrayBuffer로 다운로드
+    async function fetchGlbWithCorsFallback(rawUrl) {
+      const candidates = [
+        rawUrl,
+        'https://corsproxy.io/?' + encodeURIComponent(rawUrl),
+        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(rawUrl),
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(rawUrl)
+      ];
+      let lastErr = null;
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, { mode: 'cors' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const buf = await res.arrayBuffer();
+          if (buf && buf.byteLength > 128) return buf;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error('GLB 로드 실패');
+    }
+
+    // GLTF 모델 내 Door A, Door B 오브젝트를 기존 ascentDoors 시스템과 연동
+    function registerModelBlastDoor(doorName, meshObj) {
+      meshObj.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(meshObj);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+
+      const closedY = meshObj.position.y;
+      const openOffsetY = Math.max(size.y, 3.6);
+      const rotY = size.x >= size.z ? 0 : Math.PI / 2;
+
+      const dummySwitchMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffcc,
+        emissive: 0x00aa88,
+        emissiveIntensity: 0.8
+      });
+
+      const doorObj = {
+        name: doorName,
+        group: meshObj,
+        panel: meshObj,
+        switchMat: dummySwitchMat,
+        x: center.x,
+        z: center.z,
+        rotY: rotY,
+        isOpen: true,
+        openProgress: 1.0,
+        destroyed: false,
+        hp: 400,
+        collider: null,
+        closedY: closedY,
+        openY: closedY + openOffsetY,
+        boxWidth: Math.max(size.x, 0.5),
+        boxDepth: Math.max(size.z, 0.5),
+        boxMinY: box.min.y,
+        boxMaxY: box.max.y
+      };
+
+      meshObj.traverse(child => {
+        if (child.isMesh) {
+          child.userData.targetType = 'ascentDoor';
+          child.userData.doorObj = doorObj;
+          destructibleMeshes.push(child);
+        }
+      });
+
+      ascentDoors.push(doorObj);
+      toggleAscentDoor(doorObj, true, true);
+    }
+
+    // 기존 syncAscentDoorState를 GLB 메쉬 좌표와 호환되도록 확장
+    const _origSyncAscentDoorState = syncAscentDoorState;
+    syncAscentDoorState = function(doorObj) {
+      if (!doorObj) return;
+      if (doorObj.closedY === undefined) {
+        return _origSyncAscentDoorState(doorObj);
+      }
+      if (doorObj.destroyed) {
+        doorObj.panel.visible = false;
+        if (doorObj.collider) {
+          const idx = wallColliders.indexOf(doorObj.collider);
+          if (idx >= 0) wallColliders.splice(idx, 1);
+          doorObj.collider = null;
+        }
+        return;
+      }
+
+      const currentY = THREE.MathUtils.lerp(doorObj.closedY, doorObj.openY, doorObj.openProgress);
+      doorObj.panel.position.y = currentY;
+      doorObj.panel.visible = true;
+
+      const liftDelta = currentY - doorObj.closedY;
+      const curMinY = doorObj.boxMinY + liftDelta;
+      const curMaxY = doorObj.boxMaxY + liftDelta;
+
+      if (curMinY >= doorObj.boxMinY + (doorObj.openY - doorObj.closedY) * 0.85) {
+        if (doorObj.collider) {
+          const idx = wallColliders.indexOf(doorObj.collider);
+          if (idx >= 0) wallColliders.splice(idx, 1);
+          doorObj.collider = null;
+        }
+      } else {
+        if (!doorObj.collider) {
+          doorObj.collider = {
+            minX: doorObj.x - doorObj.boxWidth / 2 - 0.35,
+            maxX: doorObj.x + doorObj.boxWidth / 2 + 0.35,
+            minZ: doorObj.z - doorObj.boxDepth / 2 - 0.35,
+            maxZ: doorObj.z + doorObj.boxDepth / 2 + 0.35,
+            minY: curMinY,
+            maxY: curMaxY
+          };
+          wallColliders.push(doorObj.collider);
+        } else {
+          doorObj.collider.minY = curMinY;
+          doorObj.collider.maxY = curMaxY;
+        }
+      }
+    };
+
+    // 로드된 어센트 3D 맵의 모든 메쉬를 분석하여 플레이어 1.8m 스케일 맞춤 & 바닥/벽/문 충돌 생성
+    function setupAscentGltfEnvironment(gltfScene) {
+      const rawBox = new THREE.Box3().setFromObject(gltfScene);
+      const rawSize = new THREE.Vector3();
+      rawBox.getSize(rawSize);
+
+      // 어센트 전체 맵 가로/세로 폭 약 96m 기준 스케일 산출 (플레이어 키 1.8m / 눈높이 1.65m 비례)
+      const maxHoriz = Math.max(rawSize.x, rawSize.z, 0.001);
+      const targetArenaSpan = 96.0;
+      const autoScale = targetArenaSpan / maxHoriz;
+      gltfScene.scale.setScalar(autoScale);
+      gltfScene.updateMatrixWorld(true);
+
+      const scaledBox = new THREE.Box3().setFromObject(gltfScene);
+      const scaledCenter = new THREE.Vector3();
+      scaledBox.getCenter(scaledCenter);
+
+      gltfScene.position.set(
+        -scaledCenter.x,
+        -scaledBox.min.y,
+        -scaledCenter.z
+      );
+      gltfScene.updateMatrixWorld(true);
+
+      // 주 플레이 바닥 레벨 보정 (가장 넓은 바닥 면의 Y 좌표를 0.0으로 맞춤)
+      let floorYHistogram = {};
+      gltfScene.traverse(node => {
+        if (!node.isMesh || !node.geometry) return;
+        const b = new THREE.Box3().setFromObject(node);
+        const s = new THREE.Vector3();
+        b.getSize(s);
+        if (s.x > 6 && s.z > 6 && s.y < 1.5) {
+          const keyY = Math.round(b.max.y * 10) / 10;
+          floorYHistogram[keyY] = (floorYHistogram[keyY] || 0) + s.x * s.z;
+        }
+      });
+      let mainGroundY = 0;
+      let maxArea = 0;
+      for (const [yStr, area] of Object.entries(floorYHistogram)) {
+        if (area > maxArea) {
+          maxArea = area;
+          mainGroundY = parseFloat(yStr);
+        }
+      }
+      if (Math.abs(mainGroundY) > 0.05) {
+        gltfScene.position.y -= mainGroundY;
+        gltfScene.updateMatrixWorld(true);
+      }
+
+      const foundDoorA = [];
+      const foundDoorB = [];
+
+      gltfScene.traverse(node => {
+        const lowerName = (node.name || '').toLowerCase();
+
+        if ((lowerName.includes('door') && (lowerName.includes('a') || lowerName.includes('short'))) || lowerName === 'door_a' || lowerName === 'door a') {
+          if (!foundDoorA.some(p => p === node.parent)) foundDoorA.push(node);
+        } else if ((lowerName.includes('door') && (lowerName.includes('b') || lowerName.includes('market'))) || lowerName === 'door_b' || lowerName === 'door b') {
+          if (!foundDoorB.some(p => p === node.parent)) foundDoorB.push(node);
+        }
+
+        if (!node.isMesh || !node.geometry) return;
+
+        node.castShadow = true;
+        node.receiveShadow = true;
+        if (node.material) {
+          node.material.side = THREE.DoubleSide;
+        }
+
+        const isDoorPart = lowerName.includes('door_a') || lowerName.includes('door a') ||
+                           lowerName.includes('door_b') || lowerName.includes('door b') ||
+                           (node.parent && /door[\s_-]?[ab]/i.test(node.parent.name || ''));
+        if (isDoorPart) return;
+
+        wallMeshes.push(node);
+        ascentFloorMeshes.push(node);
+
+        node.updateMatrixWorld(true);
+        const geo = node.geometry;
+        if (!geo.boundingBox) geo.computeBoundingBox();
+
+        const posAttr = geo.attributes.position;
+        if (!posAttr) return;
+
+        const indexAttr = geo.index;
+        const triCount = indexAttr ? indexAttr.count / 3 : posAttr.count / 3;
+        const vA = new THREE.Vector3();
+        const vB = new THREE.Vector3();
+        const vC = new THREE.Vector3();
+        const edge1 = new THREE.Vector3();
+        const edge2 = new THREE.Vector3();
+        const normal = new THREE.Vector3();
+
+        for (let i = 0; i < triCount; i++) {
+          const i0 = indexAttr ? indexAttr.getX(i * 3) : i * 3;
+          const i1 = indexAttr ? indexAttr.getX(i * 3 + 1) : i * 3 + 1;
+          const i2 = indexAttr ? indexAttr.getX(i * 3 + 2) : i * 3 + 2;
+
+          vA.fromBufferAttribute(posAttr, i0).applyMatrix4(node.matrixWorld);
+          vB.fromBufferAttribute(posAttr, i1).applyMatrix4(node.matrixWorld);
+          vC.fromBufferAttribute(posAttr, i2).applyMatrix4(node.matrixWorld);
+
+          edge1.subVectors(vB, vA);
+          edge2.subVectors(vC, vA);
+          normal.crossVectors(edge1, edge2).normalize();
+
+          const minX = Math.min(vA.x, vB.x, vC.x);
+          const maxX = Math.max(vA.x, vB.x, vC.x);
+          const minY = Math.min(vA.y, vB.y, vC.y);
+          const maxY = Math.max(vA.y, vB.y, vC.y);
+          const minZ = Math.min(vA.z, vB.z, vC.z);
+          const maxZ = Math.max(vA.z, vB.z, vC.z);
+
+          if (Math.abs(normal.y) < 0.55 && (maxY - minY) > 0.15) {
+            wallColliders.push({
+              minX: minX - 0.32,
+              maxX: maxX + 0.32,
+              minZ: minZ - 0.32,
+              maxZ: maxZ + 0.32,
+              minY: minY,
+              maxY: maxY,
+              isLowWoodCrate: (maxY <= 1.65 && maxY > 0.35)
+            });
+          }
+        }
+      });
+
+      foundDoorA.forEach((dNode, idx) => {
+        registerModelBlastDoor(idx === 0 ? 'Door A' : `Door A (${idx + 1})`, dNode);
+      });
+      foundDoorB.forEach((dNode, idx) => {
+        registerModelBlastDoor(idx === 0 ? 'Door B' : `Door B (${idx + 1})`, dNode);
+      });
+    }
+
     function buildBrawlMap() {
       while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
       wallColliders = [];
@@ -3221,233 +3505,70 @@
       ascentGlassPanes = [];
       destructibleMeshes = [];
       floorZones = [];
+      ascentFloorMeshes = [];
 
-      // 차분한 황혼빛 이탈리아 베네치아 하늘 및 안개
-      scene.background = new THREE.Color(0x527996);
-      scene.fog = new THREE.Fog(0x527996, 65, 210);
+      scene.background = new THREE.Color(0x6c96b8);
+      scene.fog = new THREE.Fog(0x6c96b8, 75, 240);
 
-      const asphaltDark = 0x3a3f47;      // 기본 아스팔트 돌바닥
-      const sunkenAsphalt = 0x262b33;    // 짙은 석재 바닥
-      const italianBeige = 0xc89d74;     // 이탈리아 베이지색 회벽
-      const terracottaOrange = 0xb45336; // 테라코타 지붕 및 포인트
-      const woodCrateBrown = 0x7c4d2b;   // 갈색 나무 상자
-      const radianiteGreen = 0x1f5e4b;   // 초록색 레디어나이트 상자
-      const canalDeepBlue = 0x164e63;    // 운하 수면
-      const atkZoneColor = 0x10b981;     // 공격팀(초록) 스폰 패드
-      const defZoneColor = 0xff4655;     // 수비팀(빨강) 스폰 패드
+      // 맵 로딩 완료 전 낙하 방지를 위한 임시 안전 바닥 콜라이더
+      wallColliders.push({
+        minX: -120, maxX: 120,
+        minZ: -120, maxZ: 120,
+        minY: -2.0, maxY: 0.0
+      });
 
-      function addCylinderProp(rTop, rBottom, h, x, y, z, color, addCollider = true, roughness = 0.45, metalness = 0.65) {
-        const mesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(rTop, rBottom, h, 24),
-          new THREE.MeshStandardMaterial({ color, roughness, metalness })
-        );
-        mesh.position.set(x, y, z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mapGroup.add(mesh);
-        wallMeshes.push(mesh);
-        if (addCollider) {
-          const r = Math.max(rTop, rBottom);
-          wallColliders.push({
-            minX: x - r - 0.45,
-            maxX: x + r + 0.45,
-            minZ: z - r - 0.45,
-            maxZ: z + r + 0.45,
-            minY: y - h / 2,
-            maxY: y + h / 2
-          });
-        }
-        return mesh;
+      if (ascentLoadedModel) {
+        const cloned = ascentLoadedModel.clone(true);
+        mapGroup.add(cloned);
+        setupAscentGltfEnvironment(cloned);
+        return;
       }
 
-      // =========================================================
-      // 1. 맵 전체 바닥 및 외곽 성벽 (X: -45 ~ +45, Z: -55 ~ +55)
-      // =========================================================
-      addBlock(92, 1.2, 112, 0, -0.6, 0, asphaltDark, false, 'asphalt');
-      addBlock(260, 0.5, 260, 0, -3.2, 0, canalDeepBlue, false);
+      if (typeof THREE.GLTFLoader === 'undefined') {
+        console.error('THREE.GLTFLoader가 로드되지 않았습니다.');
+        return;
+      }
 
-      // 외곽 성벽 (X = ±46, Z = ±56)
-      addBlock(94, 10.0, 2, 0, 5.0, -56, italianBeige, true, 'italianWall');
-      addBlock(94, 10.0, 2, 0, 5.0, 56, italianBeige, true, 'italianWall');
-      addBlock(2, 10.0, 114, -46, 5.0, 0, italianBeige, true, 'italianWall');
-      addBlock(2, 10.0, 114, 46, 5.0, 0, italianBeige, true, 'italianWall');
+      const gltfLoader = new THREE.GLTFLoader();
+      if (typeof THREE.DRACOLoader !== 'undefined') {
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+        dracoLoader.setDecoderConfig({ type: 'js' });
+        gltfLoader.setDRACOLoader(dracoLoader);
+      }
 
-      // 외곽 테라코타 지붕 띠 장식
-      addBlock(94, 0.7, 2.4, 0, 10.2, -56, terracottaOrange, false, 'terracotta');
-      addBlock(94, 0.7, 2.4, 0, 10.2, 56, terracottaOrange, false, 'terracotta');
-      addBlock(2.4, 0.7, 114, -46, 10.2, 0, terracottaOrange, false, 'terracotta');
-      addBlock(2.4, 0.7, 114, 46, 10.2, 0, terracottaOrange, false, 'terracotta');
+      addKillFeed('[맵 로딩] 깃허브 릴리즈에서 어센트 3D 맵을 불러오는 중...', false);
 
-      // =========================================================
-      // 2. 공격팀 스폰 (Z: +45) / 수비팀 스폰 (Z: -45)
-      // =========================================================
-      const atkPad = new THREE.Mesh(new THREE.PlaneGeometry(44, 12), new THREE.MeshBasicMaterial({ color: atkZoneColor, transparent: true, opacity: 0.25 }));
-      atkPad.rotation.x = -Math.PI / 2; atkPad.position.set(0, 0.02, 46); mapGroup.add(atkPad);
+      fetchGlbWithCorsFallback(ASCENT_GLB_URL)
+        .then(arrayBuffer => {
+          gltfLoader.parse(
+            arrayBuffer,
+            '',
+            gltf => {
+              ascentLoadedModel = gltf.scene;
+              if (currentMap === 'brawl') {
+                while (mapGroup.children.length > 0) mapGroup.remove(mapGroup.children[0]);
+                wallColliders = [];
+                wallMeshes = [];
+                ascentDoors = [];
+                destructibleMeshes = [];
+                ascentFloorMeshes = [];
 
-      const defPad = new THREE.Mesh(new THREE.PlaneGeometry(44, 12), new THREE.MeshBasicMaterial({ color: defZoneColor, transparent: true, opacity: 0.25 }));
-      defPad.rotation.x = -Math.PI / 2; defPad.position.set(0, 0.02, -46); mapGroup.add(defPad);
-
-      // 공격 로비 3갈래 구역 분리벽 (Z = +36, 서: B메인 입구 / 중: 미드 / 동: A메인 입구)
-      addBlock(12, 8.5, 2.0, -24, 4.25, 36, italianBeige, true, 'italianWall');
-      addBlock(12.4, 0.6, 2.4, -24, 8.7, 36, terracottaOrange, false, 'terracotta');
-      addBlock(12, 8.5, 2.0, 24, 4.25, 36, italianBeige, true, 'italianWall');
-      addBlock(12.4, 0.6, 2.4, 24, 8.7, 36, terracottaOrange, false, 'terracotta');
-
-      // 수비 스폰 구역 분리벽 (Z = -34, 서: B 연결 / 중: 미드 아치 / 동: 헤븐 경사로·A 연결)
-      addBlock(10, 8.5, 2.0, -17, 4.25, -34, italianBeige, true, 'italianWall');
-      addBlock(10, 8.5, 2.0, 17, 4.25, -34, italianBeige, true, 'italianWall');
-
-      // =========================================================
-      // 3. 중앙 미드(Mid) 광장 (X: -12 ~ +12) & 캣워크 & 미드 마켓
-      // =========================================================
-      // 미드 중앙 분수대 & 엄폐 상자
-      addBlock(4.0, 1.3, 4.0, -2, 0.65, 6, italianBeige, true, 'italianWall');
-      addBlock(1.8, 3.0, 1.8, -2, 1.5, 6, terracottaOrange, true, 'terracotta');
-      addBlock(2.2, 1.5, 2.2, -6, 0.75, -4, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.2, 1.5, 2.2, 4, 0.75, 14, radianiteGreen, true, 'greenCrate');
-
-      // 미드 우측 '캣워크(Catwalk)' 고지대 통로 (X: +8 ~ +12, Z: -14 ~ +6, 높이 Y: 0.55) -> 트리 방과 연결
-      addFloorZone(4.5, 20, 10.0, 0.55, -4, asphaltDark);
-      addBlock(4.5, 0.55, 20, 10.0, 0.275, -4, asphaltDark, false, 'asphalt');
-      addBlock(4.5, 0.28, 2.0, 10.0, 0.14, 7.0, asphaltDark, false, 'asphalt');
-      addBlock(4.5, 0.28, 2.0, 10.0, 0.14, -15.0, asphaltDark, false, 'asphalt');
-      addBlock(0.7, 1.35, 16, 7.8, 0.68, -4, italianBeige, true, 'italianWall'); // 캣워크 난간
-      addBlock(1.8, 1.6, 1.8, 9.6, 1.35, -10, radianiteGreen, true, 'greenCrate');
-
-      // 미드 좌측 '미드 마켓(Mid Market)' 방 (X: -20 ~ -12, Z: -20 ~ -6) -> B 사이트 연결
-      addBlock(1.6, 8.5, 8.0, -12.5, 4.25, -10.0, italianBeige, true, 'italianWall'); // 마켓 동벽(남)
-      addBlock(1.6, 8.5, 3.0, -12.5, 4.25, -19.5, italianBeige, true, 'italianWall'); // 마켓 동벽(북) - Z=-16 부근 미드 입구 개방
-      addBlock(8.5, 8.5, 1.6, -16.2, 4.25, -6.0, italianBeige, true, 'italianWall');  // 마켓 남벽
-      addBlock(8.5, 8.5, 1.6, -16.2, 4.25, -21.0, italianBeige, true, 'italianWall'); // 마켓 북벽
-      addBlock(9.2, 0.7, 16.5, -16.2, 8.7, -13.5, terracottaOrange, false, 'terracotta');
-      addBlock(2.0, 1.5, 2.0, -16.0, 0.75, -10.5, woodCrateBrown, true, 'woodCrate');
-
-      // =========================================================
-      // 4. 동쪽 A 사이트 구역 (X: +20 ~ +45)
-      // =========================================================
-      // (1) A 메인 복도: X: +32 ~ +42, Z: +10 ~ +35 구간 양옆이 높은 벽으로 막힌 좁은 진입 복도
-      // 좌측(서측) 벽: X = 31.0 (X: 20 ~ 32 블록으로 미드/트리 하단과 완전 분리)
-      addBlock(12.0, 8.5, 25.0, 26.0, 4.25, 22.5, italianBeige, true, 'italianWall');
-      addBlock(12.4, 0.7, 25.4, 26.0, 8.7, 22.5, terracottaOrange, false, 'terracotta');
-      // 우측(동측) 벽: X = 43.5 (X: 42 ~ 45 벽)
-      addBlock(3.0, 8.5, 25.0, 43.5, 4.25, 22.5, italianBeige, true, 'italianWall');
-      addBlock(3.4, 0.7, 25.4, 43.5, 8.7, 22.5, terracottaOrange, false, 'terracotta');
-      // A 메인 복도 내부 엄폐 상자 (통행 가능 폭 X: 32 ~ 42 확보)
-      addBlock(2.0, 1.6, 2.0, 33.5, 0.8, 16.0, radianiteGreen, true, 'greenCrate');
-      addBlock(2.0, 1.6, 2.0, 40.5, 0.8, 26.0, woodCrateBrown, true, 'woodCrate');
-
-      // (2) A 사이트(Z: -10 ~ +10) & 원통형 발전기(배터리) 중앙(X: +28, Z: 0)
-      const siteRingMat = new THREE.MeshBasicMaterial({ color: 0xff4655, side: THREE.DoubleSide, transparent: true, opacity: 0.48 });
-      const siteARing = new THREE.Mesh(new THREE.RingGeometry(6.2, 6.8, 48), siteRingMat);
-      siteARing.rotation.x = -Math.PI / 2;
-      siteARing.position.set(30, 0.02, 0);
-      mapGroup.add(siteARing);
-
-      // 원통형 발전기(Generator) 엄폐물: X = +28, Z = 0
-      addCylinderProp(1.45, 1.55, 3.1, 28, 1.55, 0, 0x1c2026, true, 0.35, 0.75);
-      addCylinderProp(1.58, 1.58, 0.32, 28, 2.55, 0, 0x6b7280, false, 0.3, 0.85);
-      addCylinderProp(1.58, 1.58, 0.32, 28, 0.55, 0, 0x6b7280, false, 0.3, 0.85);
-      addCylinderProp(1.15, 1.15, 0.28, 28, 3.22, 0, 0x4b5563, false, 0.35, 0.8);
-      // 발전기 옆 다이스(Dice) 및 사이트 엄폐물
-      addBlock(2.0, 1.65, 2.0, 24.8, 0.825, 1.6, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.2, 2.2, 2.2, 42.5, 1.1, 4.5, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.0, 1.6, 2.0, 38.5, 0.8, -4.5, radianiteGreen, true, 'greenCrate');
-
-      // (3) 트리(Tree) 방: A 사이트 왼쪽(X: +12 ~ +20, Z: -5 ~ +5)에 미드 캣워크와 연결되는 방
-      // 트리 방 남벽 (Z = +5.5, X: 12 ~ 20)
-      addBlock(8.0, 8.5, 1.4, 16.0, 4.25, 5.5, italianBeige, true, 'italianWall');
-      // 트리 방 북벽 (Z = -5.5, X: 12 ~ 20)
-      addBlock(8.0, 8.5, 1.4, 16.0, 4.25, -5.5, italianBeige, true, 'italianWall');
-      // 트리 방 지붕
-      addBlock(8.8, 0.6, 12.4, 16.0, 8.7, 0, terracottaOrange, false, 'terracotta');
-      // 트리 방 내부 화단 & 나무 (좌측 구석 X: 14.2, Z: 3.0에 배치해 중앙 통로 개방)
-      addBlock(2.2, 0.6, 2.2, 14.2, 0.3, 3.0, terracottaOrange, true, 'terracotta');
-      addCylinderProp(0.42, 0.50, 3.6, 14.2, 1.8, 3.0, woodCrateBrown, true, 0.85, 0.05);
-      addBlock(3.2, 2.0, 3.2, 14.2, 4.2, 3.0, radianiteGreen, false, 'greenCrate');
-      // 트리 방 - A 사이트 연결 출입구(X = +20, Z: -5 ~ +5) 방화 철문 및 창문
-      createAscentBlastDoor('A 쇼트(트리) 방화 철문', 20.0, -2.2, Math.PI / 2);
-      addBlock(0.8, 1.2, 4.2, 20.0, 0.6, 2.5, italianBeige, true, 'italianWall');
-      createBreakableGlass(20.0, 2.8, 2.5, 0.25, 3.2, 4.0);
-
-      // (4) 끊기지 않는 헤븐(2층): X: +20 ~ +42, Z: -22 ~ -12, 높이 Y: 3.8
-      //     그 바로 아래(Y: 0 ~ 3.2)는 뚫려 있는 헬(언더) 공간!
-      addFloorZone(22, 10, 31.0, 3.8, -17.0, asphaltDark);
-      // 2층 바닥 슬래브: Y = 3.2 ~ 3.8 (center y = 3.5, h = 0.6 -> minY = 3.2, maxY = 3.8)
-      addBlock(22, 0.6, 10, 31.0, 3.5, -17.0, italianBeige, true, 'italianWall');
-      // 2층 헤븐 앞쪽(Z = -12) 발코니 난간 (Y = 3.9 ~ 4.9 -> minY = 3.9, 1층 헬 입구를 전혀 막지 않음!)
-      addBlock(22, 1.0, 0.6, 31.0, 4.4, -12.3, terracottaOrange, true, 'terracotta');
-      // 2층 헤븐 뒤쪽(Z = -22) & 우측(X = +42) 외벽 (2층 높이 Y = 3.5 ~ 8.5)
-      // 경사로 연결부(X: +22 ~ +28)는 개방하여 자연스럽게 2층 헤븐으로 진입 가능
-      addBlock(14, 5.0, 0.8, 35.0, 6.0, -22.0, italianBeige, true, 'italianWall');
-      addBlock(2.0, 5.0, 0.8, 21.0, 6.0, -22.0, italianBeige, true, 'italianWall');
-      addBlock(0.8, 8.5, 10, 42.0, 4.25, -17.0, italianBeige, true, 'italianWall');
-      // 2층 헤븐 지붕 캐노피 & 엄폐 상자 (Y = 3.9 위)
-      addBlock(22.6, 0.6, 10.6, 31.0, 8.8, -17.0, terracottaOrange, false, 'terracotta');
-      addBlock(2.2, 1.4, 2.2, 36.5, 4.6, -17.5, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.0, 1.3, 2.0, 25.0, 4.55, -16.5, radianiteGreen, true, 'greenCrate');
-
-      // 1. 언더(헬) 입구 절반 정도를 가리는 1층 높이(Y: 0 ~ 3.2) 세로 엄폐 가벽 + 내부 엄폐 상자
-      addBlock(9.2, 3.2, 0.9, 32.0, 1.6, -12.6, italianBeige, true, 'italianWall');
-      addBlock(2.2, 1.4, 2.2, 33.5, 0.7, -19.5, woodCrateBrown, true, 'woodCrate');
-
-      // 2. 수비 스폰 쪽(Z = -32, Y = 0)에서 2층 헤븐(Z = -22, Y = 3.8)으로 올라가는 경사로
-      addFloorZone(6.0, 10.4, 25.0, 3.8, -27.0, asphaltDark, true, 0, 3.8);
-      const rampMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(6.0, 0.45, 10.7),
-        new THREE.MeshStandardMaterial({ map: getMapTexture('asphalt'), roughness: 0.88 })
-      );
-      rampMesh.position.set(25.0, 1.72, -27.0);
-      rampMesh.rotation.x = -Math.atan2(3.8, 10.0);
-      rampMesh.castShadow = true;
-      rampMesh.receiveShadow = true;
-      mapGroup.add(rampMesh);
-      // 경사로 좌·우측 난간벽 (X = 21.6, X = 28.4)
-      addBlock(0.8, 4.8, 10.0, 21.6, 2.4, -27.0, italianBeige, true, 'italianWall');
-      addBlock(0.8, 4.8, 10.0, 28.4, 2.4, -27.0, italianBeige, true, 'italianWall');
-
-      // =========================================================
-      // 5. 서쪽 B 사이트 구역 (X: -45 ~ -20)
-      // =========================================================
-      // (1) B 메인 복도: X: -42 ~ -32, Z: +10 ~ +35 구간 양옆이 벽으로 막힌 좁은 진입 통로
-      // 우측(동측) 벽: X = -32 ~ -20 건물 블록 (미드/마켓 하단과 완전 분리)
-      addBlock(12.0, 8.5, 25.0, -26.0, 4.25, 22.5, italianBeige, true, 'italianWall');
-      addBlock(12.4, 0.7, 25.4, -26.0, 8.7, 22.5, terracottaOrange, false, 'terracotta');
-      // 좌측(서측) 벽: X = -45 ~ -42 벽
-      addBlock(3.0, 8.5, 25.0, -43.5, 4.25, 22.5, italianBeige, true, 'italianWall');
-      addBlock(3.4, 0.7, 25.4, -43.5, 8.7, 22.5, terracottaOrange, false, 'terracotta');
-      // B 메인 복도 내부 엄폐 상자 (통행 가능 폭 X: -42 ~ -32 확보)
-      addBlock(2.0, 1.6, 2.0, -40.5, 0.8, 24.0, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.0, 1.6, 2.0, -33.5, 0.8, 15.0, radianiteGreen, true, 'greenCrate');
-
-      // (2) B 사이트(Z: -15 ~ +10) 바닥 및 스파이크 설치 구역
-      addBlock(25.0, 0.06, 25.0, -32.5, 0.01, -2.5, sunkenAsphalt, false, 'sunkenAsphalt');
-      const siteBRing = new THREE.Mesh(new THREE.RingGeometry(6.2, 6.8, 48), siteRingMat);
-      siteBRing.rotation.x = -Math.PI / 2;
-      siteBRing.position.set(-32, 0.03, -2);
-      mapGroup.add(siteBRing);
-
-      // B 사이트 엄폐물 (다이아몬드/중앙 상자)
-      addBlock(2.2, 1.6, 2.2, -31.0, 0.8, 2.0, woodCrateBrown, true, 'woodCrate');
-      addBlock(2.0, 1.6, 2.0, -41.5, 0.8, 3.0, radianiteGreen, true, 'greenCrate');
-
-      // (3) 보트하우스: B 사이트 안쪽(X: -40 ~ -25, Z: -20 ~ -10)에 지붕이 덮인 건물
-      // 보트하우스 우측(동쪽) 벽 (X = -25.4, Z: -20 ~ -10)
-      addBlock(1.2, 4.8, 10.0, -25.4, 2.4, -15.0, italianBeige, true, 'italianWall');
-      // 보트하우스 뒤쪽(북쪽) 벽 (X: -40 ~ -25, Z = -19.6)
-      addBlock(15.0, 4.8, 1.2, -32.5, 2.4, -19.6, italianBeige, true, 'italianWall');
-      // 보트하우스 좌측(서쪽) 기둥벽 (X = -39.6, Z: -20 ~ -17 및 Z: -12 ~ -10, 중앙 개방)
-      addBlock(1.2, 4.8, 3.2, -39.6, 2.4, -18.4, italianBeige, true, 'italianWall');
-      addBlock(1.2, 4.8, 2.4, -39.6, 2.4, -11.2, italianBeige, true, 'italianWall');
-      // 보트하우스 지붕 (Y = 4.8 ~ 5.5 -> minY = 4.8, 내부 통행 가능)
-      addBlock(15.8, 0.6, 10.8, -32.5, 5.1, -15.0, terracottaOrange, true, 'terracotta');
-      addBlock(13.0, 0.5, 8.4, -32.5, 5.6, -15.0, terracottaOrange, false, 'terracotta');
-      // 보트하우스 내부 엄폐 상자
-      addBlock(2.2, 1.5, 2.2, -32.5, 0.75, -14.5, radianiteGreen, true, 'greenCrate');
-
-      // 미드 마켓 <-> B 사이트 연결 분리벽 & 방화 철문 (X = -20.0, Z: -20 ~ -6)
-      addBlock(1.6, 8.5, 5.0, -20.0, 4.25, -8.5, italianBeige, true, 'italianWall');
-      addBlock(1.6, 8.5, 3.5, -20.0, 4.25, -19.2, italianBeige, true, 'italianWall');
-      createAscentBlastDoor('B 마켓 방화 철문', -20.0, -14.0, Math.PI / 2);
+                mapGroup.add(ascentLoadedModel);
+                setupAscentGltfEnvironment(ascentLoadedModel);
+                addKillFeed(`[맵 완료] 어센트 3D 맵 로드 완료 (문 ${ascentDoors.length}개 연동)`, true);
+              }
+            },
+            err => {
+              console.error('GLTF 파싱 오류:', err);
+              addKillFeed('[오류] 어센트 GLB 파싱 실패 - 콘솔을 확인하세요.', false);
+            }
+          );
+        })
+        .catch(err => {
+          console.error('어센트 GLB 다운로드 오류:', err);
+          addKillFeed('[오류] 깃허브 릴리즈 GLB 로드 실패 (URL 및 릴리즈 공개 여부 확인)', false);
+        });
     }
 
     const gunGroup = new THREE.Group();
